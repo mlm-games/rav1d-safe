@@ -1034,6 +1034,162 @@ macro_rules! neon_st1q_u16 {
 #[cfg(target_arch = "aarch64")]
 pub(crate) use neon_st1q_u16;
 
+// --- wasm32 SIMD128 macros ---
+
+/// Load 128 bits (16 bytes) from a typed array reference for wasm32 simd128.
+///
+/// `$src` must be a reference to a type implementing `Is16BytesUnaligned`
+/// (e.g., `&[u8; 16]`, `&[u16; 8]`, `&[i16; 8]`, `&[i32; 4]`).
+///
+/// ```ignore
+/// let v: v128 = wasm_load_128!(&arr);                          // arr: [u8; 16]
+/// let v: v128 = wasm_load_128!(&src[off..off+16], [u8; 16]);   // from slice
+/// ```
+#[cfg(target_arch = "wasm32")]
+macro_rules! wasm_load_128 {
+    ($src:expr) => {{
+        #[cfg(not(feature = "unchecked"))]
+        {
+            safe_unaligned_simd::wasm32::v128_load($src)
+        }
+        #[cfg(feature = "unchecked")]
+        {
+            #[allow(unsafe_code)]
+            unsafe {
+                core::arch::wasm32::v128_load(core::ptr::from_ref($src).cast())
+            }
+        }
+    }};
+    ($slice:expr, $T:ty) => {{
+        #[cfg(not(feature = "unchecked"))]
+        {
+            safe_unaligned_simd::wasm32::v128_load::<$T>(($slice).try_into().unwrap())
+        }
+        #[cfg(feature = "unchecked")]
+        {
+            let __s = $slice;
+            debug_assert!(core::mem::size_of_val(__s) >= 16);
+            #[allow(unsafe_code)]
+            unsafe {
+                core::arch::wasm32::v128_load(__s.as_ptr() as *const _)
+            }
+        }
+    }};
+}
+#[cfg(target_arch = "wasm32")]
+pub(crate) use wasm_load_128;
+
+/// Store 128 bits (16 bytes) to a typed array reference for wasm32 simd128.
+///
+/// ```ignore
+/// wasm_store_128!(&mut arr, v);                              // arr: [u8; 16]
+/// wasm_store_128!(&mut dst[off..off+16], [u8; 16], v);       // from slice
+/// ```
+#[cfg(target_arch = "wasm32")]
+macro_rules! wasm_store_128 {
+    ($dst:expr, $val:expr) => {{
+        #[cfg(not(feature = "unchecked"))]
+        {
+            safe_unaligned_simd::wasm32::v128_store($dst, $val)
+        }
+        #[cfg(feature = "unchecked")]
+        {
+            #[allow(unsafe_code)]
+            unsafe {
+                core::arch::wasm32::v128_store(core::ptr::from_mut($dst).cast(), $val)
+            }
+        }
+    }};
+    ($slice:expr, $T:ty, $val:expr) => {{
+        #[cfg(not(feature = "unchecked"))]
+        {
+            safe_unaligned_simd::wasm32::v128_store::<$T>(($slice).try_into().unwrap(), $val)
+        }
+        #[cfg(feature = "unchecked")]
+        {
+            let __s = $slice;
+            debug_assert!(core::mem::size_of_val(__s) >= 16);
+            #[allow(unsafe_code)]
+            unsafe {
+                core::arch::wasm32::v128_store(__s.as_mut_ptr() as *mut _, $val)
+            }
+        }
+    }};
+}
+#[cfg(target_arch = "wasm32")]
+pub(crate) use wasm_store_128;
+
+/// Load 4 bytes from a slice as a `v128` (zero-extended into lane 0).
+///
+/// ```ignore
+/// let v = wasm_loadi32!(&src[off..off+4]);
+/// ```
+#[cfg(target_arch = "wasm32")]
+macro_rules! wasm_loadi32 {
+    ($src:expr) => {{
+        let bytes: &[u8] = $src;
+        let val = i32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+        core::arch::wasm32::i32x4(val, 0, 0, 0)
+    }};
+}
+#[cfg(target_arch = "wasm32")]
+pub(crate) use wasm_loadi32;
+
+/// Store low 4 bytes of a `v128` to a slice.
+///
+/// ```ignore
+/// wasm_storei32!(&mut dst[off..off+4], v);
+/// ```
+#[cfg(target_arch = "wasm32")]
+macro_rules! wasm_storei32 {
+    ($dst:expr, $val:expr) => {{
+        let val = core::arch::wasm32::i32x4_extract_lane::<0>($val);
+        let bytes = val.to_ne_bytes();
+        let dst: &mut [u8] = $dst;
+        dst[0] = bytes[0];
+        dst[1] = bytes[1];
+        dst[2] = bytes[2];
+        dst[3] = bytes[3];
+    }};
+}
+#[cfg(target_arch = "wasm32")]
+pub(crate) use wasm_storei32;
+
+/// Load 8 bytes from a slice as a `v128` (zero-extended into low 64 bits).
+///
+/// ```ignore
+/// let v = wasm_loadi64!(&src[off..off+8]);
+/// ```
+#[cfg(target_arch = "wasm32")]
+macro_rules! wasm_loadi64 {
+    ($src:expr) => {{
+        let bytes: &[u8] = $src;
+        let lo = i64::from_ne_bytes([
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+        ]);
+        core::arch::wasm32::i64x2(lo, 0)
+    }};
+}
+#[cfg(target_arch = "wasm32")]
+pub(crate) use wasm_loadi64;
+
+/// Store low 8 bytes of a `v128` to a slice.
+///
+/// ```ignore
+/// wasm_storei64!(&mut dst[off..off+8], v);
+/// ```
+#[cfg(target_arch = "wasm32")]
+macro_rules! wasm_storei64 {
+    ($dst:expr, $val:expr) => {{
+        let val = core::arch::wasm32::i64x2_extract_lane::<0>($val);
+        let bytes = val.to_ne_bytes();
+        let dst: &mut [u8] = $dst;
+        dst[..8].copy_from_slice(&bytes);
+    }};
+}
+#[cfg(target_arch = "wasm32")]
+pub(crate) use wasm_storei64;
+
 #[cfg(target_arch = "aarch64")]
 macro_rules! neon_st1q_s16 {
     ($dst:expr, $val:expr) => {{

@@ -752,7 +752,7 @@ mod tests {
 use crate::include::common::intops::iclip;
 
 // TMP_STRIDE is 12 in the original cdef.rs
-const TMP_STRIDE: usize = 12;
+pub(super) const TMP_STRIDE: usize = 12;
 
 /// Scalar constrain function
 #[inline(always)]
@@ -769,7 +769,7 @@ fn constrain_scalar(diff: i32, threshold: c_int, shift: c_int) -> i32 {
 }
 
 /// Scalar CDEF filter fallback for 8bpc, used on non-x86_64 or when AVX2 unavailable.
-fn cdef_filter_block_scalar_8bpc(
+pub(super) fn cdef_filter_block_scalar_8bpc(
     tmp: &[u16],
     tmp_offset: usize,
     dst: PicOffset,
@@ -911,7 +911,7 @@ fn cdef_filter_block_scalar_8bpc(
 
 /// Padding function for 8bpc - copies edge pixels into temporary buffer.
 /// Merged loops: source + left + right in one pass to halve DisjointMut calls.
-fn padding_8bpc(
+pub(super) fn padding_8bpc(
     tmp: &mut [u16],
     dst: PicOffset,
     left: &[LeftPixelRow2px<u8>; 8],
@@ -1320,7 +1320,7 @@ pub unsafe extern "C" fn cdef_find_dir_8bpc_avx2(
 // ============================================================================
 
 /// Padding function for 16bpc
-fn padding_16bpc(
+pub(super) fn padding_16bpc(
     tmp: &mut [u16],
     dst: PicOffset,
     left: &[LeftPixelRow2px<u16>; 8],
@@ -1633,7 +1633,7 @@ fn cdef_filter_block_simd_16bpc(
 }
 
 /// Scalar CDEF filter fallback for 16bpc.
-fn cdef_filter_block_scalar_16bpc(
+pub(super) fn cdef_filter_block_scalar_16bpc(
     tmp: &[u16],
     tmp_offset: usize,
     dst: PicOffset,

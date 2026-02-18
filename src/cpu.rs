@@ -281,6 +281,16 @@ pub(crate) fn summon_avx512() -> Option<archmage::prelude::Server64> {
     archmage::prelude::Server64::summon()
 }
 
+/// Try to summon a Wasm128 token for WebAssembly SIMD128.
+/// This is compile-time only — wasm32 has no runtime feature detection.
+/// Returns `None` if not compiled with `+simd128` target feature.
+#[cfg(target_arch = "wasm32")]
+#[inline(always)]
+pub(crate) fn summon_wasm128() -> Option<archmage::Wasm128Token> {
+    use archmage::SimdToken as _;
+    archmage::Wasm128Token::summon()
+}
+
 #[cold]
 pub(crate) fn rav1d_init_cpu() {
     // Ensure detection only happens once (consistent with lazy init in rav1d_get_cpu_flags)

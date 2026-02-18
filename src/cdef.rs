@@ -142,6 +142,25 @@ fn cdef_direct<BD: BitDepth>(
         }
     }
 
+    #[cfg(target_arch = "wasm32")]
+    if !simd_handled {
+        if crate::src::safe_simd::cdef_wasm::cdef_filter_dispatch::<BD>(
+            variant,
+            dst,
+            left,
+            top,
+            bottom,
+            pri_strength,
+            sec_strength,
+            dir,
+            damping,
+            edges,
+            bd,
+        ) {
+            simd_handled = true;
+        }
+    }
+
     if simd_handled {
         #[cfg(feature = "simd_test")]
         {

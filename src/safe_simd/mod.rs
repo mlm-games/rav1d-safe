@@ -37,6 +37,9 @@ pub mod itx_arm;
 
 pub mod cdef;
 
+#[cfg(target_arch = "wasm32")]
+pub mod cdef_wasm;
+
 #[cfg(target_arch = "x86_64")]
 pub mod itx;
 
