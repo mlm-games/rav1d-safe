@@ -621,6 +621,10 @@ fn avg_direct<BD: BitDepth>(
     if crate::src::safe_simd::mc_arm::avg_dispatch::<BD>(dst, tmp1, tmp2, w, h, bd) {
         return;
     }
+    #[cfg(target_arch = "wasm32")]
+    if crate::src::safe_simd::mc_wasm::avg_dispatch::<BD>(dst, tmp1, tmp2, w, h, bd) {
+        return;
+    }
     #[allow(unreachable_code)]
     avg_rust(dst, tmp1, tmp2, w as usize, h as usize, bd);
 }
@@ -644,6 +648,10 @@ fn w_avg_direct<BD: BitDepth>(
     if crate::src::safe_simd::mc_arm::w_avg_dispatch::<BD>(dst, tmp1, tmp2, w, h, weight, bd) {
         return;
     }
+    #[cfg(target_arch = "wasm32")]
+    if crate::src::safe_simd::mc_wasm::w_avg_dispatch::<BD>(dst, tmp1, tmp2, w, h, weight, bd) {
+        return;
+    }
     #[allow(unreachable_code)]
     w_avg_rust(dst, tmp1, tmp2, w as usize, h as usize, weight, bd);
 }
@@ -665,6 +673,10 @@ fn mask_direct<BD: BitDepth>(
     }
     #[cfg(target_arch = "aarch64")]
     if crate::src::safe_simd::mc_arm::mask_dispatch::<BD>(dst, tmp1, tmp2, w, h, mask, bd) {
+        return;
+    }
+    #[cfg(target_arch = "wasm32")]
+    if crate::src::safe_simd::mc_wasm::mask_dispatch::<BD>(dst, tmp1, tmp2, w, h, mask, bd) {
         return;
     }
     #[allow(unreachable_code)]
