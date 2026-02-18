@@ -444,7 +444,9 @@ impl itxfm::Fn {
                     { crate::src::safe_simd::itx::itxfm_add_dispatch::<BD>(tx_size, tx_type, dst, coeff, eob, bd) }
                     #[cfg(target_arch = "aarch64")]
                     { crate::src::safe_simd::itx_arm::itxfm_add_dispatch::<BD>(tx_size, tx_type, dst, coeff, eob, bd) }
-                    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+                    #[cfg(target_arch = "wasm32")]
+                    { crate::src::safe_simd::itx_wasm::itxfm_add_dispatch::<BD>(tx_size, tx_type, dst, coeff, eob, bd) }
+                    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "wasm32")))]
                     { let _ = (tx_size, tx_type, &dst, &coeff, eob, &bd); false }
                 };
                 if simd_handled {
