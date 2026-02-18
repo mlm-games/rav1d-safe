@@ -48,16 +48,13 @@ archmage = { version = "0.7", features = ["macros", "avx512"] }
 safe_unaligned_simd = { version = "0.2.4", features = ["avx512"] }
 
 [dev-dependencies]
-archmage = { version = "0.7", features = ["macros", "avx512"] }
+archmage = { version = "0.7", features = ["macros", "avx512", "testable_dispatch"] }
 divan = "0.1"
 md5 = "0.8.0"
 zenavif-parse = { version = "0.3", features = ["eager"] }
 
-# testable_dispatch enables runtime SIMD level toggling for x86/aarch64 tests.
-# Must NOT be enabled on wasm32 — it disables Wasm128Token::summon() entirely
-# because wasm has no runtime feature detection (simd128 is compile-time only).
+# tango-bench depends on libloading which doesn't support wasm32
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
-archmage = { version = "0.7", features = ["macros", "avx512", "testable_dispatch"] }
 tango-bench = "0.6"
 
 [build-dependencies]
