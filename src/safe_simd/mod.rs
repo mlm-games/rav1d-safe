@@ -46,7 +46,7 @@ pub mod mc_wasm;
 #[cfg(target_arch = "x86_64")]
 pub mod itx;
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "wasm32"))]
 pub mod loopfilter;
 
 #[cfg(target_arch = "x86_64")]

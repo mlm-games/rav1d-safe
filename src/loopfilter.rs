@@ -108,7 +108,13 @@ fn loopfilter_sb_direct<BD: BitDepth>(
                 dst, stride, mask, lvl, b4_stride, lut, wh, bd_max, is_y, is_v,
             )
         }
-        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+        #[cfg(target_arch = "wasm32")]
+        {
+            crate::src::safe_simd::loopfilter::loopfilter_sb_dispatch::<BD>(
+                dst, stride, mask, lvl, b4_stride, lut, wh, bd_max, is_y, is_v,
+            )
+        }
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "wasm32")))]
         {
             let _ = (stride, &mask, &lvl, b4_stride, lut, wh, bd_max, is_y, is_v);
             false
