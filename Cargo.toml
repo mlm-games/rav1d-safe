@@ -5,7 +5,7 @@ exclude = ["fuzz"]
 [package]
 name = "rav1d-safe"
 authors = ["Rav1d Developers", "Prossimo", "Imazen"]
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 rust-version = "1.93"
 description = "Safe SIMD fork of rav1d - Rust AV1 decoder with archmage intrinsics"
@@ -44,11 +44,11 @@ to_method = "1.1.0"
 zerocopy = { version = "0.8", features = ["derive"] }
 
 # Safe SIMD dependencies
-archmage = { version = "0.8.3", features = ["macros", "avx512"] }
+archmage = { version = "0.8.4", features = ["macros", "avx512"] }
 safe_unaligned_simd = { version = "0.2.4", features = ["avx512"] }
 
 [dev-dependencies]
-archmage = { version = "0.8.3", features = ["macros", "avx512", "testable_dispatch"] }
+archmage = { version = "0.8.4", features = ["macros", "avx512", "testable_dispatch"] }
 divan = "0.1"
 md5 = "0.8.0"
 zenavif-parse = { version = "0.3", features = ["eager"] }
