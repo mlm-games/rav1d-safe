@@ -49,7 +49,8 @@ use crate::src::tables::dav1d_sm_weights;
 use crate::src::tables::filter_fn;
 use crate::src::tables::FLT_INCR;
 use crate::src::wrap_fn_ptr::wrap_fn_ptr;
-use libc::ptrdiff_t;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 use std::cmp;
 use std::ffi::c_int;
 use std::ffi::c_uint;

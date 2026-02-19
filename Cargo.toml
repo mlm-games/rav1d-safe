@@ -35,7 +35,7 @@ atomig = { version = "0.4.0", features = ["derive"] }
 bitflags = "2.4.0"
 cfg-if = "1.0.0"
 rav1d-disjoint-mut = { version = "0.3.0", path = "crates/rav1d-disjoint-mut", default-features = false, features = ["std", "aligned", "pic-buf", "zerocopy"] }
-libc = "0.2"
+libc = { version = "0.2", optional = true }
 parking_lot = "0.12.2"
 paste = "1.0.14"
 raw-cpuid = "11.0.1"
@@ -44,11 +44,11 @@ to_method = "1.1.0"
 zerocopy = { version = "0.8", features = ["derive"] }
 
 # Safe SIMD dependencies
-archmage = { version = "0.7", features = ["macros", "avx512"] }
+archmage = { version = "0.8.3", features = ["macros", "avx512"] }
 safe_unaligned_simd = { version = "0.2.4", features = ["avx512"] }
 
 [dev-dependencies]
-archmage = { version = "0.7", features = ["macros", "avx512", "testable_dispatch"] }
+archmage = { version = "0.8.3", features = ["macros", "avx512", "testable_dispatch"] }
 divan = "0.1"
 md5 = "0.8.0"
 zenavif-parse = { version = "0.3", features = ["eager"] }
@@ -72,7 +72,7 @@ unchecked = []
 
 # C FFI API compatibility (unsafe extern "C" functions)
 # Enables: dav1d_* C API, FFISafe, c_arc, c_box
-c-ffi = ["unchecked", "dav1d-compat"]
+c-ffi = ["unchecked", "dav1d-compat", "libc"]
 
 # Export C symbols as dav1d_* (drop-in replacement for libdav1d).
 # When disabled, symbols are exported as rav1d_* for side-by-side benchmarking.

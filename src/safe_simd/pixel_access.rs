@@ -1161,6 +1161,7 @@ pub(crate) use wasm_storei32;
 /// let v = wasm_loadi64!(&src[off..off+8]);
 /// ```
 #[cfg(target_arch = "wasm32")]
+#[allow(unused_macros)]
 macro_rules! wasm_loadi64 {
     ($src:expr) => {{
         let bytes: &[u8] = $src;
@@ -1171,6 +1172,7 @@ macro_rules! wasm_loadi64 {
     }};
 }
 #[cfg(target_arch = "wasm32")]
+#[allow(unused_imports)]
 pub(crate) use wasm_loadi64;
 
 /// Store low 8 bytes of a `v128` to a slice.
@@ -1179,6 +1181,7 @@ pub(crate) use wasm_loadi64;
 /// wasm_storei64!(&mut dst[off..off+8], v);
 /// ```
 #[cfg(target_arch = "wasm32")]
+#[allow(unused_macros)]
 macro_rules! wasm_storei64 {
     ($dst:expr, $val:expr) => {{
         let val = core::arch::wasm32::i64x2_extract_lane::<0>($val);
@@ -1188,6 +1191,7 @@ macro_rules! wasm_storei64 {
     }};
 }
 #[cfg(target_arch = "wasm32")]
+#[allow(unused_imports)]
 pub(crate) use wasm_storei64;
 
 #[cfg(target_arch = "aarch64")]

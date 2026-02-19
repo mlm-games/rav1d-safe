@@ -16,7 +16,8 @@ use crate::src::tables::dav1d_sgr_params;
 use aligned::Aligned;
 use assert_matches::assert_matches;
 use bitflags::bitflags;
-use libc::ptrdiff_t;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 use std::cmp;
 use std::ffi::c_int;
 

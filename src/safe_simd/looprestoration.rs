@@ -42,7 +42,8 @@ use crate::src::ffi_safe::FFISafe;
 use crate::src::looprestoration::{padding, LooprestorationParams, LrEdgeFlags};
 use crate::src::strided::Strided as _;
 use crate::src::tables::dav1d_sgr_x_by_x;
-use libc::ptrdiff_t;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 
 // Must match the constant in looprestoration.rs
 const REST_UNIT_STRIDE: usize = 256 * 3 / 2 + 3 + 3; // = 390

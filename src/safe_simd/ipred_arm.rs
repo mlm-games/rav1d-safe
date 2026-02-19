@@ -12,7 +12,9 @@ use core::arch::aarch64::*;
 #[cfg(target_arch = "aarch64")]
 use archmage::{arcane, Arm64, SimdToken};
 
-use libc::{c_int, ptrdiff_t};
+use std::ffi::c_int;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 
 use crate::include::common::bitdepth::DynPixel;
 use crate::include::dav1d::picture::PicOffset;

@@ -212,7 +212,18 @@ fn inv_txfm_add_dct_dct_4x4_8bpc(
         i32x4_extract_lane::<1>(sum0) as u8,
         i32x4_extract_lane::<2>(sum0) as u8,
         i32x4_extract_lane::<3>(sum0) as u8,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
     );
     wasm_storei32!(&mut dst[..4], packed0);
 
@@ -231,7 +242,18 @@ fn inv_txfm_add_dct_dct_4x4_8bpc(
         i32x4_extract_lane::<1>(sum1) as u8,
         i32x4_extract_lane::<2>(sum1) as u8,
         i32x4_extract_lane::<3>(sum1) as u8,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
     );
     wasm_storei32!(&mut dst[off1..off1 + 4], packed1);
 
@@ -250,7 +272,18 @@ fn inv_txfm_add_dct_dct_4x4_8bpc(
         i32x4_extract_lane::<1>(sum2) as u8,
         i32x4_extract_lane::<2>(sum2) as u8,
         i32x4_extract_lane::<3>(sum2) as u8,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
     );
     wasm_storei32!(&mut dst[off2..off2 + 4], packed2);
 
@@ -269,7 +302,18 @@ fn inv_txfm_add_dct_dct_4x4_8bpc(
         i32x4_extract_lane::<1>(sum3) as u8,
         i32x4_extract_lane::<2>(sum3) as u8,
         i32x4_extract_lane::<3>(sum3) as u8,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
     );
     wasm_storei32!(&mut dst[off3..off3 + 4], packed3);
 
@@ -471,15 +515,26 @@ fn dct8_4rows(
 /// of 4 rows, we transpose to get 4 rows of 8 elements for the column DCT8.
 #[inline(always)]
 fn transpose_8x4_to_4x8(
-    c0: v128, c1: v128, c2: v128, c3: v128,
-    c4: v128, c5: v128, c6: v128, c7: v128,
+    c0: v128,
+    c1: v128,
+    c2: v128,
+    c3: v128,
+    c4: v128,
+    c5: v128,
+    c6: v128,
+    c7: v128,
 ) -> ((v128, v128), (v128, v128), (v128, v128), (v128, v128)) {
     // First, transpose the 4x4 blocks
     let (t0_lo, t1_lo, t2_lo, t3_lo) = transpose_4x4(c0, c1, c2, c3);
     let (t0_hi, t1_hi, t2_hi, t3_hi) = transpose_4x4(c4, c5, c6, c7);
     // Now t0_lo = [c0[0], c1[0], c2[0], c3[0]] — first 4 elements of row 0
     // and t0_hi = [c4[0], c5[0], c6[0], c7[0]] — last 4 elements of row 0
-    ((t0_lo, t0_hi), (t1_lo, t1_hi), (t2_lo, t2_hi), (t3_lo, t3_hi))
+    (
+        (t0_lo, t0_hi),
+        (t1_lo, t1_hi),
+        (t2_lo, t2_hi),
+        (t3_lo, t3_hi),
+    )
 }
 
 // ============================================================================
@@ -533,16 +588,30 @@ fn inv_txfm_add_dct_dct_8x8_8bpc(
 
     // Row DCT8 on rows 0-3 (low halves of all 8 columns)
     let (r0_lo, r1_lo, r2_lo, r3_lo, r4_lo, r5_lo, r6_lo, r7_lo) = dct8_4rows(
-        load_col_lo(0), load_col_lo(1), load_col_lo(2), load_col_lo(3),
-        load_col_lo(4), load_col_lo(5), load_col_lo(6), load_col_lo(7),
-        row_clip_min, row_clip_max,
+        load_col_lo(0),
+        load_col_lo(1),
+        load_col_lo(2),
+        load_col_lo(3),
+        load_col_lo(4),
+        load_col_lo(5),
+        load_col_lo(6),
+        load_col_lo(7),
+        row_clip_min,
+        row_clip_max,
     );
 
     // Row DCT8 on rows 4-7 (high halves of all 8 columns)
     let (r0_hi, r1_hi, r2_hi, r3_hi, r4_hi, r5_hi, r6_hi, r7_hi) = dct8_4rows(
-        load_col_hi(0), load_col_hi(1), load_col_hi(2), load_col_hi(3),
-        load_col_hi(4), load_col_hi(5), load_col_hi(6), load_col_hi(7),
-        row_clip_min, row_clip_max,
+        load_col_hi(0),
+        load_col_hi(1),
+        load_col_hi(2),
+        load_col_hi(3),
+        load_col_hi(4),
+        load_col_hi(5),
+        load_col_hi(6),
+        load_col_hi(7),
+        row_clip_min,
+        row_clip_max,
     );
 
     // Transpose: 8 columns × 8 rows → 8 columns × 8 rows
@@ -563,14 +632,22 @@ fn inv_txfm_add_dct_dct_8x8_8bpc(
         i32x4_max(i32x4_min(i32x4_shr(i32x4_add(v, rnd_shift), 1), cmax), cmin)
     };
 
-    let c0_lo = clamp_shift(r0_lo); let c0_hi = clamp_shift(r0_hi);
-    let c1_lo = clamp_shift(r1_lo); let c1_hi = clamp_shift(r1_hi);
-    let c2_lo = clamp_shift(r2_lo); let c2_hi = clamp_shift(r2_hi);
-    let c3_lo = clamp_shift(r3_lo); let c3_hi = clamp_shift(r3_hi);
-    let c4_lo = clamp_shift(r4_lo); let c4_hi = clamp_shift(r4_hi);
-    let c5_lo = clamp_shift(r5_lo); let c5_hi = clamp_shift(r5_hi);
-    let c6_lo = clamp_shift(r6_lo); let c6_hi = clamp_shift(r6_hi);
-    let c7_lo = clamp_shift(r7_lo); let c7_hi = clamp_shift(r7_hi);
+    let c0_lo = clamp_shift(r0_lo);
+    let c0_hi = clamp_shift(r0_hi);
+    let c1_lo = clamp_shift(r1_lo);
+    let c1_hi = clamp_shift(r1_hi);
+    let c2_lo = clamp_shift(r2_lo);
+    let c2_hi = clamp_shift(r2_hi);
+    let c3_lo = clamp_shift(r3_lo);
+    let c3_hi = clamp_shift(r3_hi);
+    let c4_lo = clamp_shift(r4_lo);
+    let c4_hi = clamp_shift(r4_hi);
+    let c5_lo = clamp_shift(r5_lo);
+    let c5_hi = clamp_shift(r5_hi);
+    let c6_lo = clamp_shift(r6_lo);
+    let c6_hi = clamp_shift(r6_hi);
+    let c7_lo = clamp_shift(r7_lo);
+    let c7_hi = clamp_shift(r7_hi);
 
     // Column DCT8: we now need to apply DCT8 along the column direction.
     // Each "column" has 8 values split across _lo (rows 0-3) and _hi (rows 4-7).
@@ -595,14 +672,30 @@ fn inv_txfm_add_dct_dct_8x8_8bpc(
 
     // Column DCT8 on columns 0-3 (using _lo parts of each row)
     let (f0_lo, f1_lo, f2_lo, f3_lo, f4_lo, f5_lo, f6_lo, f7_lo) = dct8_4rows(
-        row0_lo, row1_lo, row2_lo, row3_lo, row4_lo, row5_lo, row6_lo, row7_lo,
-        col_clip_min, col_clip_max,
+        row0_lo,
+        row1_lo,
+        row2_lo,
+        row3_lo,
+        row4_lo,
+        row5_lo,
+        row6_lo,
+        row7_lo,
+        col_clip_min,
+        col_clip_max,
     );
 
     // Column DCT8 on columns 4-7 (using _hi parts of each row)
     let (f0_hi, f1_hi, f2_hi, f3_hi, f4_hi, f5_hi, f6_hi, f7_hi) = dct8_4rows(
-        row0_hi, row1_hi, row2_hi, row3_hi, row4_hi, row5_hi, row6_hi, row7_hi,
-        col_clip_min, col_clip_max,
+        row0_hi,
+        row1_hi,
+        row2_hi,
+        row3_hi,
+        row4_hi,
+        row5_hi,
+        row6_hi,
+        row7_hi,
+        col_clip_min,
+        col_clip_max,
     );
 
     // Scale: (val + 8) >> 4, then add to destination and clamp
@@ -615,15 +708,23 @@ fn inv_txfm_add_dct_dct_8x8_8bpc(
         let out_lo = i32x4_shr(i32x4_add(out_lo, rnd), 4);
         let out_hi = i32x4_shr(i32x4_add(out_hi, rnd), 4);
         // Extract and write pixels 0-3
-        dst[off + 0] = (dst[off + 0] as i32 + i32x4_extract_lane::<0>(out_lo)).clamp(0, bdmax) as u8;
-        dst[off + 1] = (dst[off + 1] as i32 + i32x4_extract_lane::<1>(out_lo)).clamp(0, bdmax) as u8;
-        dst[off + 2] = (dst[off + 2] as i32 + i32x4_extract_lane::<2>(out_lo)).clamp(0, bdmax) as u8;
-        dst[off + 3] = (dst[off + 3] as i32 + i32x4_extract_lane::<3>(out_lo)).clamp(0, bdmax) as u8;
+        dst[off + 0] =
+            (dst[off + 0] as i32 + i32x4_extract_lane::<0>(out_lo)).clamp(0, bdmax) as u8;
+        dst[off + 1] =
+            (dst[off + 1] as i32 + i32x4_extract_lane::<1>(out_lo)).clamp(0, bdmax) as u8;
+        dst[off + 2] =
+            (dst[off + 2] as i32 + i32x4_extract_lane::<2>(out_lo)).clamp(0, bdmax) as u8;
+        dst[off + 3] =
+            (dst[off + 3] as i32 + i32x4_extract_lane::<3>(out_lo)).clamp(0, bdmax) as u8;
         // Extract and write pixels 4-7
-        dst[off + 4] = (dst[off + 4] as i32 + i32x4_extract_lane::<0>(out_hi)).clamp(0, bdmax) as u8;
-        dst[off + 5] = (dst[off + 5] as i32 + i32x4_extract_lane::<1>(out_hi)).clamp(0, bdmax) as u8;
-        dst[off + 6] = (dst[off + 6] as i32 + i32x4_extract_lane::<2>(out_hi)).clamp(0, bdmax) as u8;
-        dst[off + 7] = (dst[off + 7] as i32 + i32x4_extract_lane::<3>(out_hi)).clamp(0, bdmax) as u8;
+        dst[off + 4] =
+            (dst[off + 4] as i32 + i32x4_extract_lane::<0>(out_hi)).clamp(0, bdmax) as u8;
+        dst[off + 5] =
+            (dst[off + 5] as i32 + i32x4_extract_lane::<1>(out_hi)).clamp(0, bdmax) as u8;
+        dst[off + 6] =
+            (dst[off + 6] as i32 + i32x4_extract_lane::<2>(out_hi)).clamp(0, bdmax) as u8;
+        dst[off + 7] =
+            (dst[off + 7] as i32 + i32x4_extract_lane::<3>(out_hi)).clamp(0, bdmax) as u8;
     }
     let _ = rnd; // used inside write_row_8bpc
 
@@ -671,9 +772,8 @@ pub fn itxfm_add_dispatch<BD: BitDepth>(
     match BD::BPC {
         BPC::BPC8 => {
             // Reinterpret coeff as &mut [i16] via zerocopy
-            let coeff_i16: &mut [i16] =
-                zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
-                    .expect("coeff alignment/size mismatch for i16 reinterpretation");
+            let coeff_i16: &mut [i16] = zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
+                .expect("coeff alignment/size mismatch for i16 reinterpretation");
 
             let (mut guard, _base) = dst.strided_slice_mut::<BD>(w, h);
             let dst_u8: &mut [u8] = guard.as_mut_bytes();
@@ -691,9 +791,8 @@ pub fn itxfm_add_dispatch<BD: BitDepth>(
             }
         }
         BPC::BPC16 => {
-            let coeff_i32: &mut [i32] =
-                zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
-                    .expect("coeff alignment/size mismatch for i32 reinterpretation");
+            let coeff_i32: &mut [i32] = zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
+                .expect("coeff alignment/size mismatch for i32 reinterpretation");
 
             let (mut guard, _base) = dst.strided_slice_mut::<BD>(w, h);
             let dst_bytes: &mut [u8] = guard.as_mut_bytes();

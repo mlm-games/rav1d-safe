@@ -19,7 +19,8 @@ use crate::src::disjoint_mut::DisjointMut;
 use crate::src::ffi_safe::FFISafe;
 use crate::src::lf_mask::Av1FilterLUT;
 use crate::src::with_offset::WithOffset;
-use libc::ptrdiff_t;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 use std::cmp;
 use std::ffi::c_int;
 

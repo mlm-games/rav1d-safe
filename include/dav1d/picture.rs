@@ -41,9 +41,11 @@ use crate::src::pixels::Pixels;
 use crate::src::send_sync_non_null::SendSyncNonNull;
 use crate::src::strided::Strided;
 use crate::src::with_offset::WithOffset;
-use libc::ptrdiff_t;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 #[cfg(feature = "c-ffi")]
-use libc::uintptr_t;
+#[allow(non_camel_case_types)]
+type uintptr_t = usize;
 #[cfg(not(feature = "c-ffi"))]
 use rav1d_disjoint_mut::PicBuf;
 use std::array;

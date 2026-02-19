@@ -32,7 +32,8 @@ use crate::src::safe_simd::pixel_access::Flex;
 use crate::src::strided::Strided as _;
 use crate::src::tables::dav1d_cdef_directions;
 use crate::src::with_offset::WithOffset;
-use libc::ptrdiff_t;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 use std::cmp;
 
 // ============================================================================

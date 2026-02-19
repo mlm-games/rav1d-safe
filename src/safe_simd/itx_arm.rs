@@ -21,7 +21,8 @@ use crate::include::common::bitdepth::DynPixel;
 use crate::include::common::intops::iclip;
 use crate::include::dav1d::picture::PicOffset;
 use crate::src::ffi_safe::FFISafe;
-use libc::ptrdiff_t;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 
 // ============================================================================
 // WHT_WHT 4x4 TRANSFORM

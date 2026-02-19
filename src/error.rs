@@ -18,14 +18,28 @@ pub enum Rav1dError {
     /// which is more optimal since `0` is no error for [`Dav1dResult`].
     EGeneric = 1,
 
-    ENOENT = libc::ENOENT as u8,
-    EIO = libc::EIO as u8,
-    EAGAIN = libc::EAGAIN as u8,
-    ENOMEM = libc::ENOMEM as u8,
-    EINVAL = libc::EINVAL as u8,
-    ERANGE = libc::ERANGE as u8,
-    ENOPROTOOPT = libc::ENOPROTOOPT as u8,
+    // POSIX errno values. When c-ffi is enabled, a static assertion
+    // verifies these match the platform's libc constants.
+    ENOENT = 2,
+    EIO = 5,
+    EAGAIN = 11,
+    ENOMEM = 12,
+    EINVAL = 22,
+    ERANGE = 34,
+    ENOPROTOOPT = 92,
 }
+
+// When c-ffi is enabled, verify our hardcoded values match the platform's errno.
+#[cfg(feature = "c-ffi")]
+const _: () = {
+    assert!(Rav1dError::ENOENT as u8 == libc::ENOENT as u8);
+    assert!(Rav1dError::EIO as u8 == libc::EIO as u8);
+    assert!(Rav1dError::EAGAIN as u8 == libc::EAGAIN as u8);
+    assert!(Rav1dError::ENOMEM as u8 == libc::ENOMEM as u8);
+    assert!(Rav1dError::EINVAL as u8 == libc::EINVAL as u8);
+    assert!(Rav1dError::ERANGE as u8 == libc::ERANGE as u8);
+    assert!(Rav1dError::ENOPROTOOPT as u8 == libc::ENOPROTOOPT as u8);
+};
 
 pub type Rav1dResult<T = ()> = Result<T, Rav1dError>;
 

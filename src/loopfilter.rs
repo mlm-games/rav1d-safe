@@ -13,7 +13,8 @@ use crate::src::lf_mask::Av1FilterLUT;
 use crate::src::strided::Strided as _;
 use crate::src::with_offset::WithOffset;
 use crate::src::wrap_fn_ptr::wrap_fn_ptr;
-use libc::ptrdiff_t;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 use std::cmp;
 use std::ffi::c_int;
 use strum::FromRepr;
@@ -114,7 +115,11 @@ fn loopfilter_sb_direct<BD: BitDepth>(
                 dst, stride, mask, lvl, b4_stride, lut, wh, bd_max, is_y, is_v,
             )
         }
-        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64", target_arch = "wasm32")))]
+        #[cfg(not(any(
+            target_arch = "x86_64",
+            target_arch = "aarch64",
+            target_arch = "wasm32"
+        )))]
         {
             let _ = (stride, &mask, &lvl, b4_stride, lut, wh, bd_max, is_y, is_v);
             false

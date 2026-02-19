@@ -22,7 +22,7 @@ use crate::src::strided::Strided as _;
 use crate::src::tables::dav1d_cdef_directions;
 
 // Re-use constants and shared functions from the main cdef module
-use super::cdef::{padding_8bpc, padding_16bpc, TMP_STRIDE};
+use super::cdef::{padding_16bpc, padding_8bpc, TMP_STRIDE};
 
 // ============================================================================
 // CONSTRAIN FUNCTION (wasm128 SIMD)
@@ -35,12 +35,7 @@ use super::cdef::{padding_8bpc, padding_16bpc, TMP_STRIDE};
 ///   _mm_blendv_epi8(a, b, mask) → v128_bitselect(b, a, mask) [args flipped!]
 ///   _mm_sra_epi16(a, count) → i16x8_shr(a, extract_lane(count))
 #[rite]
-fn constrain_wasm128(
-    _t: Wasm128Token,
-    diff: v128,
-    threshold: v128,
-    shift: u32,
-) -> v128 {
+fn constrain_wasm128(_t: Wasm128Token, diff: v128, threshold: v128, shift: u32) -> v128 {
     let zero = i16x8_splat(0);
 
     // Compute absolute value
@@ -88,7 +83,7 @@ fn cdef_filter_block_simd_8bpc(
     sec_strength: c_int,
     damping: c_int,
 ) {
-    use super::pixel_access::{wasm_load_128, wasm_storei32, wasm_store_128};
+    use super::pixel_access::{wasm_load_128, wasm_store_128, wasm_storei32};
     use crate::include::common::bitdepth::BitDepth8;
 
     let zero = i16x8_splat(0);
@@ -154,14 +149,8 @@ fn cdef_filter_block_simd_8bpc(
                     let sec_sum = i16x8_add(i16x8_add(ds0, ds1), i16x8_add(ds2, ds3));
                     sum = i16x8_add(sum, i16x8_mul(sec_tap_v, sec_sum));
 
-                    min_v = u16x8_min(
-                        min_v,
-                        u16x8_min(u16x8_min(s0, s1), u16x8_min(s2, s3)),
-                    );
-                    max_v = i16x8_max(
-                        max_v,
-                        i16x8_max(i16x8_max(s0, s1), i16x8_max(s2, s3)),
-                    );
+                    min_v = u16x8_min(min_v, u16x8_min(u16x8_min(s0, s1), u16x8_min(s2, s3)));
+                    max_v = i16x8_max(max_v, i16x8_max(i16x8_max(s0, s1), i16x8_max(s2, s3)));
                 }
 
                 // Rounding: (sum - (sum < 0) + 8) >> 4
@@ -360,14 +349,8 @@ fn cdef_filter_block_simd_16bpc(
                     let sec_sum = i16x8_add(i16x8_add(ds0, ds1), i16x8_add(ds2, ds3));
                     sum = i16x8_add(sum, i16x8_mul(sec_tap_v, sec_sum));
 
-                    min_v = u16x8_min(
-                        min_v,
-                        u16x8_min(u16x8_min(s0, s1), u16x8_min(s2, s3)),
-                    );
-                    max_v = i16x8_max(
-                        max_v,
-                        i16x8_max(i16x8_max(s0, s1), i16x8_max(s2, s3)),
-                    );
+                    min_v = u16x8_min(min_v, u16x8_min(u16x8_min(s0, s1), u16x8_min(s2, s3)));
+                    max_v = i16x8_max(max_v, i16x8_max(i16x8_max(s0, s1), i16x8_max(s2, s3)));
                 }
 
                 let neg_mask = i16x8_gt(zero, sum);
@@ -496,15 +479,32 @@ fn cdef_filter_8x8_8bpc_wasm_inner(
 
     if let Some(token) = crate::src::cpu::summon_wasm128() {
         cdef_filter_block_simd_8bpc(
-            token, &tmp, tmp_offset, dst, stride, 8, 8,
-            dir as usize, pri_strength, sec_strength, damping,
+            token,
+            &tmp,
+            tmp_offset,
+            dst,
+            stride,
+            8,
+            8,
+            dir as usize,
+            pri_strength,
+            sec_strength,
+            damping,
         );
         return;
     }
 
     super::cdef::cdef_filter_block_scalar_8bpc(
-        &tmp, tmp_offset, dst, stride, 8, 8,
-        dir as usize, pri_strength, sec_strength, damping,
+        &tmp,
+        tmp_offset,
+        dst,
+        stride,
+        8,
+        8,
+        dir as usize,
+        pri_strength,
+        sec_strength,
+        damping,
     );
 }
 
@@ -529,15 +529,32 @@ fn cdef_filter_4x8_8bpc_wasm_inner(
 
     if let Some(token) = crate::src::cpu::summon_wasm128() {
         cdef_filter_block_simd_8bpc(
-            token, &tmp, tmp_offset, dst, stride, 4, 8,
-            dir as usize, pri_strength, sec_strength, damping,
+            token,
+            &tmp,
+            tmp_offset,
+            dst,
+            stride,
+            4,
+            8,
+            dir as usize,
+            pri_strength,
+            sec_strength,
+            damping,
         );
         return;
     }
 
     super::cdef::cdef_filter_block_scalar_8bpc(
-        &tmp, tmp_offset, dst, stride, 4, 8,
-        dir as usize, pri_strength, sec_strength, damping,
+        &tmp,
+        tmp_offset,
+        dst,
+        stride,
+        4,
+        8,
+        dir as usize,
+        pri_strength,
+        sec_strength,
+        damping,
     );
 }
 
@@ -562,15 +579,32 @@ fn cdef_filter_4x4_8bpc_wasm_inner(
 
     if let Some(token) = crate::src::cpu::summon_wasm128() {
         cdef_filter_block_simd_8bpc(
-            token, &tmp, tmp_offset, dst, stride, 4, 4,
-            dir as usize, pri_strength, sec_strength, damping,
+            token,
+            &tmp,
+            tmp_offset,
+            dst,
+            stride,
+            4,
+            4,
+            dir as usize,
+            pri_strength,
+            sec_strength,
+            damping,
         );
         return;
     }
 
     super::cdef::cdef_filter_block_scalar_8bpc(
-        &tmp, tmp_offset, dst, stride, 4, 4,
-        dir as usize, pri_strength, sec_strength, damping,
+        &tmp,
+        tmp_offset,
+        dst,
+        stride,
+        4,
+        4,
+        dir as usize,
+        pri_strength,
+        sec_strength,
+        damping,
     );
 }
 
@@ -596,15 +630,34 @@ fn cdef_filter_8x8_16bpc_wasm_inner(
 
     if let Some(token) = crate::src::cpu::summon_wasm128() {
         cdef_filter_block_simd_16bpc(
-            token, &tmp, tmp_offset, dst, stride, 8, 8,
-            dir as usize, pri_strength, sec_strength, damping, bitdepth_max,
+            token,
+            &tmp,
+            tmp_offset,
+            dst,
+            stride,
+            8,
+            8,
+            dir as usize,
+            pri_strength,
+            sec_strength,
+            damping,
+            bitdepth_max,
         );
         return;
     }
 
     super::cdef::cdef_filter_block_scalar_16bpc(
-        &tmp, tmp_offset, dst, stride, 8, 8,
-        dir as usize, pri_strength, sec_strength, damping, bitdepth_max,
+        &tmp,
+        tmp_offset,
+        dst,
+        stride,
+        8,
+        8,
+        dir as usize,
+        pri_strength,
+        sec_strength,
+        damping,
+        bitdepth_max,
     );
 }
 
@@ -630,15 +683,34 @@ fn cdef_filter_4x8_16bpc_wasm_inner(
 
     if let Some(token) = crate::src::cpu::summon_wasm128() {
         cdef_filter_block_simd_16bpc(
-            token, &tmp, tmp_offset, dst, stride, 4, 8,
-            dir as usize, pri_strength, sec_strength, damping, bitdepth_max,
+            token,
+            &tmp,
+            tmp_offset,
+            dst,
+            stride,
+            4,
+            8,
+            dir as usize,
+            pri_strength,
+            sec_strength,
+            damping,
+            bitdepth_max,
         );
         return;
     }
 
     super::cdef::cdef_filter_block_scalar_16bpc(
-        &tmp, tmp_offset, dst, stride, 4, 8,
-        dir as usize, pri_strength, sec_strength, damping, bitdepth_max,
+        &tmp,
+        tmp_offset,
+        dst,
+        stride,
+        4,
+        8,
+        dir as usize,
+        pri_strength,
+        sec_strength,
+        damping,
+        bitdepth_max,
     );
 }
 
@@ -664,15 +736,34 @@ fn cdef_filter_4x4_16bpc_wasm_inner(
 
     if let Some(token) = crate::src::cpu::summon_wasm128() {
         cdef_filter_block_simd_16bpc(
-            token, &tmp, tmp_offset, dst, stride, 4, 4,
-            dir as usize, pri_strength, sec_strength, damping, bitdepth_max,
+            token,
+            &tmp,
+            tmp_offset,
+            dst,
+            stride,
+            4,
+            4,
+            dir as usize,
+            pri_strength,
+            sec_strength,
+            damping,
+            bitdepth_max,
         );
         return;
     }
 
     super::cdef::cdef_filter_block_scalar_16bpc(
-        &tmp, tmp_offset, dst, stride, 4, 4,
-        dir as usize, pri_strength, sec_strength, damping, bitdepth_max,
+        &tmp,
+        tmp_offset,
+        dst,
+        stride,
+        4,
+        4,
+        dir as usize,
+        pri_strength,
+        sec_strength,
+        damping,
+        bitdepth_max,
     );
 }
 
@@ -708,8 +799,15 @@ pub fn cdef_filter_dispatch<BD: BitDepth>(
                 crate::src::safe_simd::pixel_access::reinterpret_ref(left)
                     .expect("BD::Pixel layout matches u8");
             cdef_filter_8x8_8bpc_wasm_inner(
-                dst, left, &top, &bottom,
-                pri_strength, sec_strength, dir, damping, edges,
+                dst,
+                left,
+                &top,
+                &bottom,
+                pri_strength,
+                sec_strength,
+                dir,
+                damping,
+                edges,
             );
         }
         (BPC::BPC8, 1) => {
@@ -717,8 +815,15 @@ pub fn cdef_filter_dispatch<BD: BitDepth>(
                 crate::src::safe_simd::pixel_access::reinterpret_ref(left)
                     .expect("BD::Pixel layout matches u8");
             cdef_filter_4x8_8bpc_wasm_inner(
-                dst, left, &top, &bottom,
-                pri_strength, sec_strength, dir, damping, edges,
+                dst,
+                left,
+                &top,
+                &bottom,
+                pri_strength,
+                sec_strength,
+                dir,
+                damping,
+                edges,
             );
         }
         (BPC::BPC8, _) => {
@@ -726,8 +831,15 @@ pub fn cdef_filter_dispatch<BD: BitDepth>(
                 crate::src::safe_simd::pixel_access::reinterpret_ref(left)
                     .expect("BD::Pixel layout matches u8");
             cdef_filter_4x4_8bpc_wasm_inner(
-                dst, left, &top, &bottom,
-                pri_strength, sec_strength, dir, damping, edges,
+                dst,
+                left,
+                &top,
+                &bottom,
+                pri_strength,
+                sec_strength,
+                dir,
+                damping,
+                edges,
             );
         }
         (BPC::BPC16, 0) => {
@@ -735,8 +847,16 @@ pub fn cdef_filter_dispatch<BD: BitDepth>(
                 crate::src::safe_simd::pixel_access::reinterpret_ref(left)
                     .expect("BD::Pixel layout matches u16");
             cdef_filter_8x8_16bpc_wasm_inner(
-                dst, left, &top, &bottom,
-                pri_strength, sec_strength, dir, damping, edges, bd.into_c(),
+                dst,
+                left,
+                &top,
+                &bottom,
+                pri_strength,
+                sec_strength,
+                dir,
+                damping,
+                edges,
+                bd.into_c(),
             );
         }
         (BPC::BPC16, 1) => {
@@ -744,8 +864,16 @@ pub fn cdef_filter_dispatch<BD: BitDepth>(
                 crate::src::safe_simd::pixel_access::reinterpret_ref(left)
                     .expect("BD::Pixel layout matches u16");
             cdef_filter_4x8_16bpc_wasm_inner(
-                dst, left, &top, &bottom,
-                pri_strength, sec_strength, dir, damping, edges, bd.into_c(),
+                dst,
+                left,
+                &top,
+                &bottom,
+                pri_strength,
+                sec_strength,
+                dir,
+                damping,
+                edges,
+                bd.into_c(),
             );
         }
         (BPC::BPC16, _) => {
@@ -753,8 +881,16 @@ pub fn cdef_filter_dispatch<BD: BitDepth>(
                 crate::src::safe_simd::pixel_access::reinterpret_ref(left)
                     .expect("BD::Pixel layout matches u16");
             cdef_filter_4x4_16bpc_wasm_inner(
-                dst, left, &top, &bottom,
-                pri_strength, sec_strength, dir, damping, edges, bd.into_c(),
+                dst,
+                left,
+                &top,
+                &bottom,
+                pri_strength,
+                sec_strength,
+                dir,
+                damping,
+                edges,
+                bd.into_c(),
             );
         }
     }

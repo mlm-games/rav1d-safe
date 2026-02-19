@@ -16,7 +16,8 @@ use crate::src::tables::dav1d_cdef_directions;
 use crate::src::with_offset::WithOffset;
 use crate::src::wrap_fn_ptr::wrap_fn_ptr;
 use bitflags::bitflags;
-use libc::ptrdiff_t;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 use std::cmp;
 use std::ffi::c_int;
 use std::ffi::c_uint;

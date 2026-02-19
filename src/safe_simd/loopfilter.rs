@@ -33,7 +33,8 @@ use crate::src::disjoint_mut::DisjointMut;
 use crate::src::ffi_safe::FFISafe;
 use crate::src::lf_mask::Av1FilterLUT;
 use crate::src::with_offset::WithOffset;
-use libc::ptrdiff_t;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 use std::cmp;
 use std::ffi::c_int;
 
@@ -1674,20 +1675,56 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
 
             match (is_y, is_v) {
                 (true, false) => lpf_h_sb_y_8bpc_inner(
-                    buf, base, stride as isize, mask, lvl_slice, lvl_base, lvl_byte_idx,
-                    b4_stride, lut, w, bitdepth_max,
+                    buf,
+                    base,
+                    stride as isize,
+                    mask,
+                    lvl_slice,
+                    lvl_base,
+                    lvl_byte_idx,
+                    b4_stride,
+                    lut,
+                    w,
+                    bitdepth_max,
                 ),
                 (true, true) => lpf_v_sb_y_8bpc_inner(
-                    buf, base, stride as isize, mask, lvl_slice, lvl_base, lvl_byte_idx,
-                    b4_stride, lut, w, bitdepth_max,
+                    buf,
+                    base,
+                    stride as isize,
+                    mask,
+                    lvl_slice,
+                    lvl_base,
+                    lvl_byte_idx,
+                    b4_stride,
+                    lut,
+                    w,
+                    bitdepth_max,
                 ),
                 (false, false) => lpf_h_sb_uv_8bpc_inner(
-                    buf, base, stride as isize, mask, lvl_slice, lvl_base, lvl_byte_idx,
-                    b4_stride, lut, w, bitdepth_max,
+                    buf,
+                    base,
+                    stride as isize,
+                    mask,
+                    lvl_slice,
+                    lvl_base,
+                    lvl_byte_idx,
+                    b4_stride,
+                    lut,
+                    w,
+                    bitdepth_max,
                 ),
                 (false, true) => lpf_v_sb_uv_8bpc_inner(
-                    buf, base, stride as isize, mask, lvl_slice, lvl_base, lvl_byte_idx,
-                    b4_stride, lut, w, bitdepth_max,
+                    buf,
+                    base,
+                    stride as isize,
+                    mask,
+                    lvl_slice,
+                    lvl_base,
+                    lvl_byte_idx,
+                    b4_stride,
+                    lut,
+                    w,
+                    bitdepth_max,
                 ),
             }
         }
@@ -1717,20 +1754,56 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
 
             match (is_y, is_v) {
                 (true, false) => lpf_h_sb_y_16bpc_inner(
-                    buf, base, stride as isize / 2, mask, lvl_slice, lvl_base, lvl_byte_idx,
-                    b4_stride, lut, w, bitdepth_max,
+                    buf,
+                    base,
+                    stride as isize / 2,
+                    mask,
+                    lvl_slice,
+                    lvl_base,
+                    lvl_byte_idx,
+                    b4_stride,
+                    lut,
+                    w,
+                    bitdepth_max,
                 ),
                 (true, true) => lpf_v_sb_y_16bpc_inner(
-                    buf, base, stride as isize / 2, mask, lvl_slice, lvl_base, lvl_byte_idx,
-                    b4_stride, lut, w, bitdepth_max,
+                    buf,
+                    base,
+                    stride as isize / 2,
+                    mask,
+                    lvl_slice,
+                    lvl_base,
+                    lvl_byte_idx,
+                    b4_stride,
+                    lut,
+                    w,
+                    bitdepth_max,
                 ),
                 (false, false) => lpf_h_sb_uv_16bpc_inner(
-                    buf, base, stride as isize / 2, mask, lvl_slice, lvl_base, lvl_byte_idx,
-                    b4_stride, lut, w, bitdepth_max,
+                    buf,
+                    base,
+                    stride as isize / 2,
+                    mask,
+                    lvl_slice,
+                    lvl_base,
+                    lvl_byte_idx,
+                    b4_stride,
+                    lut,
+                    w,
+                    bitdepth_max,
                 ),
                 (false, true) => lpf_v_sb_uv_16bpc_inner(
-                    buf, base, stride as isize / 2, mask, lvl_slice, lvl_base, lvl_byte_idx,
-                    b4_stride, lut, w, bitdepth_max,
+                    buf,
+                    base,
+                    stride as isize / 2,
+                    mask,
+                    lvl_slice,
+                    lvl_base,
+                    lvl_byte_idx,
+                    b4_stride,
+                    lut,
+                    w,
+                    bitdepth_max,
                 ),
             }
         }

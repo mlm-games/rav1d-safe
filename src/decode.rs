@@ -170,7 +170,8 @@ use crate::src::warpmv::rav1d_find_affine_int;
 use crate::src::warpmv::rav1d_get_shear_params;
 use crate::src::warpmv::rav1d_set_affine_mv2d;
 use aligned::Aligned;
-use libc::ptrdiff_t;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 use std::array;
 use std::cmp;
 use std::ffi::c_int;

@@ -122,7 +122,11 @@ fn avg_16bpc_wasm128(
     let w = w as usize;
     let h = h as usize;
 
-    let intermediate_bits = if (bitdepth_max >> 11) != 0 { 2i32 } else { 4i32 };
+    let intermediate_bits = if (bitdepth_max >> 11) != 0 {
+        2i32
+    } else {
+        4i32
+    };
     let sh = intermediate_bits + 1;
     let rnd = (1 << intermediate_bits) + 8192 * 2;
     let max = bitdepth_max;
@@ -292,7 +296,11 @@ fn w_avg_16bpc_wasm128(
     let w = w as usize;
     let h = h as usize;
 
-    let intermediate_bits = if (bitdepth_max >> 11) != 0 { 2i32 } else { 4i32 };
+    let intermediate_bits = if (bitdepth_max >> 11) != 0 {
+        2i32
+    } else {
+        4i32
+    };
     let sh = intermediate_bits + 4;
     let rnd = (8 << intermediate_bits) + 8192 * 16;
     let max = bitdepth_max;
@@ -462,7 +470,11 @@ fn mask_16bpc_wasm128(
     let h = h as usize;
     let max = bitdepth_max;
 
-    let intermediate_bits = if (bitdepth_max >> 11) != 0 { 2i32 } else { 4i32 };
+    let intermediate_bits = if (bitdepth_max >> 11) != 0 {
+        2i32
+    } else {
+        4i32
+    };
     let sh = intermediate_bits + 6;
     let rnd_val = (32 << intermediate_bits) + 8192 * 64;
 

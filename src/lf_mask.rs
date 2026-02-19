@@ -16,7 +16,8 @@ use crate::src::levels::TxfmSize;
 use crate::src::relaxed_atomic::RelaxedAtomic;
 use crate::src::tables::dav1d_txfm_dimensions;
 use aligned::Aligned;
-use libc::ptrdiff_t;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 use parking_lot::RwLock;
 use std::cmp;
 use std::ffi::c_int;

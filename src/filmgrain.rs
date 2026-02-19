@@ -19,8 +19,10 @@ use crate::src::internal::GrainLut;
 use crate::src::strided::Strided as _;
 use crate::src::tables::dav1d_gaussian_sequence;
 use crate::src::wrap_fn_ptr::wrap_fn_ptr;
-use libc::intptr_t;
-use libc::ptrdiff_t;
+#[allow(non_camel_case_types)]
+type intptr_t = isize;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 use std::cmp;
 use std::ffi::c_int;
 use std::ffi::c_uint;

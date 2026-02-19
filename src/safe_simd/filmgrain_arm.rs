@@ -21,7 +21,10 @@ use std::cmp;
 use std::ffi::c_int;
 use std::ffi::c_uint;
 
-use libc::{intptr_t, ptrdiff_t};
+#[allow(non_camel_case_types)]
+type intptr_t = isize;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 
 use crate::include::common::bitdepth::{DynEntry, DynPixel, DynScaling};
 use crate::include::dav1d::headers::{Dav1dFilmGrainData, Rav1dFilmGrainData};

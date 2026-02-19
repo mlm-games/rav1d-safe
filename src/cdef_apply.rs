@@ -18,7 +18,8 @@ use crate::src::strided::WithStride;
 use crate::src::with_offset::WithOffset;
 use aligned::Aligned;
 use bitflags::bitflags;
-use libc::ptrdiff_t;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 use std::cmp;
 use std::ffi::c_int;
 use std::ffi::c_uint;

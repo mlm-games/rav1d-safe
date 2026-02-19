@@ -16,7 +16,9 @@
 use core::arch::x86_64::*;
 
 use archmage::{arcane, Desktop64, Server64, SimdToken};
-use libc::{c_int, ptrdiff_t};
+use std::ffi::c_int;
+#[allow(non_camel_case_types)]
+type ptrdiff_t = isize;
 
 #[cfg(target_arch = "x86_64")]
 use super::partial_simd;
