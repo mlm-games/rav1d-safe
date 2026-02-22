@@ -25,3 +25,10 @@ zerocopy = ["dep:zerocopy"]
 aligned = { version = "0.4", default-features = false, optional = true }
 aligned-vec = { version = "0.6", default-features = false, optional = true }
 zerocopy = { version = "0.8", default-features = false, optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false }
+
+[[bench]]
+name = "lock_overhead"
+harness = false
