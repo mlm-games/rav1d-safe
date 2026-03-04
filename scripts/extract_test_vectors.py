@@ -18,7 +18,13 @@ import os
 import re
 import sys
 
-BASE = "/home/lilith/work/rav1d-safe/test-vectors/dav1d-test-data"
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_SCRIPT_DIR)
+BASE = os.environ.get(
+    "DAV1D_TEST_DATA_DIR",
+    os.path.join(_PROJECT_ROOT, "test-vectors", "dav1d-test-data"),
+)
+assert os.path.isdir(BASE), f"dav1d test data not found: {BASE}. Set DAV1D_TEST_DATA_DIR."
 
 # Pattern for individual array entries: ['name', files('path'), 'md5']
 ENTRY_RE = re.compile(

@@ -211,10 +211,10 @@ generate-bench-avif avifenc="avifenc" avifdec="avifdec":
     set -e
     OUT="test-vectors/bench"
     mkdir -p "$OUT"
-    SRC="/mnt/v/datasets/scraping/avif/google-native/8d716f849a1c4448.avif"
+    SRC="${BENCH_AVIF_SOURCE:-/mnt/v/datasets/scraping/avif/google-native/8d716f849a1c4448.avif}"
     if [ ! -f "$SRC" ]; then
         echo "Source 8K AVIF not found at $SRC"
-        echo "Provide any 8K+ AVIF and update the SRC path in the justfile"
+        echo "Set BENCH_AVIF_SOURCE to an 8K+ AVIF file path"
         exit 1
     fi
     echo "Decoding 8K source to PNG..."
