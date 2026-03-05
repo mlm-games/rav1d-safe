@@ -648,7 +648,7 @@ fn derive_warpmv(
 fn findoddzero(buf: &[u8]) -> bool {
     buf.iter()
         .enumerate()
-        .find(|(i, &e)| i & 1 == 1 && e == 0)
+        .find(|&(i, &e)| i & 1 == 1 && e == 0)
         .is_some()
 }
 
