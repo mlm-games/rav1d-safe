@@ -24,9 +24,9 @@ jobs:
         features: ["", "--no-default-features"]
         include:
           - os: ubuntu-latest
-            features: "--features unchecked"
+            features: "--all-features"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test -p rav1d-disjoint-mut ${{ matrix.features }}
 
@@ -41,7 +41,7 @@ jobs:
           - name: "Tree Borrows"
             flags: "-Zmiri-tree-borrows"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: miri
@@ -53,7 +53,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -65,7 +65,7 @@ jobs:
     name: MSRV (1.85)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.85"
@@ -76,7 +76,7 @@ jobs:
     name: Documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo doc -p rav1d-disjoint-mut --no-deps
         env:
