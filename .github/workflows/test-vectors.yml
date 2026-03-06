@@ -58,7 +58,7 @@ jobs:
           PASS=0
           FAIL=0
           TOTAL=0
-          for ivf in $(find test-vectors/dav1d-test-data/8-bit -name "*.ivf" -o -name "*.obu" | head -100); do
+          for ivf in $(find test-vectors/dav1d-test-data/8-bit -name "*.ivf" -o -name "*.obu" 2>/dev/null | head -100 || true); do
             ((TOTAL++))
             if timeout 30 cargo run --release --example managed_decode --no-default-features \
                 --features "bitdepth_8,bitdepth_16" -- "$ivf" > /dev/null 2>&1; then
@@ -76,7 +76,7 @@ jobs:
           PASS=0
           FAIL=0
           TOTAL=0
-          for ivf in $(find test-vectors/dav1d-test-data/10-bit -name "*.ivf" -o -name "*.obu" | head -50); do
+          for ivf in $(find test-vectors/dav1d-test-data/10-bit -name "*.ivf" -o -name "*.obu" 2>/dev/null | head -50 || true); do
             ((TOTAL++))
             if timeout 30 cargo run --release --example managed_decode --no-default-features \
                 --features "bitdepth_8,bitdepth_16" -- "$ivf" > /dev/null 2>&1; then
@@ -94,7 +94,7 @@ jobs:
           PASS=0
           FAIL=0
           TOTAL=0
-          for ivf in $(find test-vectors/dav1d-test-data/12-bit -name "*.ivf" -o -name "*.obu" | head -50); do
+          for ivf in $(find test-vectors/dav1d-test-data/12-bit -name "*.ivf" -o -name "*.obu" 2>/dev/null | head -50 || true); do
             ((TOTAL++))
             if timeout 30 cargo run --release --example managed_decode --no-default-features \
                 --features "bitdepth_8,bitdepth_16" -- "$ivf" > /dev/null 2>&1; then
