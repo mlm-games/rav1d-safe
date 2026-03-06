@@ -305,7 +305,7 @@ pub fn rav1d_set_cpu_flags_mask(mask: c_uint) {
 }
 
 #[cfg(feature = "asm")]
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[cold]
 pub extern "C" fn dav1d_set_cpu_flags_mask(mask: c_uint) {
     rav1d_set_cpu_flags_mask(mask)

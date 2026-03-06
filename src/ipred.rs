@@ -1890,7 +1890,7 @@ mod neon {
         // Since it's not behind a ptr, we can't make it a `DynPixel`
         // and call it uniformly with `bd_fn!`.
 
-        extern "C" {
+        unsafe extern "C" {
             #[cfg(feature = "bitdepth_8")]
             fn dav1d_ipred_pixel_set_8bpc_neon(
                 out: *mut DynPixel,

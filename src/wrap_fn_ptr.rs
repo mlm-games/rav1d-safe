@@ -109,7 +109,7 @@ macro_rules! wrap_fn_ptr {
             #[allow(unused_macros)]
             macro_rules! decl_fn {
                 (fn $fn_name:ident) => {{
-                    extern "C" {
+                    unsafe extern "C" {
                         fn $fn_name($($arg_name: $arg_ty,)*) -> $return_ty;
                     }
 
