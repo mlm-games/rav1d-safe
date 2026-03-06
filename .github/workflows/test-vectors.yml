@@ -59,12 +59,12 @@ jobs:
           FAIL=0
           TOTAL=0
           for ivf in $(find test-vectors/dav1d-test-data/8-bit -name "*.ivf" -o -name "*.obu" 2>/dev/null | head -100 || true); do
-            ((TOTAL++))
+            ((TOTAL++)) || true
             if timeout 30 cargo run --release --example managed_decode --no-default-features \
                 --features "bitdepth_8,bitdepth_16" -- "$ivf" > /dev/null 2>&1; then
-              ((PASS++))
+              ((PASS++)) || true
             else
-              ((FAIL++))
+              ((FAIL++)) || true
               echo "FAIL: $ivf"
             fi
           done
@@ -77,12 +77,12 @@ jobs:
           FAIL=0
           TOTAL=0
           for ivf in $(find test-vectors/dav1d-test-data/10-bit -name "*.ivf" -o -name "*.obu" 2>/dev/null | head -50 || true); do
-            ((TOTAL++))
+            ((TOTAL++)) || true
             if timeout 30 cargo run --release --example managed_decode --no-default-features \
                 --features "bitdepth_8,bitdepth_16" -- "$ivf" > /dev/null 2>&1; then
-              ((PASS++))
+              ((PASS++)) || true
             else
-              ((FAIL++))
+              ((FAIL++)) || true
               echo "FAIL: $ivf"
             fi
           done
@@ -95,12 +95,12 @@ jobs:
           FAIL=0
           TOTAL=0
           for ivf in $(find test-vectors/dav1d-test-data/12-bit -name "*.ivf" -o -name "*.obu" 2>/dev/null | head -50 || true); do
-            ((TOTAL++))
+            ((TOTAL++)) || true
             if timeout 30 cargo run --release --example managed_decode --no-default-features \
                 --features "bitdepth_8,bitdepth_16" -- "$ivf" > /dev/null 2>&1; then
-              ((PASS++))
+              ((PASS++)) || true
             else
-              ((FAIL++))
+              ((FAIL++)) || true
               echo "FAIL: $ivf"
             fi
           done
@@ -153,12 +153,12 @@ jobs:
             if [ -d "$VECTORS_DIR/$suite" ]; then
               echo "Testing $suite..."
               for ivf in $(find "$VECTORS_DIR/$suite" -name "*.ivf" -o -name "*.obu"); do
-                ((TOTAL++))
+                ((TOTAL++)) || true
                 if timeout 60 cargo run --release --example managed_decode --no-default-features \
                     --features "bitdepth_8,bitdepth_16" -- "$ivf" > /dev/null 2>&1; then
-                  ((PASS++))
+                  ((PASS++)) || true
                 else
-                  ((FAIL++))
+                  ((FAIL++)) || true
                   echo "FAIL: $ivf"
                 fi
               done
@@ -212,13 +212,13 @@ jobs:
           
           if [ -d test-vectors/argon/argon ]; then
             for ivf in $(find test-vectors/argon/argon -name "*.ivf" -o -name "*.obu" | shuf | head -500); do
-              ((TOTAL++))
+              ((TOTAL++)) || true
               if timeout 120 cargo run --release --example managed_decode --no-default-features \
                   --features "bitdepth_8,bitdepth_16" -- "$ivf" > /dev/null 2>&1; then
-                ((PASS++))
+                ((PASS++)) || true
                 [ $(( TOTAL % 50 )) -eq 0 ] && echo "Progress: $PASS/$TOTAL passed"
               else
-                ((FAIL++))
+                ((FAIL++)) || true
                 echo "FAIL: $(basename $ivf)"
               fi
             done
