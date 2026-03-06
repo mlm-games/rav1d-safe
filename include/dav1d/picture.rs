@@ -309,7 +309,10 @@ unsafe impl ExternalAsMutPtr for Rav1dPictureDataComponentInner {
         // SAFETY: Only creates &Self (SharedReadOnly). Data is behind a raw pointer,
         // not inline, so SharedReadOnly doesn't cover element data.
         let this = unsafe { &*ptr };
+        // SAFETY: Alignment guaranteed by PicBuf allocation (via AlignedVec).
         unsafe { assume(this.ptr.is_chunk_aligned()) };
+        // SAFETY: Length is always a multiple of RAV1D_PICTURE_GUARANTEED_MULTIPLE,
+        // enforced by PicBuf::new padding.
         unsafe { assume(this.len % RAV1D_PICTURE_GUARANTEED_MULTIPLE == 0) };
         core::ptr::slice_from_raw_parts_mut(this.ptr.as_ptr(), this.len)
     }
