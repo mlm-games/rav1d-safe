@@ -10,7 +10,7 @@
 use core::arch::aarch64::*;
 
 #[cfg(target_arch = "aarch64")]
-use archmage::{arcane, Arm64, SimdToken};
+use archmage::{Arm64, SimdToken, arcane};
 
 #[cfg(target_arch = "aarch64")]
 use safe_unaligned_simd::aarch64 as safe_simd;
@@ -951,7 +951,7 @@ mod tests {
     #[test]
     #[cfg(target_arch = "aarch64")]
     fn test_arm_token_permutations() {
-        use archmage::testing::{for_each_token_permutation, CompileTimePolicy};
+        use archmage::testing::{CompileTimePolicy, for_each_token_permutation};
         use archmage::{Arm64, SimdToken};
 
         let mut had_enabled = false;

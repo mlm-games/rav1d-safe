@@ -21,7 +21,7 @@ use crate::src::safe_simd::pixel_access::{
     loadi64, loadu_128, loadu_256, loadu_512, storeu_128, storeu_256, storeu_512,
 };
 #[cfg(target_arch = "x86_64")]
-use archmage::{arcane, rite, Desktop64, Server64};
+use archmage::{Desktop64, Server64, arcane, rite};
 
 #[cfg(target_arch = "x86_64")]
 use crate::include::common::bitdepth::BitDepth;
@@ -2975,34 +2975,27 @@ fn v_filter_8tap_8bpc_direct_avx512_inner(
         let p0 = _mm512_cvtepu8_epi32(loadu_128!(
             <&[u8; 16]>::try_from(&src[col..col + 16]).unwrap()
         ));
-        let p1 = _mm512_cvtepu8_epi32(loadu_128!(<&[u8; 16]>::try_from(
-            &src[stride + col..stride + col + 16]
-        )
-        .unwrap()));
-        let p2 = _mm512_cvtepu8_epi32(loadu_128!(<&[u8; 16]>::try_from(
-            &src[2 * stride + col..2 * stride + col + 16]
-        )
-        .unwrap()));
-        let p3 = _mm512_cvtepu8_epi32(loadu_128!(<&[u8; 16]>::try_from(
-            &src[3 * stride + col..3 * stride + col + 16]
-        )
-        .unwrap()));
-        let p4 = _mm512_cvtepu8_epi32(loadu_128!(<&[u8; 16]>::try_from(
-            &src[4 * stride + col..4 * stride + col + 16]
-        )
-        .unwrap()));
-        let p5 = _mm512_cvtepu8_epi32(loadu_128!(<&[u8; 16]>::try_from(
-            &src[5 * stride + col..5 * stride + col + 16]
-        )
-        .unwrap()));
-        let p6 = _mm512_cvtepu8_epi32(loadu_128!(<&[u8; 16]>::try_from(
-            &src[6 * stride + col..6 * stride + col + 16]
-        )
-        .unwrap()));
-        let p7 = _mm512_cvtepu8_epi32(loadu_128!(<&[u8; 16]>::try_from(
-            &src[7 * stride + col..7 * stride + col + 16]
-        )
-        .unwrap()));
+        let p1 = _mm512_cvtepu8_epi32(loadu_128!(
+            <&[u8; 16]>::try_from(&src[stride + col..stride + col + 16]).unwrap()
+        ));
+        let p2 = _mm512_cvtepu8_epi32(loadu_128!(
+            <&[u8; 16]>::try_from(&src[2 * stride + col..2 * stride + col + 16]).unwrap()
+        ));
+        let p3 = _mm512_cvtepu8_epi32(loadu_128!(
+            <&[u8; 16]>::try_from(&src[3 * stride + col..3 * stride + col + 16]).unwrap()
+        ));
+        let p4 = _mm512_cvtepu8_epi32(loadu_128!(
+            <&[u8; 16]>::try_from(&src[4 * stride + col..4 * stride + col + 16]).unwrap()
+        ));
+        let p5 = _mm512_cvtepu8_epi32(loadu_128!(
+            <&[u8; 16]>::try_from(&src[5 * stride + col..5 * stride + col + 16]).unwrap()
+        ));
+        let p6 = _mm512_cvtepu8_epi32(loadu_128!(
+            <&[u8; 16]>::try_from(&src[6 * stride + col..6 * stride + col + 16]).unwrap()
+        ));
+        let p7 = _mm512_cvtepu8_epi32(loadu_128!(
+            <&[u8; 16]>::try_from(&src[7 * stride + col..7 * stride + col + 16]).unwrap()
+        ));
 
         // Multiply and accumulate
         let mut sum = _mm512_mullo_epi32(p0, c0);
@@ -5463,34 +5456,27 @@ fn v_filter_8tap_16bpc_direct_avx2_inner(
         let p0 = _mm256_cvtepu16_epi32(loadu_128!(
             <&[u16; 8]>::try_from(&src[col..col + 8]).unwrap()
         ));
-        let p1 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[stride_u + col..stride_u + col + 8]
-        )
-        .unwrap()));
-        let p2 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[2 * stride_u + col..2 * stride_u + col + 8]
-        )
-        .unwrap()));
-        let p3 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[3 * stride_u + col..3 * stride_u + col + 8]
-        )
-        .unwrap()));
-        let p4 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[4 * stride_u + col..4 * stride_u + col + 8]
-        )
-        .unwrap()));
-        let p5 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[5 * stride_u + col..5 * stride_u + col + 8]
-        )
-        .unwrap()));
-        let p6 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[6 * stride_u + col..6 * stride_u + col + 8]
-        )
-        .unwrap()));
-        let p7 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[7 * stride_u + col..7 * stride_u + col + 8]
-        )
-        .unwrap()));
+        let p1 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[stride_u + col..stride_u + col + 8]).unwrap()
+        ));
+        let p2 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[2 * stride_u + col..2 * stride_u + col + 8]).unwrap()
+        ));
+        let p3 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[3 * stride_u + col..3 * stride_u + col + 8]).unwrap()
+        ));
+        let p4 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[4 * stride_u + col..4 * stride_u + col + 8]).unwrap()
+        ));
+        let p5 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[5 * stride_u + col..5 * stride_u + col + 8]).unwrap()
+        ));
+        let p6 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[6 * stride_u + col..6 * stride_u + col + 8]).unwrap()
+        ));
+        let p7 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[7 * stride_u + col..7 * stride_u + col + 8]).unwrap()
+        ));
 
         // Multiply and accumulate
         let m0 = _mm256_mullo_epi32(p0, c0);
@@ -5719,34 +5705,27 @@ fn v_filter_8tap_16bpc_prep_direct_avx2_inner(
         let p0 = _mm256_cvtepu16_epi32(loadu_128!(
             <&[u16; 8]>::try_from(&src[col..col + 8]).unwrap()
         ));
-        let p1 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[stride_u + col..stride_u + col + 8]
-        )
-        .unwrap()));
-        let p2 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[2 * stride_u + col..2 * stride_u + col + 8]
-        )
-        .unwrap()));
-        let p3 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[3 * stride_u + col..3 * stride_u + col + 8]
-        )
-        .unwrap()));
-        let p4 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[4 * stride_u + col..4 * stride_u + col + 8]
-        )
-        .unwrap()));
-        let p5 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[5 * stride_u + col..5 * stride_u + col + 8]
-        )
-        .unwrap()));
-        let p6 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[6 * stride_u + col..6 * stride_u + col + 8]
-        )
-        .unwrap()));
-        let p7 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[7 * stride_u + col..7 * stride_u + col + 8]
-        )
-        .unwrap()));
+        let p1 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[stride_u + col..stride_u + col + 8]).unwrap()
+        ));
+        let p2 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[2 * stride_u + col..2 * stride_u + col + 8]).unwrap()
+        ));
+        let p3 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[3 * stride_u + col..3 * stride_u + col + 8]).unwrap()
+        ));
+        let p4 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[4 * stride_u + col..4 * stride_u + col + 8]).unwrap()
+        ));
+        let p5 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[5 * stride_u + col..5 * stride_u + col + 8]).unwrap()
+        ));
+        let p6 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[6 * stride_u + col..6 * stride_u + col + 8]).unwrap()
+        ));
+        let p7 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[7 * stride_u + col..7 * stride_u + col + 8]).unwrap()
+        ));
 
         // Multiply and accumulate
         let m0 = _mm256_mullo_epi32(p0, c0);
@@ -6253,34 +6232,27 @@ fn v_filter_8tap_16bpc_direct_avx512_inner(
         let p0 = _mm512_cvtepu16_epi32(loadu_256!(
             <&[u16; 16]>::try_from(&src[col..col + 16]).unwrap()
         ));
-        let p1 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[stride_u + col..stride_u + col + 16]
-        )
-        .unwrap()));
-        let p2 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[2 * stride_u + col..2 * stride_u + col + 16]
-        )
-        .unwrap()));
-        let p3 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[3 * stride_u + col..3 * stride_u + col + 16]
-        )
-        .unwrap()));
-        let p4 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[4 * stride_u + col..4 * stride_u + col + 16]
-        )
-        .unwrap()));
-        let p5 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[5 * stride_u + col..5 * stride_u + col + 16]
-        )
-        .unwrap()));
-        let p6 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[6 * stride_u + col..6 * stride_u + col + 16]
-        )
-        .unwrap()));
-        let p7 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[7 * stride_u + col..7 * stride_u + col + 16]
-        )
-        .unwrap()));
+        let p1 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[stride_u + col..stride_u + col + 16]).unwrap()
+        ));
+        let p2 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[2 * stride_u + col..2 * stride_u + col + 16]).unwrap()
+        ));
+        let p3 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[3 * stride_u + col..3 * stride_u + col + 16]).unwrap()
+        ));
+        let p4 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[4 * stride_u + col..4 * stride_u + col + 16]).unwrap()
+        ));
+        let p5 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[5 * stride_u + col..5 * stride_u + col + 16]).unwrap()
+        ));
+        let p6 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[6 * stride_u + col..6 * stride_u + col + 16]).unwrap()
+        ));
+        let p7 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[7 * stride_u + col..7 * stride_u + col + 16]).unwrap()
+        ));
 
         let mut sum = _mm512_mullo_epi32(p0, c0);
         sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(p1, c1));
@@ -6349,34 +6321,27 @@ fn v_filter_8tap_16bpc_prep_direct_avx512_inner(
         let p0 = _mm512_cvtepu16_epi32(loadu_256!(
             <&[u16; 16]>::try_from(&src[col..col + 16]).unwrap()
         ));
-        let p1 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[stride_u + col..stride_u + col + 16]
-        )
-        .unwrap()));
-        let p2 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[2 * stride_u + col..2 * stride_u + col + 16]
-        )
-        .unwrap()));
-        let p3 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[3 * stride_u + col..3 * stride_u + col + 16]
-        )
-        .unwrap()));
-        let p4 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[4 * stride_u + col..4 * stride_u + col + 16]
-        )
-        .unwrap()));
-        let p5 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[5 * stride_u + col..5 * stride_u + col + 16]
-        )
-        .unwrap()));
-        let p6 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[6 * stride_u + col..6 * stride_u + col + 16]
-        )
-        .unwrap()));
-        let p7 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[7 * stride_u + col..7 * stride_u + col + 16]
-        )
-        .unwrap()));
+        let p1 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[stride_u + col..stride_u + col + 16]).unwrap()
+        ));
+        let p2 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[2 * stride_u + col..2 * stride_u + col + 16]).unwrap()
+        ));
+        let p3 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[3 * stride_u + col..3 * stride_u + col + 16]).unwrap()
+        ));
+        let p4 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[4 * stride_u + col..4 * stride_u + col + 16]).unwrap()
+        ));
+        let p5 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[5 * stride_u + col..5 * stride_u + col + 16]).unwrap()
+        ));
+        let p6 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[6 * stride_u + col..6 * stride_u + col + 16]).unwrap()
+        ));
+        let p7 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[7 * stride_u + col..7 * stride_u + col + 16]).unwrap()
+        ));
 
         let mut sum = _mm512_mullo_epi32(p0, c0);
         sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(p1, c1));
@@ -8339,10 +8304,12 @@ fn v_filter_bilin_8bpc_avx2_inner(
     // Process 8 pixels at a time using 32-bit arithmetic
     while x + 8 <= w {
         // Load 8 i16 values from each row and sign-extend to i32
-        let row0 =
-            _mm256_cvtepi16_epi32(loadu_128!(<&[i16; 8]>::try_from(&mid[0][x..x + 8]).unwrap()));
-        let row1 =
-            _mm256_cvtepi16_epi32(loadu_128!(<&[i16; 8]>::try_from(&mid[1][x..x + 8]).unwrap()));
+        let row0 = _mm256_cvtepi16_epi32(loadu_128!(
+            <&[i16; 8]>::try_from(&mid[0][x..x + 8]).unwrap()
+        ));
+        let row1 = _mm256_cvtepi16_epi32(loadu_128!(
+            <&[i16; 8]>::try_from(&mid[1][x..x + 8]).unwrap()
+        ));
 
         // result = coeff0 * row0 + coeff1 * row1 (32-bit, no overflow)
         let mul0 = _mm256_mullo_epi32(row0, c0_32);
@@ -10197,10 +10164,10 @@ fn v_bilin_16bpc_direct_avx2_inner(
         let p0 = _mm256_cvtepu16_epi32(loadu_128!(
             <&[u16; 8]>::try_from(&src[col..col + 8]).unwrap()
         ));
-        let p1 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[src_stride as usize + col..src_stride as usize + col + 8]
-        )
-        .unwrap()));
+        let p1 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[src_stride as usize + col..src_stride as usize + col + 8])
+                .unwrap()
+        ));
 
         // (16 - my) * p0 + my * p1
         let term0 = _mm256_mullo_epi32(p0, w0);
@@ -10352,10 +10319,10 @@ fn v_bilin_16bpc_prep_direct_avx2_inner(
         let p0 = _mm256_cvtepu16_epi32(loadu_128!(
             <&[u16; 8]>::try_from(&src[col..col + 8]).unwrap()
         ));
-        let p1 = _mm256_cvtepu16_epi32(loadu_128!(<&[u16; 8]>::try_from(
-            &src[src_stride as usize + col..src_stride as usize + col + 8]
-        )
-        .unwrap()));
+        let p1 = _mm256_cvtepu16_epi32(loadu_128!(
+            <&[u16; 8]>::try_from(&src[src_stride as usize + col..src_stride as usize + col + 8])
+                .unwrap()
+        ));
 
         // (16 - my) * p0 + my * p1
         let term0 = _mm256_mullo_epi32(p0, w0);
@@ -10891,10 +10858,10 @@ fn v_bilin_16bpc_direct_avx512_inner(
         let p0 = _mm512_cvtepu16_epi32(loadu_256!(
             <&[u16; 16]>::try_from(&src[col..col + 16]).unwrap()
         ));
-        let p1 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[src_stride as usize + col..src_stride as usize + col + 16]
-        )
-        .unwrap()));
+        let p1 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[src_stride as usize + col..src_stride as usize + col + 16])
+                .unwrap()
+        ));
 
         let term0 = _mm512_mullo_epi32(p0, w0);
         let term1 = _mm512_mullo_epi32(p1, w1);
@@ -10999,10 +10966,10 @@ fn v_bilin_16bpc_prep_direct_avx512_inner(
         let p0 = _mm512_cvtepu16_epi32(loadu_256!(
             <&[u16; 16]>::try_from(&src[col..col + 16]).unwrap()
         ));
-        let p1 = _mm512_cvtepu16_epi32(loadu_256!(<&[u16; 16]>::try_from(
-            &src[src_stride as usize + col..src_stride as usize + col + 16]
-        )
-        .unwrap()));
+        let p1 = _mm512_cvtepu16_epi32(loadu_256!(
+            <&[u16; 16]>::try_from(&src[src_stride as usize + col..src_stride as usize + col + 16])
+                .unwrap()
+        ));
 
         let term0 = _mm512_mullo_epi32(p0, w0);
         let term1 = _mm512_mullo_epi32(p1, w1);
@@ -13017,7 +12984,7 @@ mod tests {
     /// Verify MC avg produces consistent output across all token permutations.
     #[test]
     fn test_avg_token_permutations() {
-        use archmage::testing::{for_each_token_permutation, CompileTimePolicy};
+        use archmage::testing::{CompileTimePolicy, for_each_token_permutation};
 
         let w = 32i32;
         let h = 2i32;

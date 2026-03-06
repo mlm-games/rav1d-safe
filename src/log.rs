@@ -9,10 +9,10 @@ use std::ffi::c_void;
 use std::fmt;
 #[cfg(feature = "c-ffi")]
 use std::fmt::Write as _;
+use std::io::Write as _;
 use std::io::stderr;
 #[cfg(feature = "c-ffi")]
 use std::io::stdout;
-use std::io::Write as _;
 #[cfg(feature = "c-ffi")]
 use std::ptr::fn_addr_eq;
 

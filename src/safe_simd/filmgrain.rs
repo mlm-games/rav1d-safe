@@ -18,14 +18,14 @@
 use core::arch::x86_64::*;
 
 #[cfg(target_arch = "x86_64")]
-use crate::src::safe_simd::pixel_access::{loadu_128, loadu_256, storeu_128, storeu_256, Flex};
+use crate::src::safe_simd::pixel_access::{Flex, loadu_128, loadu_256, storeu_128, storeu_256};
 
 use std::cmp;
 use std::ffi::c_int;
 use std::ffi::c_uint;
 
 #[cfg(target_arch = "x86_64")]
-use archmage::{arcane, Desktop64};
+use archmage::{Desktop64, arcane};
 
 use crate::include::dav1d::headers::Rav1dFilmGrainData;
 use crate::src::filmgrain::{FG_BLOCK_SIZE, GRAIN_HEIGHT, GRAIN_WIDTH};
@@ -2483,7 +2483,7 @@ fn fguv_inner_safe_16bpc(
 // Safe dispatch wrappers — encapsulate unsafe pointer creation and FFI calls
 // ============================================================================
 
-use crate::include::common::bitdepth::{BitDepth, BPC};
+use crate::include::common::bitdepth::{BPC, BitDepth};
 use crate::include::dav1d::headers::Rav1dPixelLayoutSubSampled;
 use crate::include::dav1d::picture::Rav1dPictureDataComponent;
 use crate::src::strided::Strided as _;

@@ -48,20 +48,12 @@ pub fn iclip(v: c_int, min: c_int, max: c_int) -> c_int {
 
 #[inline]
 pub fn apply_sign(v: c_int, s: c_int) -> c_int {
-    if s < 0 {
-        -v
-    } else {
-        v
-    }
+    if s < 0 { -v } else { v }
 }
 
 #[inline]
 pub fn apply_sign64(v: c_int, s: i64) -> c_int {
-    if s < 0 {
-        -v
-    } else {
-        v
-    }
+    if s < 0 { -v } else { v }
 }
 
 #[inline]

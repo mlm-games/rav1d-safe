@@ -8,7 +8,7 @@
 #![allow(dead_code)]
 
 #[cfg(target_arch = "x86_64")]
-use archmage::{arcane, rite, Desktop64, SimdToken};
+use archmage::{Desktop64, SimdToken, arcane, rite};
 #[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::*;
 
@@ -762,11 +762,7 @@ fn constrain_scalar(diff: i32, threshold: c_int, shift: c_int) -> i32 {
     let term = threshold - (adiff >> shift);
     let max_term = cmp::max(0, term);
     let result = cmp::min(adiff, max_term);
-    if diff < 0 {
-        -result
-    } else {
-        result
-    }
+    if diff < 0 { -result } else { result }
 }
 
 /// Scalar CDEF filter fallback for 8bpc, used on non-x86_64 or when AVX2 unavailable.

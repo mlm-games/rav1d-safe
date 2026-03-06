@@ -45,7 +45,7 @@
 
 #![forbid(unsafe_code)]
 
-use crate::include::common::bitdepth::{BitDepth16, BitDepth8};
+use crate::include::common::bitdepth::{BitDepth8, BitDepth16};
 use crate::include::dav1d::data::Rav1dData;
 use crate::include::dav1d::dav1d::{Rav1dDecodeFrameType, Rav1dInloopFilterType, Rav1dSettings};
 use crate::include::dav1d::headers::{

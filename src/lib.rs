@@ -7,10 +7,10 @@
 )]
 #![deny(unsafe_op_in_unsafe_fn)]
 
-#[cfg(feature = "bitdepth_16")]
-use crate::include::common::bitdepth::BitDepth16;
 #[cfg(feature = "bitdepth_8")]
 use crate::include::common::bitdepth::BitDepth8;
+#[cfg(feature = "bitdepth_16")]
+use crate::include::common::bitdepth::BitDepth16;
 use crate::include::common::validate::validate_input;
 use crate::include::dav1d::data::Rav1dData;
 use crate::include::dav1d::dav1d::Rav1dDecodeFrameType;
@@ -21,8 +21,8 @@ use crate::include::dav1d::picture::Rav1dPicture;
 use crate::src::cpu::rav1d_init_cpu;
 use crate::src::cpu::rav1d_num_logical_processors;
 use crate::src::decode::rav1d_decode_frame_exit;
-use crate::src::error::Rav1dError::EGeneric;
 use crate::src::error::Rav1dError::EAGAIN;
+use crate::src::error::Rav1dError::EGeneric;
 use crate::src::error::Rav1dError::EINVAL;
 use crate::src::error::Rav1dResult;
 use crate::src::extensions::OptionError as _;
@@ -42,25 +42,25 @@ use crate::src::log::Rav1dLog as _;
 use crate::src::log::Rav1dLogger;
 use crate::src::mem::try_arc;
 use crate::src::obu::rav1d_parse_obus;
-use crate::src::picture::rav1d_picture_alloc_copy;
 use crate::src::picture::PictureFlags;
+use crate::src::picture::rav1d_picture_alloc_copy;
 #[cfg(feature = "c-ffi")]
 use crate::src::send_sync_non_null::SendSyncNonNull;
+use crate::src::thread_task::FRAME_ERROR;
 use crate::src::thread_task::rav1d_task_delayed_fg;
 use crate::src::thread_task::rav1d_worker_task;
-use crate::src::thread_task::FRAME_ERROR;
 use parking_lot::Mutex;
 use std::cmp;
 #[cfg(feature = "c-ffi")]
-use std::ffi::c_void;
-#[cfg(feature = "c-ffi")]
 use std::ffi::CStr;
+#[cfg(feature = "c-ffi")]
+use std::ffi::c_void;
 use std::mem;
+use std::sync::Arc;
+use std::sync::Once;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use std::sync::Once;
 use std::thread;
 use std::thread::JoinHandle;
 

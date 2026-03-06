@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
-use crate::src::align::aligned_inner;
 use crate::src::align::Align16;
 use crate::src::align::Align32;
 use crate::src::align::Align64;
+use crate::src::align::aligned_inner;
 use crate::src::const_fn::const_for;
 use crate::src::const_fn::const_min;
 use crate::src::levels::BlockSize;

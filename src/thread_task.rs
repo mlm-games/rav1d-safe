@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
-#[cfg(feature = "bitdepth_16")]
-use crate::include::common::bitdepth::BitDepth16;
 #[cfg(feature = "bitdepth_8")]
 use crate::include::common::bitdepth::BitDepth8;
+#[cfg(feature = "bitdepth_16")]
+use crate::include::common::bitdepth::BitDepth16;
 use crate::include::common::intops::iclip;
 use crate::include::dav1d::headers::Rav1dPixelLayout;
 use crate::include::dav1d::picture::Rav1dPicture;
@@ -46,10 +46,10 @@ use std::ops::Add;
 use std::ops::AddAssign;
 use std::ops::Deref;
 use std::process::abort;
+use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicI32;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::thread;
 
 pub const FRAME_ERROR: u32 = u32::MAX - 1;

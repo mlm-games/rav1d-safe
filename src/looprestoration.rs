@@ -1,10 +1,10 @@
 #![cfg_attr(not(feature = "asm"), forbid(unsafe_code))]
 use crate::include::common::bitdepth::AsPrimitive;
+use crate::include::common::bitdepth::BPC;
 use crate::include::common::bitdepth::BitDepth;
 use crate::include::common::bitdepth::DynPixel;
 use crate::include::common::bitdepth::LeftPixelRow;
 use crate::include::common::bitdepth::ToPrimitive;
-use crate::include::common::bitdepth::BPC;
 use crate::include::common::intops::iclip;
 use crate::include::dav1d::picture::PicOffset;
 use crate::src::align::AlignedVec64;
@@ -57,11 +57,7 @@ bitflags! {
 
 impl LrEdgeFlags {
     pub const fn select(&self, select: bool) -> Self {
-        if select {
-            *self
-        } else {
-            Self::empty()
-        }
+        if select { *self } else { Self::empty() }
     }
 }
 

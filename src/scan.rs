@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
-use crate::src::align::aligned_inner;
 use crate::src::align::Align32;
+use crate::src::align::aligned_inner;
 use crate::src::in_range::InRange;
 use crate::src::levels::TxfmSize;
 use aligned::Aligned;

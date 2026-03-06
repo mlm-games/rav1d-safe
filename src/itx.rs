@@ -10,24 +10,22 @@ use crate::include::dav1d::picture::PicOffset;
 use crate::src::cpu::CpuFlags;
 use crate::src::enum_map::DefaultValue;
 use crate::src::ffi_safe::FFISafe;
-use crate::src::itx_1d::rav1d_inv_adst16_1d_c;
 use crate::src::itx_1d::rav1d_inv_adst4_1d_c;
 use crate::src::itx_1d::rav1d_inv_adst8_1d_c;
+use crate::src::itx_1d::rav1d_inv_adst16_1d_c;
+use crate::src::itx_1d::rav1d_inv_dct4_1d_c;
+use crate::src::itx_1d::rav1d_inv_dct8_1d_c;
 use crate::src::itx_1d::rav1d_inv_dct16_1d_c;
 use crate::src::itx_1d::rav1d_inv_dct32_1d_c;
-use crate::src::itx_1d::rav1d_inv_dct4_1d_c;
 use crate::src::itx_1d::rav1d_inv_dct64_1d_c;
-use crate::src::itx_1d::rav1d_inv_dct8_1d_c;
-use crate::src::itx_1d::rav1d_inv_flipadst16_1d_c;
 use crate::src::itx_1d::rav1d_inv_flipadst4_1d_c;
 use crate::src::itx_1d::rav1d_inv_flipadst8_1d_c;
-use crate::src::itx_1d::rav1d_inv_identity16_1d_c;
-use crate::src::itx_1d::rav1d_inv_identity32_1d_c;
+use crate::src::itx_1d::rav1d_inv_flipadst16_1d_c;
 use crate::src::itx_1d::rav1d_inv_identity4_1d_c;
 use crate::src::itx_1d::rav1d_inv_identity8_1d_c;
+use crate::src::itx_1d::rav1d_inv_identity16_1d_c;
+use crate::src::itx_1d::rav1d_inv_identity32_1d_c;
 use crate::src::itx_1d::rav1d_inv_wht4_1d_c;
-use crate::src::levels::TxfmSize;
-use crate::src::levels::TxfmType;
 use crate::src::levels::ADST_ADST;
 use crate::src::levels::ADST_DCT;
 use crate::src::levels::ADST_FLIPADST;
@@ -42,6 +40,8 @@ use crate::src::levels::H_DCT;
 use crate::src::levels::H_FLIPADST;
 use crate::src::levels::IDTX;
 use crate::src::levels::N_TX_TYPES_PLUS_LL;
+use crate::src::levels::TxfmSize;
+use crate::src::levels::TxfmType;
 use crate::src::levels::V_ADST;
 use crate::src::levels::V_DCT;
 use crate::src::levels::V_FLIPADST;
@@ -581,9 +581,7 @@ macro_rules! assign_itx1_bpc_fn {
 
 #[cfg(all(feature = "asm", any(target_arch = "arm", target_arch = "aarch64")))]
 macro_rules! assign_itx1_fn {
-    ($c:ident, $BD:ty, $w:literal, $h:literal, $ext:ident) => {{
-        assign_itx_fn!($c, BD, $w, $h, dct_dct, DCT_DCT, $ext)
-    }};
+    ($c:ident, $BD:ty, $w:literal, $h:literal, $ext:ident) => {{ assign_itx_fn!($c, BD, $w, $h, dct_dct, DCT_DCT, $ext) }};
 }
 
 #[cfg(all(feature = "asm", any(target_arch = "x86", target_arch = "x86_64")))]

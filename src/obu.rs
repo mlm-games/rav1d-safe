@@ -8,6 +8,12 @@ use crate::include::dav1d::dav1d::Rav1dDecodeFrameType;
 use crate::include::dav1d::headers::DRav1d;
 #[cfg(feature = "c-ffi")]
 use crate::include::dav1d::headers::Dav1dSequenceHeader;
+use crate::include::dav1d::headers::RAV1D_MAX_CDEF_STRENGTHS;
+use crate::include::dav1d::headers::RAV1D_MAX_OPERATING_POINTS;
+use crate::include::dav1d::headers::RAV1D_MAX_TILE_COLS;
+use crate::include::dav1d::headers::RAV1D_MAX_TILE_ROWS;
+use crate::include::dav1d::headers::RAV1D_PRIMARY_REF_NONE;
+use crate::include::dav1d::headers::RAV1D_REFS_PER_FRAME;
 use crate::include::dav1d::headers::Rav1dAdaptiveBoolean;
 use crate::include::dav1d::headers::Rav1dChromaSamplePosition;
 use crate::include::dav1d::headers::Rav1dColorPrimaries;
@@ -47,12 +53,6 @@ use crate::include::dav1d::headers::Rav1dTransferCharacteristics;
 use crate::include::dav1d::headers::Rav1dTxfmMode;
 use crate::include::dav1d::headers::Rav1dWarpedMotionParams;
 use crate::include::dav1d::headers::Rav1dWarpedMotionType;
-use crate::include::dav1d::headers::RAV1D_MAX_CDEF_STRENGTHS;
-use crate::include::dav1d::headers::RAV1D_MAX_OPERATING_POINTS;
-use crate::include::dav1d::headers::RAV1D_MAX_TILE_COLS;
-use crate::include::dav1d::headers::RAV1D_MAX_TILE_ROWS;
-use crate::include::dav1d::headers::RAV1D_PRIMARY_REF_NONE;
-use crate::include::dav1d::headers::RAV1D_REFS_PER_FRAME;
 use crate::src::c_arc::CArc;
 use crate::src::decode::rav1d_submit_frame;
 use crate::src::env::get_poc_diff;
@@ -69,8 +69,8 @@ use crate::src::internal::Rav1dTileGroupHeader;
 use crate::src::levels::ObuMetaType;
 use crate::src::log::Rav1dLog as _;
 use crate::src::mem::try_arc;
-use crate::src::picture::rav1d_picture_copy_props;
 use crate::src::picture::PictureFlags;
+use crate::src::picture::rav1d_picture_copy_props;
 use crate::src::thread_task::FRAME_ERROR;
 use std::array;
 use std::cmp;
@@ -1394,9 +1394,11 @@ fn parse_restoration(
         };
 
         unit_size = match r#type {
-            [Rav1dRestorationType::None, Rav1dRestorationType::None, Rav1dRestorationType::None] => {
-                [8, 0]
-            }
+            [
+                Rav1dRestorationType::None,
+                Rav1dRestorationType::None,
+                Rav1dRestorationType::None,
+            ] => [8, 0],
             _ => {
                 // Log2 of the restoration unit size.
                 let mut unit_size_0 = 6 + seqhdr.sb128;

@@ -13,7 +13,7 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
-use archmage::{arcane, rite, Desktop64, Server64, SimdToken};
+use archmage::{Desktop64, Server64, SimdToken, arcane, rite};
 #[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::*;
 
@@ -4312,10 +4312,9 @@ fn inv_txfm_add_dct_dct_32x16_8bpc_avx2_inner(
         // Process 32 pixels in two 16-pixel chunks
         for chunk in 0..2 {
             let chunk_off = chunk * 16;
-            let d = loadu_128!(<&[u8; 16]>::try_from(
-                &dst[dst_off + chunk_off..dst_off + chunk_off + 16]
-            )
-            .unwrap());
+            let d = loadu_128!(
+                <&[u8; 16]>::try_from(&dst[dst_off + chunk_off..dst_off + chunk_off + 16]).unwrap()
+            );
             let d16 = _mm256_cvtepu8_epi16(d);
 
             let c0 = _mm256_set_epi32(
@@ -4687,10 +4686,9 @@ fn inv_txfm_add_dct_dct_32x64_8bpc_avx2_inner(
         // Process 32 pixels in two 16-pixel chunks
         for chunk in 0..2 {
             let chunk_off = chunk * 16;
-            let d = loadu_128!(<&[u8; 16]>::try_from(
-                &dst[dst_off + chunk_off..dst_off + chunk_off + 16]
-            )
-            .unwrap());
+            let d = loadu_128!(
+                <&[u8; 16]>::try_from(&dst[dst_off + chunk_off..dst_off + chunk_off + 16]).unwrap()
+            );
             let d16 = _mm256_cvtepu8_epi16(d);
 
             let c0 = _mm256_set_epi32(
@@ -4836,10 +4834,9 @@ fn inv_txfm_add_dct_dct_64x32_8bpc_avx2_inner(
         // Process 64 pixels in four 16-pixel chunks
         for chunk in 0..4 {
             let chunk_off = chunk * 16;
-            let d = loadu_128!(<&[u8; 16]>::try_from(
-                &dst[dst_off + chunk_off..dst_off + chunk_off + 16]
-            )
-            .unwrap());
+            let d = loadu_128!(
+                <&[u8; 16]>::try_from(&dst[dst_off + chunk_off..dst_off + chunk_off + 16]).unwrap()
+            );
             let d16 = _mm256_cvtepu8_epi16(d);
 
             let c0 = _mm256_set_epi32(
@@ -5802,10 +5799,9 @@ fn inv_txfm_add_dct_dct_32x8_8bpc_avx2_inner(
         // Process 32 pixels in two 16-pixel chunks
         for chunk in 0..2 {
             let chunk_off = chunk * 16;
-            let d = loadu_128!(<&[u8; 16]>::try_from(
-                &dst[dst_off + chunk_off..dst_off + chunk_off + 16]
-            )
-            .unwrap());
+            let d = loadu_128!(
+                <&[u8; 16]>::try_from(&dst[dst_off + chunk_off..dst_off + chunk_off + 16]).unwrap()
+            );
             let d16 = _mm256_cvtepu8_epi16(d);
 
             let c0 = _mm256_set_epi32(
@@ -6266,10 +6262,9 @@ fn inv_txfm_add_dct_dct_64x16_8bpc_avx2_inner(
         // Process 64 pixels in four 16-pixel chunks
         for chunk in 0..4 {
             let chunk_off = chunk * 16;
-            let d = loadu_128!(<&[u8; 16]>::try_from(
-                &dst[dst_off + chunk_off..dst_off + chunk_off + 16]
-            )
-            .unwrap());
+            let d = loadu_128!(
+                <&[u8; 16]>::try_from(&dst[dst_off + chunk_off..dst_off + chunk_off + 16]).unwrap()
+            );
             let d16 = _mm256_cvtepu8_epi16(d);
 
             let c0 = _mm256_set_epi32(
@@ -6384,7 +6379,7 @@ mod tests {
     /// When enabled, SIMD output must match the known-good reference.
     #[test]
     fn test_wht4_token_permutations() {
-        use archmage::testing::{for_each_token_permutation, CompileTimePolicy};
+        use archmage::testing::{CompileTimePolicy, for_each_token_permutation};
 
         // Compute reference output once with tokens fully enabled
         let reference = {
@@ -14582,10 +14577,9 @@ macro_rules! impl_16x8_transform_16bpc {
                     let x_base = chunk * 8;
                     let dst_chunk_off = dst_off + x_base;
 
-                    let d = loadu_128!(<&[u16; 8]>::try_from(
-                        &dst[dst_chunk_off..dst_chunk_off + 8]
-                    )
-                    .unwrap());
+                    let d = loadu_128!(
+                        <&[u16; 8]>::try_from(&dst[dst_chunk_off..dst_chunk_off + 8]).unwrap()
+                    );
                     let d_lo = _mm_unpacklo_epi16(d, zero);
                     let d_hi = _mm_unpackhi_epi16(d, zero);
 
@@ -14911,10 +14905,9 @@ macro_rules! impl_16x4_transform_16bpc {
                     let x_base = chunk * 8;
                     let dst_chunk_off = dst_off + x_base;
 
-                    let d = loadu_128!(<&[u16; 8]>::try_from(
-                        &dst[dst_chunk_off..dst_chunk_off + 8]
-                    )
-                    .unwrap());
+                    let d = loadu_128!(
+                        <&[u16; 8]>::try_from(&dst[dst_chunk_off..dst_chunk_off + 8]).unwrap()
+                    );
                     let d_lo = _mm_unpacklo_epi16(d, zero);
                     let d_hi = _mm_unpackhi_epi16(d, zero);
 
@@ -15786,10 +15779,9 @@ macro_rules! impl_16x16_transform_16bpc {
                     let x_base = chunk * 8;
                     let dst_chunk_off = dst_off + x_base;
 
-                    let d = loadu_128!(<&[u16; 8]>::try_from(
-                        &dst[dst_chunk_off..dst_chunk_off + 8]
-                    )
-                    .unwrap());
+                    let d = loadu_128!(
+                        <&[u16; 8]>::try_from(&dst[dst_chunk_off..dst_chunk_off + 8]).unwrap()
+                    );
                     let d_lo = _mm_unpacklo_epi16(d, zero);
                     let d_hi = _mm_unpackhi_epi16(d, zero);
 
@@ -15891,8 +15883,6 @@ impl_ffi_wrapper_16bpc!(
 // so that src/itx.rs can remain fully safe in the default build.
 
 use crate::include::common::bitdepth::BPC;
-use crate::src::levels::TxfmSize;
-use crate::src::levels::TxfmType;
 use crate::src::levels::ADST_ADST;
 use crate::src::levels::ADST_DCT;
 use crate::src::levels::ADST_FLIPADST;
@@ -15906,6 +15896,8 @@ use crate::src::levels::H_ADST;
 use crate::src::levels::H_DCT;
 use crate::src::levels::H_FLIPADST;
 use crate::src::levels::IDTX;
+use crate::src::levels::TxfmSize;
+use crate::src::levels::TxfmType;
 use crate::src::levels::V_ADST;
 use crate::src::levels::V_DCT;
 use crate::src::levels::V_FLIPADST;

@@ -15,7 +15,7 @@
 use core::arch::wasm32::*;
 
 #[cfg(target_arch = "wasm32")]
-use archmage::{arcane, Wasm128Token};
+use archmage::{Wasm128Token, arcane};
 
 #[cfg(target_arch = "wasm32")]
 use crate::include::common::bitdepth::BitDepth;

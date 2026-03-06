@@ -218,7 +218,7 @@ fn verify_permutations(
     expected_md5: &str,
     apply_grain: bool,
 ) -> Result<usize, String> {
-    use archmage::testing::{for_each_token_permutation, CompileTimePolicy};
+    use archmage::testing::{CompileTimePolicy, for_each_token_permutation};
 
     let mut failures: Vec<String> = Vec::new();
     let mut permutations_run = 0;
@@ -362,7 +362,10 @@ fn test_permutations_8bit_issues() {
 fn test_permutations_8bit_quantizer() {
     let meson = dav1d_test_data().join("8-bit/quantizer/meson.build");
     let (passed, failed, skipped, perms) = verify_meson_permutations(&meson, false);
-    eprintln!("8-bit/quantizer: {passed} passed, {} failed, {skipped} skipped, {perms} total permutations", failed.len());
+    eprintln!(
+        "8-bit/quantizer: {passed} passed, {} failed, {skipped} skipped, {perms} total permutations",
+        failed.len()
+    );
     assert!(failed.is_empty(), "failures:\n{}", failed.join("\n"));
 }
 
@@ -392,7 +395,10 @@ fn test_permutations_8bit_intra() {
 fn test_permutations_8bit_film_grain() {
     let meson = dav1d_test_data().join("8-bit/film_grain/meson.build");
     let (passed, failed, skipped, perms) = verify_meson_permutations(&meson, true);
-    eprintln!("8-bit/film_grain: {passed} passed, {} failed, {skipped} skipped, {perms} total permutations", failed.len());
+    eprintln!(
+        "8-bit/film_grain: {passed} passed, {} failed, {skipped} skipped, {perms} total permutations",
+        failed.len()
+    );
     assert!(failed.is_empty(), "failures:\n{}", failed.join("\n"));
 }
 
@@ -400,7 +406,10 @@ fn test_permutations_8bit_film_grain() {
 fn test_permutations_8bit_cdfupdate() {
     let meson = dav1d_test_data().join("8-bit/cdfupdate/meson.build");
     let (passed, failed, skipped, perms) = verify_meson_permutations(&meson, false);
-    eprintln!("8-bit/cdfupdate: {passed} passed, {} failed, {skipped} skipped, {perms} total permutations", failed.len());
+    eprintln!(
+        "8-bit/cdfupdate: {passed} passed, {} failed, {skipped} skipped, {perms} total permutations",
+        failed.len()
+    );
     assert!(failed.is_empty(), "failures:\n{}", failed.join("\n"));
 }
 
@@ -452,7 +461,10 @@ fn test_permutations_10bit_data() {
 fn test_permutations_10bit_features() {
     let meson = dav1d_test_data().join("10-bit/features/meson.build");
     let (passed, failed, skipped, perms) = verify_meson_permutations(&meson, false);
-    eprintln!("10-bit/features: {passed} passed, {} failed, {skipped} skipped, {perms} total permutations", failed.len());
+    eprintln!(
+        "10-bit/features: {passed} passed, {} failed, {skipped} skipped, {perms} total permutations",
+        failed.len()
+    );
     assert!(failed.is_empty(), "failures:\n{}", failed.join("\n"));
 }
 
@@ -460,7 +472,10 @@ fn test_permutations_10bit_features() {
 fn test_permutations_10bit_quantizer() {
     let meson = dav1d_test_data().join("10-bit/quantizer/meson.build");
     let (passed, failed, skipped, perms) = verify_meson_permutations(&meson, false);
-    eprintln!("10-bit/quantizer: {passed} passed, {} failed, {skipped} skipped, {perms} total permutations", failed.len());
+    eprintln!(
+        "10-bit/quantizer: {passed} passed, {} failed, {skipped} skipped, {perms} total permutations",
+        failed.len()
+    );
     assert!(failed.is_empty(), "failures:\n{}", failed.join("\n"));
 }
 
@@ -479,7 +494,10 @@ fn test_permutations_10bit_issues() {
 fn test_permutations_10bit_film_grain() {
     let meson = dav1d_test_data().join("10-bit/film_grain/meson.build");
     let (passed, failed, skipped, perms) = verify_meson_permutations(&meson, true);
-    eprintln!("10-bit/film_grain: {passed} passed, {} failed, {skipped} skipped, {perms} total permutations", failed.len());
+    eprintln!(
+        "10-bit/film_grain: {passed} passed, {} failed, {skipped} skipped, {perms} total permutations",
+        failed.len()
+    );
     assert!(failed.is_empty(), "failures:\n{}", failed.join("\n"));
 }
 
@@ -498,6 +516,9 @@ fn test_permutations_12bit_data() {
 fn test_permutations_12bit_features() {
     let meson = dav1d_test_data().join("12-bit/features/meson.build");
     let (passed, failed, skipped, perms) = verify_meson_permutations(&meson, false);
-    eprintln!("12-bit/features: {passed} passed, {} failed, {skipped} skipped, {perms} total permutations", failed.len());
+    eprintln!(
+        "12-bit/features: {passed} passed, {} failed, {skipped} skipped, {perms} total permutations",
+        failed.len()
+    );
     assert!(failed.is_empty(), "failures:\n{}", failed.join("\n"));
 }

@@ -19,7 +19,7 @@ use rav1d_safe::src::managed::{Decoder, Settings};
 use std::hint::black_box;
 use std::path::PathBuf;
 use std::sync::OnceLock;
-use tango_bench::{benchmark_fn, tango_benchmarks, tango_main, IntoBenchmarks};
+use tango_bench::{IntoBenchmarks, benchmark_fn, tango_benchmarks, tango_main};
 
 // ---------------------------------------------------------------------------
 // IVF parser

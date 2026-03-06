@@ -707,11 +707,7 @@ fn loop_filter_4_16bpc(
     bitdepth_max: i32,
 ) {
     let bitdepth_min_8 = if bitdepth_max > 255 {
-        if bitdepth_max > 1023 {
-            4
-        } else {
-            2
-        }
+        if bitdepth_max > 1023 { 4 } else { 2 }
     } else {
         0
     };

@@ -4,7 +4,7 @@
 //! when panics occur during decoding.
 
 use rav1d_safe::src::managed::Decoder;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 #[test]
 fn test_decoder_drop_on_panic() {

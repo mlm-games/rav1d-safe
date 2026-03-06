@@ -1,13 +1,13 @@
 #![forbid(unsafe_code)]
 
-use crate::include::common::bitdepth::BitDepth;
 use crate::include::common::bitdepth::BPC;
+use crate::include::common::bitdepth::BitDepth;
 use crate::include::dav1d::headers::Rav1dMatrixCoefficients;
 use crate::include::dav1d::headers::Rav1dPixelLayout;
 use crate::include::dav1d::picture::Rav1dPicture;
 use crate::src::align::ArrayDefault;
-use crate::src::filmgrain::Rav1dFilmGrainDSPContext;
 use crate::src::filmgrain::FG_BLOCK_SIZE;
+use crate::src::filmgrain::Rav1dFilmGrainDSPContext;
 use crate::src::internal::GrainBD;
 use crate::src::strided::Strided as _;
 use std::cmp;

@@ -41,11 +41,7 @@ fn constrain_scalar(diff: i32, threshold: c_int, shift: c_int) -> i32 {
     let term = threshold - (adiff >> shift);
     let max_term = cmp::max(0, term);
     let result = cmp::min(adiff, max_term);
-    if diff < 0 {
-        -result
-    } else {
-        result
-    }
+    if diff < 0 { -result } else { result }
 }
 
 // ============================================================================

@@ -6,7 +6,7 @@
 #![deny(unsafe_code)]
 #![allow(dead_code)]
 
-use archmage::{arcane, rite, Wasm128Token};
+use archmage::{Wasm128Token, arcane, rite};
 use core::arch::wasm32::*;
 
 use std::cmp;
@@ -22,7 +22,7 @@ use crate::src::strided::Strided as _;
 use crate::src::tables::dav1d_cdef_directions;
 
 // Re-use constants and shared functions from the main cdef module
-use super::cdef::{padding_16bpc, padding_8bpc, TMP_STRIDE};
+use super::cdef::{TMP_STRIDE, padding_8bpc, padding_16bpc};
 
 // ============================================================================
 // CONSTRAIN FUNCTION (wasm128 SIMD)

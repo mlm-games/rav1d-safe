@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 
-use crate::include::common::bitdepth::BitDepth;
 use crate::include::common::bitdepth::BPC;
+use crate::include::common::bitdepth::BitDepth;
 use crate::include::common::intops::ulog2;
 use crate::include::dav1d::headers::Rav1dPixelLayout;
 use crate::include::dav1d::picture::PicOffset;
@@ -34,11 +34,7 @@ bitflags! {
 
 impl Backup2x8Flags {
     pub const fn select(&self, select: bool) -> Self {
-        if select {
-            *self
-        } else {
-            Self::empty()
-        }
+        if select { *self } else { Self::empty() }
     }
 }
 

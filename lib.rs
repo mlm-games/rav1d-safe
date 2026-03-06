@@ -24,7 +24,9 @@
 )]
 
 #[cfg(not(any(feature = "bitdepth_8", feature = "bitdepth_16")))]
-compile_error!("No bitdepths enabled. Enable one or more of the following features: `bitdepth_8`, `bitdepth_16`");
+compile_error!(
+    "No bitdepths enabled. Enable one or more of the following features: `bitdepth_8`, `bitdepth_16`"
+);
 
 pub mod include {
     pub mod common {
@@ -157,8 +159,8 @@ pub mod src {
 // Re-export the managed API at the crate root for convenience.
 // Users can write `rav1d_safe::Decoder` instead of `rav1d_safe::src::managed::Decoder`.
 pub use src::managed::{
-    enabled_features, ColorInfo, ColorPrimaries, ColorRange, ContentLightLevel, CpuLevel,
-    DecodeFrameType, Decoder, Error, Frame, InloopFilters, MasteringDisplay, MatrixCoefficients,
-    PixelLayout, PlaneView16, PlaneView8, Planes, Planes16, Planes8, Result, Settings,
-    TransferCharacteristics,
+    ColorInfo, ColorPrimaries, ColorRange, ContentLightLevel, CpuLevel, DecodeFrameType, Decoder,
+    Error, Frame, InloopFilters, MasteringDisplay, MatrixCoefficients, PixelLayout, PlaneView8,
+    PlaneView16, Planes, Planes8, Planes16, Result, Settings, TransferCharacteristics,
+    enabled_features,
 };

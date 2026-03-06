@@ -14,8 +14,8 @@ use core::arch::aarch64::*;
 use std::ffi::c_int;
 
 use crate::include::common::bitdepth::AsPrimitive;
-use crate::include::common::bitdepth::BitDepth16;
 use crate::include::common::bitdepth::BitDepth8;
+use crate::include::common::bitdepth::BitDepth16;
 use crate::include::common::bitdepth::DynCoef;
 use crate::include::common::bitdepth::DynPixel;
 use crate::include::common::intops::iclip;
@@ -7802,10 +7802,8 @@ gen_itx_arm_8bpc!(identity, identity, 16, 8, false);
 // DISPATCH: Safe entry point for ITX SIMD dispatch on ARM
 // ============================================================================
 
-use crate::include::common::bitdepth::BitDepth;
 use crate::include::common::bitdepth::BPC;
-use crate::src::levels::TxfmSize;
-use crate::src::levels::TxfmType;
+use crate::include::common::bitdepth::BitDepth;
 use crate::src::levels::ADST_ADST;
 use crate::src::levels::ADST_DCT;
 use crate::src::levels::ADST_FLIPADST;
@@ -7819,6 +7817,8 @@ use crate::src::levels::H_ADST;
 use crate::src::levels::H_DCT;
 use crate::src::levels::H_FLIPADST;
 use crate::src::levels::IDTX;
+use crate::src::levels::TxfmSize;
+use crate::src::levels::TxfmType;
 use crate::src::levels::V_ADST;
 use crate::src::levels::V_DCT;
 use crate::src::levels::V_FLIPADST;

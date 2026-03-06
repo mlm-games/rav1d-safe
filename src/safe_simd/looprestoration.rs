@@ -15,7 +15,7 @@ use core::arch::x86_64::*;
 
 #[cfg(target_arch = "x86_64")]
 use crate::src::cpu::summon_avx2;
-use archmage::{arcane, rite, Desktop64, Server64, SimdToken};
+use archmage::{Desktop64, Server64, SimdToken, arcane, rite};
 use std::cmp;
 use std::ffi::c_int;
 use std::ffi::c_uint;
@@ -25,13 +25,13 @@ use std::slice;
 use crate::src::safe_simd::partial_simd;
 #[cfg(target_arch = "x86_64")]
 use crate::src::safe_simd::pixel_access::{
-    loadi64, loadu_128, loadu_256, loadu_512, storeu_128, storeu_256, storeu_512, Flex,
+    Flex, loadi64, loadu_128, loadu_256, loadu_512, storeu_128, storeu_256, storeu_512,
 };
 
 use crate::include::common::bitdepth::AsPrimitive;
 use crate::include::common::bitdepth::BitDepth;
-use crate::include::common::bitdepth::BitDepth16;
 use crate::include::common::bitdepth::BitDepth8;
+use crate::include::common::bitdepth::BitDepth16;
 use crate::include::common::bitdepth::DynPixel;
 use crate::include::common::bitdepth::LeftPixelRow;
 use crate::include::common::intops::iclip;
@@ -39,7 +39,7 @@ use crate::include::dav1d::picture::PicOffset;
 use crate::src::align::AlignedVec64;
 use crate::src::disjoint_mut::DisjointMut;
 use crate::src::ffi_safe::FFISafe;
-use crate::src::looprestoration::{padding, LooprestorationParams, LrEdgeFlags};
+use crate::src::looprestoration::{LooprestorationParams, LrEdgeFlags, padding};
 use crate::src::strided::Strided as _;
 use crate::src::tables::dav1d_sgr_x_by_x;
 #[allow(non_camel_case_types)]

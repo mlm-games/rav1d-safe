@@ -12,7 +12,7 @@ use super::partial_simd;
 use super::pixel_access::{loadu_128, loadu_256, storeu_128, storeu_256};
 use crate::src::safe_simd::pixel_access::Flex;
 #[cfg(target_arch = "x86_64")]
-use archmage::{arcane, Desktop64};
+use archmage::{Desktop64, arcane};
 #[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::*;
 #[cfg(feature = "asm")]

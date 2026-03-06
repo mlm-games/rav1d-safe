@@ -15,7 +15,7 @@
 #[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::*;
 
-use archmage::{arcane, Desktop64, Server64, SimdToken};
+use archmage::{Desktop64, Server64, SimdToken, arcane};
 use std::ffi::c_int;
 #[allow(non_camel_case_types)]
 type ptrdiff_t = isize;
@@ -24,7 +24,7 @@ type ptrdiff_t = isize;
 use super::partial_simd;
 #[cfg(target_arch = "x86_64")]
 use crate::src::safe_simd::pixel_access::{
-    loadu_128, loadu_256, loadu_512, storeu_128, storeu_256, storeu_512, Flex,
+    Flex, loadu_128, loadu_256, loadu_512, storeu_128, storeu_256, storeu_512,
 };
 
 use crate::include::common::bitdepth::DynPixel;
@@ -1672,7 +1672,7 @@ pub unsafe extern "C" fn ipred_smooth_h_8bpc_avx2(
 // FILTER Prediction (filter intra)
 // ============================================================================
 
-use crate::src::tables::{dav1d_dr_intra_derivative, dav1d_filter_intra_taps, filter_fn, FLT_INCR};
+use crate::src::tables::{FLT_INCR, dav1d_dr_intra_derivative, dav1d_filter_intra_taps, filter_fn};
 
 /// FILTER prediction: uses directional filter taps on 4x2 blocks
 ///

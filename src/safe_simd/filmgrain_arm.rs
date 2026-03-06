@@ -13,7 +13,7 @@ use core::arch::aarch64::*;
 
 use crate::src::safe_simd::pixel_access::Flex;
 #[cfg(target_arch = "aarch64")]
-use archmage::{arcane, Arm64, SimdToken};
+use archmage::{Arm64, SimdToken, arcane};
 #[cfg(target_arch = "aarch64")]
 use safe_unaligned_simd::aarch64 as safe_simd;
 
@@ -1395,7 +1395,7 @@ fguv_16bpc_wrapper!(fguv_32x32xn_i444_16bpc_neon, false, false);
 // Safe dispatch wrappers — encapsulate unsafe pointer creation and FFI calls
 // ============================================================================
 
-use crate::include::common::bitdepth::{BitDepth, BPC};
+use crate::include::common::bitdepth::{BPC, BitDepth};
 use crate::include::dav1d::headers::Rav1dPixelLayoutSubSampled;
 use crate::include::dav1d::picture::Rav1dPictureDataComponent;
 use crate::src::strided::Strided as _;

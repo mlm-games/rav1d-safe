@@ -10,7 +10,7 @@
 use core::arch::aarch64::*;
 
 #[cfg(target_arch = "aarch64")]
-use archmage::{arcane, Arm64, SimdToken};
+use archmage::{Arm64, SimdToken, arcane};
 
 use std::ffi::c_int;
 #[allow(non_camel_case_types)]

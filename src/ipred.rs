@@ -1,8 +1,8 @@
 #![cfg_attr(not(feature = "asm"), forbid(unsafe_code))]
 use crate::include::common::bitdepth::AsPrimitive;
+use crate::include::common::bitdepth::BPC;
 use crate::include::common::bitdepth::BitDepth;
 use crate::include::common::bitdepth::DynPixel;
-use crate::include::common::bitdepth::BPC;
 use crate::include::common::intops::apply_sign;
 use crate::include::common::intops::iclip;
 use crate::include::dav1d::headers::Rav1dPixelLayoutSubSampled;
@@ -43,11 +43,11 @@ use crate::src::levels::Z2_PRED;
 #[cfg(feature = "asm")]
 use crate::src::levels::Z3_PRED;
 use crate::src::strided::Strided as _;
+use crate::src::tables::FLT_INCR;
 use crate::src::tables::dav1d_dr_intra_derivative;
 use crate::src::tables::dav1d_filter_intra_taps;
 use crate::src::tables::dav1d_sm_weights;
 use crate::src::tables::filter_fn;
-use crate::src::tables::FLT_INCR;
 use crate::src::wrap_fn_ptr::wrap_fn_ptr;
 #[allow(non_camel_case_types)]
 type ptrdiff_t = isize;

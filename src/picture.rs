@@ -14,11 +14,11 @@ use crate::include::dav1d::headers::Rav1dPixelLayout;
 use crate::include::dav1d::headers::Rav1dSequenceHeader;
 #[cfg(feature = "c-ffi")]
 use crate::include::dav1d::picture::Dav1dPicture;
+#[cfg(feature = "c-ffi")]
+use crate::include::dav1d::picture::RAV1D_PICTURE_ALIGNMENT;
 use crate::include::dav1d::picture::Rav1dPicAllocator;
 use crate::include::dav1d::picture::Rav1dPicture;
 use crate::include::dav1d::picture::Rav1dPictureParameters;
-#[cfg(feature = "c-ffi")]
-use crate::include::dav1d::picture::RAV1D_PICTURE_ALIGNMENT;
 #[cfg(feature = "c-ffi")]
 use crate::src::error::Dav1dResult;
 use crate::src::error::Rav1dError::{EGeneric, ENOMEM};
@@ -44,11 +44,11 @@ use std::mem;
 #[cfg(feature = "c-ffi")]
 use std::ptr;
 #[cfg(feature = "c-ffi")]
-use std::ptr::fn_addr_eq;
-#[cfg(feature = "c-ffi")]
 use std::ptr::NonNull;
-use std::sync::atomic::AtomicU32;
+#[cfg(feature = "c-ffi")]
+use std::ptr::fn_addr_eq;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 #[cfg(feature = "c-ffi")]
 use to_method::To as _;
 

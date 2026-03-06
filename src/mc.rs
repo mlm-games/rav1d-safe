@@ -10,9 +10,9 @@ use crate::include::dav1d::picture::PicOffset;
 use crate::include::dav1d::picture::Rav1dPictureDataComponent;
 use crate::src::align::AlignedVec64;
 use crate::src::cpu::CpuFlags;
+use crate::src::enum_map::DefaultValue;
 use crate::src::enum_map::enum_map;
 use crate::src::enum_map::enum_map_ty;
-use crate::src::enum_map::DefaultValue;
 use crate::src::ffi_safe::FFISafe;
 use crate::src::internal::COMPINTER_LEN;
 use crate::src::internal::EMU_EDGE_LEN;
@@ -47,7 +47,7 @@ use to_method::To;
 use crate::include::common::bitdepth::bd_fn;
 
 #[cfg(all(feature = "asm", any(target_arch = "x86", target_arch = "x86_64")))]
-use crate::include::common::bitdepth::{bpc_fn, BPC};
+use crate::include::common::bitdepth::{BPC, bpc_fn};
 
 #[cfg(all(feature = "asm", target_arch = "aarch64"))]
 use crate::include::common::bitdepth::bpc_fn;

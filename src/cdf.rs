@@ -2,21 +2,21 @@
 
 use crate::include::dav1d::headers::Rav1dFilterMode;
 use crate::include::dav1d::headers::Rav1dFrameHeader;
-use crate::src::align::Align16;
-use crate::src::align::Align32;
 use crate::src::align::Align4;
 use crate::src::align::Align8;
+use crate::src::align::Align16;
+use crate::src::align::Align32;
 use crate::src::align::ArrayDefault;
 use crate::src::error::Rav1dResult;
 use crate::src::levels::BlockLevel;
 use crate::src::levels::BlockPartition;
 use crate::src::levels::BlockSize;
 use crate::src::levels::MVJoint;
-use crate::src::levels::SegmentId;
-use crate::src::levels::TxfmSize;
 use crate::src::levels::N_COMP_INTER_PRED_MODES;
 use crate::src::levels::N_INTRA_PRED_MODES;
 use crate::src::levels::N_UV_INTRA_PRED_MODES;
+use crate::src::levels::SegmentId;
+use crate::src::levels::TxfmSize;
 use crate::src::mem::try_arc;
 use crate::src::tables::dav1d_partition_type_count;
 use aligned::Aligned;
@@ -24,8 +24,8 @@ use parking_lot::RwLock;
 use parking_lot::RwLockWriteGuard;
 use std::cmp;
 use std::ffi::c_uint;
-use std::sync::atomic::AtomicU32;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU32;
 use strum::EnumCount;
 
 #[derive(Clone, Default)]

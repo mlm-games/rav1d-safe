@@ -16,8 +16,8 @@ use std::slice;
 
 use crate::include::common::bitdepth::AsPrimitive;
 use crate::include::common::bitdepth::BitDepth;
-use crate::include::common::bitdepth::BitDepth16;
 use crate::include::common::bitdepth::BitDepth8;
+use crate::include::common::bitdepth::BitDepth16;
 use crate::include::common::bitdepth::DynPixel;
 use crate::include::common::bitdepth::LeftPixelRow;
 use crate::include::common::intops::iclip;
@@ -25,7 +25,7 @@ use crate::include::dav1d::picture::PicOffset;
 use crate::src::align::AlignedVec64;
 use crate::src::disjoint_mut::DisjointMut;
 use crate::src::ffi_safe::FFISafe;
-use crate::src::looprestoration::{padding, LooprestorationParams, LrEdgeFlags};
+use crate::src::looprestoration::{LooprestorationParams, LrEdgeFlags, padding};
 #[cfg(feature = "asm")]
 use crate::src::pixels::Pixels;
 use crate::src::strided::Strided as _;

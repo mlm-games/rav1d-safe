@@ -10,9 +10,9 @@ use std::ops::Deref;
 #[cfg(feature = "c-ffi")]
 use std::pin::Pin;
 #[cfg(feature = "c-ffi")]
-use std::ptr::drop_in_place;
-#[cfg(feature = "c-ffi")]
 use std::ptr::NonNull;
+#[cfg(feature = "c-ffi")]
+use std::ptr::drop_in_place;
 
 #[cfg(feature = "c-ffi")]
 pub type FnFree = unsafe extern "C" fn(ptr: *const u8, cookie: Option<SendSyncNonNull<c_void>>);
