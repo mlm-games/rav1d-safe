@@ -1,7 +1,7 @@
 [package]
 name = "rav1d-disjoint-mut"
 version = "0.3.0"
-edition = "2021"
+edition = "2024"
 rust-version = "1.85"
 description = "A provably safe abstraction for concurrent disjoint mutable access to contiguous storage"
 license = "BSD-2-Clause OR MIT OR Apache-2.0"
@@ -14,6 +14,8 @@ exclude = ["justfile"]
 [features]
 default = ["std"]
 std = []
+# Runtime borrow instrumentation (records size histograms, concurrency, contention).
+instrument = ["std"]
 # Aligned newtypes (Align4..64) and AlignedVec32/64 for SIMD-friendly layout.
 aligned = ["dep:aligned", "dep:aligned-vec"]
 # PicBuf: owned/borrowed byte buffer for DisjointMut (used by rav1d picture data).
