@@ -1425,7 +1425,16 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
         let byte_start = lvl_gather_start * 4;
         let byte_end = ((lvl_gather_end_entry + 1) * 4).min(lvl.data.len());
         if byte_start < byte_end {
-            let guard = lvl.data.index(byte_start..byte_end);
+            // Use strided tracking: we read ~32 entries at stride b4_stridea,
+            // spanning the full level cache stripe. Strided tracking avoids false
+            // overlap with concurrent writes to adjacent tile rows' entries.
+            let entry_width = 4usize; // each level entry is [u8; 4]
+            let byte_stride = b4_stridea_entries * entry_width;
+            let guard = lvl.data.index_strided(
+                byte_start..byte_end,
+                byte_stride,
+                entry_width,
+            );
             let src: &[[u8; 4]] =
                 zerocopy::FromBytes::ref_from_bytes(&*guard).unwrap_or(&[]);
 
@@ -1684,7 +1693,16 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
         let byte_start = lvl_gather_start * 4;
         let byte_end = ((lvl_gather_end_entry + 1) * 4).min(lvl.data.len());
         if byte_start < byte_end {
-            let guard = lvl.data.index(byte_start..byte_end);
+            // Use strided tracking: we read ~32 entries at stride b4_stridea,
+            // spanning the full level cache stripe. Strided tracking avoids false
+            // overlap with concurrent writes to adjacent tile rows' entries.
+            let entry_width = 4usize; // each level entry is [u8; 4]
+            let byte_stride = b4_stridea_entries * entry_width;
+            let guard = lvl.data.index_strided(
+                byte_start..byte_end,
+                byte_stride,
+                entry_width,
+            );
             let src: &[[u8; 4]] =
                 zerocopy::FromBytes::ref_from_bytes(&*guard).unwrap_or(&[]);
             let lookback_src = lvl_base_entry

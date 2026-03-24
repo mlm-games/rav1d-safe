@@ -585,18 +585,7 @@ impl<'a> Rav1dPictureDataComponentOffset<'a> {
         &self,
         len: usize,
     ) -> DisjointImmutGuard<'a, Rav1dPictureDataComponentInner, [BD::Pixel]> {
-        let abs_stride = self.data.pixel_stride::<BD>().unsigned_abs();
-        if abs_stride > 0 && len >= abs_stride {
-            // Multi-row access — register with stride info for 2D overlap checking
-            let w = abs_stride.min(len);
-            self.data.dm().slice_as_strided::<_, BD::Pixel>(
-                (self.offset.., ..len),
-                abs_stride,
-                w,
-            )
-        } else {
-            self.data.slice::<BD, _>((self.offset.., ..len))
-        }
+        self.data.slice::<BD, _>((self.offset.., ..len))
     }
 
     #[inline] // Inline to see bounds checks in order to potentially elide them.
@@ -605,17 +594,7 @@ impl<'a> Rav1dPictureDataComponentOffset<'a> {
         &self,
         len: usize,
     ) -> DisjointMutGuard<'a, Rav1dPictureDataComponentInner, [BD::Pixel]> {
-        let abs_stride = self.data.pixel_stride::<BD>().unsigned_abs();
-        if abs_stride > 0 && len >= abs_stride {
-            let w = abs_stride.min(len);
-            self.data.dm().mut_slice_as_strided::<_, BD::Pixel>(
-                (self.offset.., ..len),
-                abs_stride,
-                w,
-            )
-        } else {
-            self.data.slice_mut::<BD, _>((self.offset.., ..len))
-        }
+        self.data.slice_mut::<BD, _>((self.offset.., ..len))
     }
 
     /// Create a tracked mutable guard covering a strided w×h pixel region.

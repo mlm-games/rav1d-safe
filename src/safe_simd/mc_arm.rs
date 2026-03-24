@@ -4388,6 +4388,7 @@ pub fn avg_dispatch<BD: BitDepth>(
         use zerocopy::IntoBytes;
         #[allow(unsafe_code)]
         {
+            if super::mc::crosses_sb_boundary::<BD>(&dst, h) { return false; }
             let (mut dst_guard, _dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
             let dst_ptr = dst_guard.as_mut_bytes().as_mut_ptr() as *mut DynPixel;
             let dst_ptr = unsafe { dst_ptr.add(_dst_base * std::mem::size_of::<BD::Pixel>()) };
@@ -4411,6 +4412,7 @@ pub fn avg_dispatch<BD: BitDepth>(
         let token = Arm64::summon().unwrap();
         let w_u = w as usize;
         let h_u = h as usize;
+        if super::mc::crosses_sb_boundary::<BD>(&dst, h) { return false; }
         let (mut dst_guard, dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
         let dst_stride = dst.stride() as usize;
         match BD::BPC {
@@ -4468,6 +4470,7 @@ pub fn w_avg_dispatch<BD: BitDepth>(
         use zerocopy::IntoBytes;
         #[allow(unsafe_code)]
         {
+            if super::mc::crosses_sb_boundary::<BD>(&dst, h) { return false; }
             let (mut dst_guard, _dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
             let dst_ptr = dst_guard.as_mut_bytes().as_mut_ptr() as *mut DynPixel;
             let dst_ptr = unsafe { dst_ptr.add(_dst_base * std::mem::size_of::<BD::Pixel>()) };
@@ -4491,6 +4494,7 @@ pub fn w_avg_dispatch<BD: BitDepth>(
         let token = Arm64::summon().unwrap();
         let w_u = w as usize;
         let h_u = h as usize;
+        if super::mc::crosses_sb_boundary::<BD>(&dst, h) { return false; }
         let (mut dst_guard, dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
         let dst_stride = dst.stride() as usize;
         match BD::BPC {
@@ -4550,6 +4554,7 @@ pub fn mask_dispatch<BD: BitDepth>(
         use zerocopy::IntoBytes;
         #[allow(unsafe_code)]
         {
+            if super::mc::crosses_sb_boundary::<BD>(&dst, h) { return false; }
             let (mut dst_guard, _dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
             let dst_ptr = dst_guard.as_mut_bytes().as_mut_ptr() as *mut DynPixel;
             let dst_ptr = unsafe { dst_ptr.add(_dst_base * std::mem::size_of::<BD::Pixel>()) };
@@ -4575,6 +4580,7 @@ pub fn mask_dispatch<BD: BitDepth>(
         let w_u = w as usize;
         let h_u = h as usize;
         let mask_slice = &mask[..(w_u * h_u)];
+        if super::mc::crosses_sb_boundary::<BD>(&dst, h) { return false; }
         let (mut dst_guard, dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
         let dst_stride = dst.stride() as usize;
         match BD::BPC {
@@ -4632,6 +4638,7 @@ pub fn blend_dispatch<BD: BitDepth>(
         use zerocopy::IntoBytes;
         #[allow(unsafe_code)]
         {
+            if super::mc::crosses_sb_boundary::<BD>(&dst, h) { return false; }
             let (mut dst_guard, _dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
             let dst_ptr = dst_guard.as_mut_bytes().as_mut_ptr() as *mut DynPixel;
             let dst_ptr = unsafe { dst_ptr.add(_dst_base * std::mem::size_of::<BD::Pixel>()) };
@@ -4655,6 +4662,7 @@ pub fn blend_dispatch<BD: BitDepth>(
     {
         let w_u = w as usize;
         let h_u = h as usize;
+        if super::mc::crosses_sb_boundary::<BD>(&dst, h) { return false; }
         let (mut dst_guard, dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
         let dst_stride = dst.stride() as usize;
         let mask_slice = &mask[..(w_u * h_u)];
@@ -4720,6 +4728,7 @@ pub fn blend_dir_dispatch<BD: BitDepth>(
         use zerocopy::IntoBytes;
         #[allow(unsafe_code)]
         {
+            if super::mc::crosses_sb_boundary::<BD>(&dst, h) { return false; }
             let (mut dst_guard, _dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
             let dst_ptr = dst_guard.as_mut_bytes().as_mut_ptr() as *mut DynPixel;
             let dst_ptr = unsafe { dst_ptr.add(_dst_base * std::mem::size_of::<BD::Pixel>()) };
@@ -4749,6 +4758,7 @@ pub fn blend_dir_dispatch<BD: BitDepth>(
         use crate::src::tables::dav1d_obmc_masks;
         let w_u = w as usize;
         let h_u = h as usize;
+        if super::mc::crosses_sb_boundary::<BD>(&dst, h) { return false; }
         let (mut dst_guard, dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
         let dst_stride = dst.stride() as usize;
         match (BD::BPC, is_h) {
@@ -4862,6 +4872,7 @@ pub fn w_mask_dispatch<BD: BitDepth>(
         use zerocopy::IntoBytes;
         #[allow(unsafe_code)]
         {
+            if super::mc::crosses_sb_boundary::<BD>(&dst, h) { return false; }
             let (mut dst_guard, _dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
             let dst_ptr = dst_guard.as_mut_bytes().as_mut_ptr() as *mut DynPixel;
             let dst_ptr = unsafe { dst_ptr.add(_dst_base * std::mem::size_of::<BD::Pixel>()) };
@@ -4897,6 +4908,7 @@ pub fn w_mask_dispatch<BD: BitDepth>(
         let token = Arm64::summon().unwrap();
         let w_u = w as usize;
         let h_u = h as usize;
+        if super::mc::crosses_sb_boundary::<BD>(&dst, h) { return false; }
         let (mut dst_guard, dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
         let dst_stride = dst.stride() as usize;
         match BD::BPC {
@@ -5021,6 +5033,7 @@ pub fn mc_put_dispatch<BD: BitDepth>(
         use zerocopy::IntoBytes;
         #[allow(unsafe_code)]
         {
+            if super::mc::crosses_sb_boundary::<BD>(&dst, h) { return false; }
             let (mut dst_guard, _dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
             let dst_ptr = dst_guard.as_mut_bytes().as_mut_ptr() as *mut DynPixel;
             let dst_ptr = unsafe { dst_ptr.add(_dst_base * std::mem::size_of::<BD::Pixel>()) };
@@ -5125,6 +5138,7 @@ pub fn mc_put_dispatch<BD: BitDepth>(
         let h_u = h as usize;
         let mx_u = mx as usize;
         let my_u = my as usize;
+        if super::mc::crosses_sb_boundary::<BD>(&dst, h) { return false; }
         let (mut dst_guard, dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
         let (src_guard, src_base) = src.full_guard::<BD>();
         let dst_stride_raw = dst.stride();

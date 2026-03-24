@@ -1273,31 +1273,61 @@ mod checked {
             if a_start >= b_end || b_start >= a_end {
                 return false;
             }
-            // If both are strided with the same stride, use 2D rectangle check.
-            if a_stride > 0 && a_stride == b_stride && a_width > 0 && b_width > 0 {
-                let stride = a_stride;
-                // Column overlap: [a_col..a_col+a_width) vs [b_col..b_col+b_width)
-                let a_col = a_start % stride;
-                let b_col = b_start % stride;
-                if a_col >= b_col + b_width || b_col >= a_col + a_width {
+
+            // 2D stride-aware overlap checking.
+            // When at least one borrow has stride info, check if the actual accessed
+            // byte ranges overlap (not just the contiguous extent).
+            let (strided_start, strided_end, stride, s_width, other_start, other_end, o_stride, o_width) =
+                if a_stride > 0 && a_width > 0 {
+                    (a_start, a_end, a_stride, a_width, b_start, b_end, b_stride, b_width)
+                } else if b_stride > 0 && b_width > 0 {
+                    (b_start, b_end, b_stride, b_width, a_start, a_end, a_stride, a_width)
+                } else {
+                    // Neither has stride info — 1D overlap already confirmed above.
+                    return true;
+                };
+
+            if o_stride == stride && o_width > 0 {
+                // Both strided with same stride: 2D rectangle check.
+                let s_col = strided_start % stride;
+                let o_col = other_start % stride;
+                if s_col >= o_col + o_width || o_col >= s_col + s_width {
                     return false; // columns don't overlap
                 }
-                // Row overlap: [a_row..a_row+a_h) vs [b_row..b_row+b_h)
-                let a_row = a_start / stride;
-                let b_row = b_start / stride;
-                let a_h = if a_end > a_start {
-                    (a_end - a_start + stride - 1) / stride
-                } else {
-                    0
-                };
-                let b_h = if b_end > b_start {
-                    (b_end - b_start + stride - 1) / stride
-                } else {
-                    0
-                };
-                if a_row >= b_row + b_h || b_row >= a_row + a_h {
+                let s_row = strided_start / stride;
+                let o_row = other_start / stride;
+                let s_h = (strided_end - strided_start + stride - 1) / stride;
+                let o_h = (other_end - other_start + stride - 1) / stride;
+                if s_row >= o_row + o_h || o_row >= s_row + s_h {
                     return false; // rows don't overlap
                 }
+            } else if o_stride == 0 {
+                // One strided, one non-strided (e.g., small write vs large strided read).
+                // The non-strided borrow [other_start..other_end) is a flat byte range.
+                // Check if any byte in that flat range falls within the strided borrow's
+                // actual accessed columns.
+                let other_len = other_end - other_start;
+                let o_col = other_start % stride;
+                let s_col = strided_start % stride;
+
+                // Row overlap check
+                let s_row = strided_start / stride;
+                let o_row = other_start / stride;
+                let s_h = (strided_end - strided_start + stride - 1) / stride;
+                let o_h = (other_end - other_start + stride - 1) / stride;
+                if s_row >= o_row + o_h || o_row >= s_row + s_h {
+                    return false; // rows don't overlap
+                }
+
+                // Column overlap: if the flat borrow spans less than one stride,
+                // its column range is [o_col, o_col + other_len). Otherwise it
+                // covers full rows (always overlaps with any column).
+                if other_len < stride {
+                    if o_col >= s_col + s_width || s_col >= o_col + other_len {
+                        return false; // columns don't overlap
+                    }
+                }
+                // else: flat borrow spans full rows, column overlap guaranteed
             }
             true
         }
