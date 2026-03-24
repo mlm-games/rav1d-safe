@@ -39,6 +39,9 @@ extern crate std;
 #[cfg(feature = "aligned")]
 pub mod align;
 
+#[cfg(feature = "instrument")]
+pub mod instrument;
+
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -970,6 +973,8 @@ mod checked {
         #[cold]
         #[inline(never)]
         fn lock_slow(&self) {
+            #[cfg(feature = "instrument")]
+            crate::instrument::record_contention();
             loop {
                 // Spin-wait: read without writing to avoid cache line bouncing
                 while self.0.load(Ordering::Relaxed) {
@@ -1064,6 +1069,8 @@ mod checked {
         #[cold]
         #[inline(never)]
         fn alloc_overflow(&mut self, start: usize, end: usize, is_mutable: bool) -> u8 {
+            #[cfg(feature = "instrument")]
+            crate::instrument::record_overflow();
             // Find a free slot in the overflow Vec (tombstoned entries have start >= end).
             for (i, entry) in self.overflow.iter_mut().enumerate() {
                 if entry.0 >= entry.1 {
@@ -1269,6 +1276,8 @@ mod checked {
             let start = bounds.range.start;
             let end = bounds.range.end;
             if start >= end {
+                #[cfg(feature = "instrument")]
+                crate::instrument::record_empty_borrow();
                 return BorrowId(BorrowSlots::EMPTY_SLOT);
             }
             self.check_poisoned();
@@ -1277,6 +1286,11 @@ mod checked {
             let slots = unsafe { &mut *self.slots.get() };
             if let Some((es, ee, em)) = slots.find_overlap_any(start, end) {
                 Self::overlap_panic(start, end, true, es, ee, em);
+            }
+            #[cfg(feature = "instrument")]
+            {
+                let concurrent = slots.occupied.count_ones();
+                crate::instrument::record_mut_borrow(end - start, concurrent);
             }
             BorrowId(slots.alloc(start, end, true))
         }
@@ -1288,6 +1302,8 @@ mod checked {
             let start = bounds.range.start;
             let end = bounds.range.end;
             if start >= end {
+                #[cfg(feature = "instrument")]
+                crate::instrument::record_empty_borrow();
                 return BorrowId(BorrowSlots::EMPTY_SLOT);
             }
             self.check_poisoned();
@@ -1296,6 +1312,11 @@ mod checked {
             let slots = unsafe { &mut *self.slots.get() };
             if let Some((es, ee, em)) = slots.find_overlap_mut(start, end) {
                 Self::overlap_panic(start, end, false, es, ee, em);
+            }
+            #[cfg(feature = "instrument")]
+            {
+                let concurrent = slots.occupied.count_ones();
+                crate::instrument::record_immut_borrow(end - start, concurrent);
             }
             BorrowId(slots.alloc(start, end, false))
         }
@@ -1306,6 +1327,8 @@ mod checked {
             if id.0 == BorrowSlots::EMPTY_SLOT || id == BorrowId::UNCHECKED {
                 return;
             }
+            #[cfg(feature = "instrument")]
+            crate::instrument::record_remove();
             let _guard = self.lock.lock();
             // SAFETY: TinyLock is held, so we have exclusive access to slots.
             let slots = unsafe { &mut *self.slots.get() };

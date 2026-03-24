@@ -35,6 +35,36 @@ pub mod looprestoration_arm;
 #[cfg(target_arch = "aarch64")]
 pub mod itx_arm;
 
+#[cfg(target_arch = "aarch64")]
+pub mod itx_arm_neon_wht;
+
+#[cfg(target_arch = "aarch64")]
+pub mod itx_arm_neon_common;
+
+#[cfg(target_arch = "aarch64")]
+pub mod itx_arm_neon_4x4;
+
+#[cfg(target_arch = "aarch64")]
+pub mod itx_arm_neon_8x8;
+
+#[cfg(target_arch = "aarch64")]
+pub mod itx_arm_neon_rect;
+
+#[cfg(target_arch = "aarch64")]
+pub mod itx_arm_neon_16x16;
+
+#[cfg(target_arch = "aarch64")]
+pub mod itx_arm_neon_32;
+
+#[cfg(target_arch = "aarch64")]
+pub mod itx_arm_neon_rect_large;
+
+#[cfg(target_arch = "aarch64")]
+pub mod itx_arm_neon_large_rect;
+
+#[cfg(target_arch = "aarch64")]
+pub mod itx_arm_neon_64;
+
 pub mod cdef;
 
 #[cfg(target_arch = "wasm32")]

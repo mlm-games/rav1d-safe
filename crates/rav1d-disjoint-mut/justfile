@@ -19,6 +19,21 @@ miri-all: miri miri-tree
 clippy:
     cargo clippy -- -D warnings
 
+# Format code
+fmt:
+    cargo fmt
+
 # Format check
 fmt-check:
     cargo fmt --check
+
+# Feature permutation checks
+feature-check:
+    cargo test --all-features
+    cargo test --no-default-features
+    cargo test --features instrument
+    cargo test --features aligned
+    cargo test --features zerocopy
+
+# Run all CI checks locally
+ci: fmt-check clippy test feature-check

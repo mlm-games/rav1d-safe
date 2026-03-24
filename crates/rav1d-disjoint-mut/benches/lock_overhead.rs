@@ -4,7 +4,7 @@
 //! by the lock acquisition in BorrowTracker. Useful for comparing spinlock
 //! vs Mutex implementations.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use rav1d_disjoint_mut::DisjointMut;
 
 /// Single-threaded borrow/release: measures uncontended lock overhead.

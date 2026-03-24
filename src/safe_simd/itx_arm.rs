@@ -11,6 +11,7 @@
 #[cfg(target_arch = "aarch64")]
 use core::arch::aarch64::*;
 
+use archmage::autoversion;
 use std::ffi::c_int;
 
 use crate::include::common::bitdepth::AsPrimitive;
@@ -29,7 +30,8 @@ type ptrdiff_t = isize;
 // ============================================================================
 
 /// WHT 4x4 transform for 8bpc
-fn inv_txfm_add_wht_wht_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_wht_wht_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -95,6 +97,7 @@ fn inv_txfm_add_wht_wht_4x4_8bpc_inner(
 }
 
 /// WHT 4x4 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_wht_wht_4x4_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -191,7 +194,8 @@ fn dct4_1d(in0: i32, in1: i32, in2: i32, in3: i32) -> [i32; 4] {
 }
 
 /// DCT 4x4 transform for 8bpc
-fn inv_txfm_add_dct_dct_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_dct_dct_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -242,6 +246,7 @@ fn inv_txfm_add_dct_dct_4x4_8bpc_inner(
 }
 
 /// DCT 4x4 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_4x4_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -342,6 +347,7 @@ fn dct8_1d(input: &[i32; 8]) -> [i32; 8] {
 }
 
 /// DCT 8x8 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_8x8_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -388,6 +394,7 @@ fn inv_txfm_add_dct_dct_8x8_8bpc_inner(
 }
 
 /// DCT 8x8 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_8x8_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -496,6 +503,7 @@ fn dct16_1d(input: &[i32; 16]) -> [i32; 16] {
 }
 
 /// DCT 16x16 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_16x16_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -541,6 +549,7 @@ fn inv_txfm_add_dct_dct_16x16_8bpc_inner(
 }
 
 /// DCT 16x16 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_16x16_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -588,7 +597,8 @@ fn inv_txfm_add_dct_dct_16x16_16bpc_inner(
 // ============================================================================
 
 /// Identity 4x4 transform for 8bpc
-fn inv_txfm_add_identity_identity_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_identity_identity_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -618,6 +628,7 @@ fn inv_txfm_add_identity_identity_4x4_8bpc_inner(
 }
 
 /// Identity 4x4 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_identity_identity_4x4_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -646,6 +657,7 @@ fn inv_txfm_add_identity_identity_4x4_16bpc_inner(
 }
 
 /// Identity 8x8 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_identity_identity_8x8_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -672,6 +684,7 @@ fn inv_txfm_add_identity_identity_8x8_8bpc_inner(
 }
 
 /// Identity 8x8 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_identity_identity_8x8_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -697,6 +710,7 @@ fn inv_txfm_add_identity_identity_8x8_16bpc_inner(
 }
 
 /// Identity 16x16 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_identity_identity_16x16_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -726,6 +740,7 @@ fn inv_txfm_add_identity_identity_16x16_8bpc_inner(
 }
 
 /// Identity 16x16 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_identity_identity_16x16_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -792,7 +807,8 @@ fn adst4_1d(in0: i32, in1: i32, in2: i32, in3: i32) -> [i32; 4] {
 }
 
 /// ADST 4x4 transform for 8bpc
-fn inv_txfm_add_adst_adst_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_adst_adst_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -840,6 +856,7 @@ fn inv_txfm_add_adst_adst_4x4_8bpc_inner(
 }
 
 /// ADST 4x4 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_adst_adst_4x4_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -952,6 +969,7 @@ fn adst8_1d(input: &[i32; 8]) -> [i32; 8] {
 }
 
 /// ADST 8x8 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_adst_adst_8x8_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -995,6 +1013,7 @@ fn inv_txfm_add_adst_adst_8x8_8bpc_inner(
 }
 
 /// ADST 8x8 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_adst_adst_8x8_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -1048,7 +1067,8 @@ fn flipadst4_1d(in0: i32, in1: i32, in2: i32, in3: i32) -> [i32; 4] {
 }
 
 /// FlipADST 4x4 transform for 8bpc
-fn inv_txfm_add_flipadst_flipadst_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_flipadst_flipadst_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -1094,6 +1114,7 @@ fn inv_txfm_add_flipadst_flipadst_4x4_8bpc_inner(
 }
 
 /// FlipADST 4x4 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_flipadst_flipadst_4x4_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -1144,7 +1165,8 @@ fn inv_txfm_add_flipadst_flipadst_4x4_16bpc_inner(
 // ============================================================================
 
 /// DCT-ADST 4x4 transform for 8bpc (DCT on rows, ADST on columns)
-fn inv_txfm_add_dct_adst_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_dct_adst_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -1192,7 +1214,8 @@ fn inv_txfm_add_dct_adst_4x4_8bpc_inner(
 }
 
 /// ADST-DCT 4x4 transform for 8bpc (ADST on rows, DCT on columns)
-fn inv_txfm_add_adst_dct_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_adst_dct_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -1240,6 +1263,7 @@ fn inv_txfm_add_adst_dct_4x4_8bpc_inner(
 }
 
 /// DCT-ADST 4x4 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_adst_4x4_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -1286,6 +1310,7 @@ fn inv_txfm_add_dct_adst_4x4_16bpc_inner(
 }
 
 /// ADST-DCT 4x4 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_adst_dct_4x4_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -1336,7 +1361,8 @@ fn inv_txfm_add_adst_dct_4x4_16bpc_inner(
 // ============================================================================
 
 /// DCT-FLIPADST 4x4 transform for 8bpc
-fn inv_txfm_add_dct_flipadst_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_dct_flipadst_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -1382,7 +1408,8 @@ fn inv_txfm_add_dct_flipadst_4x4_8bpc_inner(
 }
 
 /// FLIPADST-DCT 4x4 transform for 8bpc
-fn inv_txfm_add_flipadst_dct_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_flipadst_dct_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -1428,6 +1455,7 @@ fn inv_txfm_add_flipadst_dct_4x4_8bpc_inner(
 }
 
 /// DCT-FLIPADST 4x4 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_flipadst_4x4_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -1474,6 +1502,7 @@ fn inv_txfm_add_dct_flipadst_4x4_16bpc_inner(
 }
 
 /// FLIPADST-DCT 4x4 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_flipadst_dct_4x4_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -1524,7 +1553,8 @@ fn inv_txfm_add_flipadst_dct_4x4_16bpc_inner(
 // ============================================================================
 
 /// ADST-FLIPADST 4x4 transform for 8bpc
-fn inv_txfm_add_adst_flipadst_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_adst_flipadst_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -1570,7 +1600,8 @@ fn inv_txfm_add_adst_flipadst_4x4_8bpc_inner(
 }
 
 /// FLIPADST-ADST 4x4 transform for 8bpc
-fn inv_txfm_add_flipadst_adst_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_flipadst_adst_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -1616,6 +1647,7 @@ fn inv_txfm_add_flipadst_adst_4x4_8bpc_inner(
 }
 
 /// ADST-FLIPADST 4x4 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_adst_flipadst_4x4_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -1662,6 +1694,7 @@ fn inv_txfm_add_adst_flipadst_4x4_16bpc_inner(
 }
 
 /// FLIPADST-ADST 4x4 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_flipadst_adst_4x4_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -1738,6 +1771,20 @@ pub unsafe extern "C" fn inv_txfm_add_wht_wht_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    // Use NEON implementation when available, fall back to scalar
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_wht::inv_txfm_add_wht_wht_4x4_8bpc_neon_inner(
+            token,
+            dst_slice,
+            base,
+            dst_stride,
+            coeff_slice,
+            eob,
+            bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_wht_wht_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -1813,6 +1860,19 @@ pub unsafe extern "C" fn inv_txfm_add_dct_dct_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_dct_dct_4x4_8bpc_neon_inner(
+            token,
+            dst_slice,
+            base,
+            dst_stride,
+            coeff_slice,
+            eob,
+            bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_dct_dct_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -1889,6 +1949,19 @@ pub unsafe extern "C" fn inv_txfm_add_dct_dct_8x8_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_8x8::inv_txfm_add_dct_dct_8x8_8bpc_neon_inner(
+            token,
+            dst_slice,
+            base,
+            dst_stride,
+            coeff_slice,
+            eob,
+            bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_dct_dct_8x8_8bpc_inner(
         dst_slice,
         base,
@@ -2041,6 +2114,13 @@ pub unsafe extern "C" fn inv_txfm_add_identity_identity_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_identity_identity_4x4_8bpc_neon_inner(
+            token, dst_slice, base, dst_stride, coeff_slice, eob, bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_identity_identity_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -2116,6 +2196,19 @@ pub unsafe extern "C" fn inv_txfm_add_identity_identity_8x8_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_8x8::inv_txfm_add_identity_identity_8x8_8bpc_neon_inner(
+            token,
+            dst_slice,
+            base,
+            dst_stride,
+            coeff_slice,
+            eob,
+            bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_identity_identity_8x8_8bpc_inner(
         dst_slice,
         base,
@@ -2267,6 +2360,13 @@ pub unsafe extern "C" fn inv_txfm_add_adst_adst_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_adst_adst_4x4_8bpc_neon_inner(
+            token, dst_slice, base, dst_stride, coeff_slice, eob, bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_adst_adst_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -2342,6 +2442,19 @@ pub unsafe extern "C" fn inv_txfm_add_adst_adst_8x8_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_8x8::inv_txfm_add_adst_adst_8x8_8bpc_neon_inner(
+            token,
+            dst_slice,
+            base,
+            dst_stride,
+            coeff_slice,
+            eob,
+            bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_adst_adst_8x8_8bpc_inner(
         dst_slice,
         base,
@@ -2418,6 +2531,13 @@ pub unsafe extern "C" fn inv_txfm_add_flipadst_flipadst_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_flipadst_flipadst_4x4_8bpc_neon_inner(
+            token, dst_slice, base, dst_stride, coeff_slice, eob, bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_flipadst_flipadst_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -2494,6 +2614,13 @@ pub unsafe extern "C" fn inv_txfm_add_dct_adst_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_dct_adst_4x4_8bpc_neon_inner(
+            token, dst_slice, base, dst_stride, coeff_slice, eob, bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_dct_adst_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -2569,6 +2696,13 @@ pub unsafe extern "C" fn inv_txfm_add_adst_dct_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_adst_dct_4x4_8bpc_neon_inner(
+            token, dst_slice, base, dst_stride, coeff_slice, eob, bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_adst_dct_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -2645,6 +2779,13 @@ pub unsafe extern "C" fn inv_txfm_add_dct_flipadst_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_dct_flipadst_4x4_8bpc_neon_inner(
+            token, dst_slice, base, dst_stride, coeff_slice, eob, bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_dct_flipadst_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -2720,6 +2861,13 @@ pub unsafe extern "C" fn inv_txfm_add_flipadst_dct_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_flipadst_dct_4x4_8bpc_neon_inner(
+            token, dst_slice, base, dst_stride, coeff_slice, eob, bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_flipadst_dct_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -2796,6 +2944,13 @@ pub unsafe extern "C" fn inv_txfm_add_adst_flipadst_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_adst_flipadst_4x4_8bpc_neon_inner(
+            token, dst_slice, base, dst_stride, coeff_slice, eob, bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_adst_flipadst_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -2871,6 +3026,13 @@ pub unsafe extern "C" fn inv_txfm_add_flipadst_adst_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_flipadst_adst_4x4_8bpc_neon_inner(
+            token, dst_slice, base, dst_stride, coeff_slice, eob, bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_flipadst_adst_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -2924,6 +3086,7 @@ pub unsafe extern "C" fn inv_txfm_add_flipadst_adst_4x4_16bpc_neon(
 // ============================================================================
 
 /// DCT 4x8 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_4x8_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -2970,6 +3133,7 @@ fn inv_txfm_add_dct_dct_4x8_8bpc_inner(
 }
 
 /// DCT 4x8 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_4x8_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -3014,6 +3178,7 @@ fn inv_txfm_add_dct_dct_4x8_16bpc_inner(
 }
 
 /// DCT 8x4 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_8x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -3060,6 +3225,7 @@ fn inv_txfm_add_dct_dct_8x4_8bpc_inner(
 }
 
 /// DCT 8x4 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_8x4_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -3108,6 +3274,7 @@ fn inv_txfm_add_dct_dct_8x4_16bpc_inner(
 // ============================================================================
 
 /// DCT 8x16 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_8x16_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -3153,6 +3320,7 @@ fn inv_txfm_add_dct_dct_8x16_8bpc_inner(
 }
 
 /// DCT 8x16 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_8x16_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -3196,6 +3364,7 @@ fn inv_txfm_add_dct_dct_8x16_16bpc_inner(
 }
 
 /// DCT 16x8 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_16x8_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -3241,6 +3410,7 @@ fn inv_txfm_add_dct_dct_16x8_8bpc_inner(
 }
 
 /// DCT 16x8 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_16x8_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -3288,6 +3458,7 @@ fn inv_txfm_add_dct_dct_16x8_16bpc_inner(
 // ============================================================================
 
 /// DCT-ADST 8x8 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_adst_8x8_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -3331,6 +3502,7 @@ fn inv_txfm_add_dct_adst_8x8_8bpc_inner(
 }
 
 /// ADST-DCT 8x8 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_adst_dct_8x8_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -3374,6 +3546,7 @@ fn inv_txfm_add_adst_dct_8x8_8bpc_inner(
 }
 
 /// DCT-ADST 8x8 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_adst_8x8_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -3417,6 +3590,7 @@ fn inv_txfm_add_dct_adst_8x8_16bpc_inner(
 }
 
 /// ADST-DCT 8x8 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_adst_dct_8x8_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -3791,6 +3965,19 @@ pub unsafe extern "C" fn inv_txfm_add_dct_adst_8x8_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_8x8::inv_txfm_add_dct_adst_8x8_8bpc_neon_inner(
+            token,
+            dst_slice,
+            base,
+            dst_stride,
+            coeff_slice,
+            eob,
+            bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_dct_adst_8x8_8bpc_inner(
         dst_slice,
         base,
@@ -3866,6 +4053,19 @@ pub unsafe extern "C" fn inv_txfm_add_adst_dct_8x8_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_8x8::inv_txfm_add_adst_dct_8x8_8bpc_neon_inner(
+            token,
+            dst_slice,
+            base,
+            dst_stride,
+            coeff_slice,
+            eob,
+            bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_adst_dct_8x8_8bpc_inner(
         dst_slice,
         base,
@@ -3979,6 +4179,7 @@ fn dct32_1d(input: &[i32; 32]) -> [i32; 32] {
 }
 
 /// DCT 32x32 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_32x32_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -4024,6 +4225,7 @@ fn inv_txfm_add_dct_dct_32x32_8bpc_inner(
 }
 
 /// DCT 32x32 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_32x32_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -4071,6 +4273,7 @@ fn inv_txfm_add_dct_dct_32x32_16bpc_inner(
 // ============================================================================
 
 /// DCT 4x16 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_4x16_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -4117,6 +4320,7 @@ fn inv_txfm_add_dct_dct_4x16_8bpc_inner(
 }
 
 /// DCT 4x16 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_4x16_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -4161,6 +4365,7 @@ fn inv_txfm_add_dct_dct_4x16_16bpc_inner(
 }
 
 /// DCT 16x4 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_16x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -4207,6 +4412,7 @@ fn inv_txfm_add_dct_dct_16x4_8bpc_inner(
 }
 
 /// DCT 16x4 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_16x4_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -4255,6 +4461,7 @@ fn inv_txfm_add_dct_dct_16x4_16bpc_inner(
 // ============================================================================
 
 /// DCT 16x32 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_16x32_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -4300,6 +4507,7 @@ fn inv_txfm_add_dct_dct_16x32_8bpc_inner(
 }
 
 /// DCT 16x32 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_16x32_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -4343,6 +4551,7 @@ fn inv_txfm_add_dct_dct_16x32_16bpc_inner(
 }
 
 /// DCT 32x16 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_32x16_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -4388,6 +4597,7 @@ fn inv_txfm_add_dct_dct_32x16_8bpc_inner(
 }
 
 /// DCT 32x16 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_32x16_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -4461,14 +4671,18 @@ pub unsafe extern "C" fn inv_txfm_add_dct_dct_32x32_8bpc_neon(
             rows * abs_stride,
         )
     };
-    inv_txfm_add_dct_dct_32x32_8bpc_inner(
-        dst_slice,
-        base,
-        dst_stride,
-        coeff_slice,
-        eob,
-        bitdepth_max,
-    );
+    {
+        let token = unsafe { archmage::Arm64::forge_token_dangerously() };
+        super::itx_arm_neon_32::inv_txfm_add_dct_dct_32x32_8bpc_neon_inner(
+            token,
+            dst_slice,
+            base,
+            dst_stride,
+            coeff_slice,
+            eob,
+            bitdepth_max,
+        );
+    }
 }
 
 #[cfg(all(feature = "asm", target_arch = "aarch64"))]
@@ -4499,14 +4713,18 @@ pub unsafe extern "C" fn inv_txfm_add_dct_dct_32x32_16bpc_neon(
             rows * abs_stride,
         )
     };
-    inv_txfm_add_dct_dct_32x32_16bpc_inner(
-        dst_slice,
-        base,
-        stride_u16 as isize,
-        coeff_slice,
-        eob,
-        bitdepth_max,
-    );
+    {
+        let token = unsafe { archmage::Arm64::forge_token_dangerously() };
+        super::itx_arm_neon_32::inv_txfm_add_dct_dct_32x32_16bpc_neon_inner(
+            token,
+            dst_slice,
+            base,
+            stride_u16 as isize,
+            coeff_slice,
+            eob,
+            bitdepth_max,
+        );
+    }
 }
 
 #[cfg(all(feature = "asm", target_arch = "aarch64"))]
@@ -4851,6 +5069,7 @@ fn dct64_1d(input: &[i32; 64]) -> [i32; 64] {
 }
 
 /// DCT 64x64 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_64x64_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -4896,6 +5115,7 @@ fn inv_txfm_add_dct_dct_64x64_8bpc_inner(
 }
 
 /// DCT 64x64 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_64x64_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -4943,6 +5163,7 @@ fn inv_txfm_add_dct_dct_64x64_16bpc_inner(
 // ============================================================================
 
 /// DCT 8x32 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_8x32_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -4988,6 +5209,7 @@ fn inv_txfm_add_dct_dct_8x32_8bpc_inner(
 }
 
 /// DCT 8x32 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_8x32_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -5031,6 +5253,7 @@ fn inv_txfm_add_dct_dct_8x32_16bpc_inner(
 }
 
 /// DCT 32x8 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_32x8_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -5076,6 +5299,7 @@ fn inv_txfm_add_dct_dct_32x8_8bpc_inner(
 }
 
 /// DCT 32x8 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_32x8_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -5123,6 +5347,7 @@ fn inv_txfm_add_dct_dct_32x8_16bpc_inner(
 // ============================================================================
 
 /// DCT 32x64 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_32x64_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -5166,6 +5391,7 @@ fn inv_txfm_add_dct_dct_32x64_8bpc_inner(
 }
 
 /// DCT 32x64 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_32x64_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -5209,6 +5435,7 @@ fn inv_txfm_add_dct_dct_32x64_16bpc_inner(
 }
 
 /// DCT 64x32 transform for 8bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_64x32_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -5252,6 +5479,7 @@ fn inv_txfm_add_dct_dct_64x32_8bpc_inner(
 }
 
 /// DCT 64x32 transform for 16bpc
+#[autoversion]
 fn inv_txfm_add_dct_dct_64x32_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -5717,6 +5945,7 @@ fn rect2_scale(v: i32) -> i32 {
 // ============================================================================
 
 /// Generic rectangular identity transform for 8bpc
+#[autoversion]
 fn identity_rect_8bpc_inner<const W: usize, const H: usize>(
     dst: &mut [u8],
     dst_base: usize,
@@ -5762,6 +5991,7 @@ fn identity_rect_8bpc_inner<const W: usize, const H: usize>(
 }
 
 /// Generic rectangular identity transform for 16bpc
+#[autoversion]
 fn identity_rect_16bpc_inner<const W: usize, const H: usize>(
     dst: &mut [u16],
     dst_base: usize,
@@ -6411,17 +6641,18 @@ pub unsafe extern "C" fn inv_txfm_add_identity_identity_32x32_8bpc_neon(
             rows * abs_stride,
         )
     };
-    identity_rect_8bpc_inner::<32, 32>(
-        dst_slice,
-        base,
-        dst_stride,
-        coeff_slice,
-        eob,
-        bitdepth_max,
-        identity32_1d_arm,
-        identity32_1d_arm,
-        false,
-    );
+    {
+        let token = unsafe { archmage::Arm64::forge_token_dangerously() };
+        super::itx_arm_neon_32::inv_txfm_add_identity_identity_32x32_8bpc_neon_inner(
+            token,
+            dst_slice,
+            base,
+            dst_stride,
+            coeff_slice,
+            eob,
+            bitdepth_max,
+        );
+    }
 }
 
 #[cfg(all(feature = "asm", target_arch = "aarch64"))]
@@ -6452,24 +6683,26 @@ pub unsafe extern "C" fn inv_txfm_add_identity_identity_32x32_16bpc_neon(
             rows * abs_stride,
         )
     };
-    identity_rect_16bpc_inner::<32, 32>(
-        dst_slice,
-        base,
-        stride_u16 as isize,
-        coeff_slice,
-        eob,
-        bitdepth_max,
-        identity32_1d_arm,
-        identity32_1d_arm,
-        false,
-    );
+    {
+        let token = unsafe { archmage::Arm64::forge_token_dangerously() };
+        super::itx_arm_neon_32::inv_txfm_add_identity_identity_32x32_16bpc_neon_inner(
+            token,
+            dst_slice,
+            base,
+            stride_u16 as isize,
+            coeff_slice,
+            eob,
+            bitdepth_max,
+        );
+    }
 }
 
 // ============================================================================
 // HYBRID IDENTITY TRANSFORMS 4x4 8BPC
 // ============================================================================
 
-fn inv_txfm_add_dct_identity_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_dct_identity_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -6504,7 +6737,8 @@ fn inv_txfm_add_dct_identity_4x4_8bpc_inner(
     }
 }
 
-fn inv_txfm_add_identity_dct_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_identity_dct_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -6547,7 +6781,8 @@ fn inv_txfm_add_identity_dct_4x4_8bpc_inner(
     }
 }
 
-fn inv_txfm_add_adst_identity_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_adst_identity_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -6583,7 +6818,8 @@ fn inv_txfm_add_adst_identity_4x4_8bpc_inner(
     }
 }
 
-fn inv_txfm_add_identity_adst_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_identity_adst_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -6626,7 +6862,8 @@ fn inv_txfm_add_identity_adst_4x4_8bpc_inner(
     }
 }
 
-fn inv_txfm_add_flipadst_identity_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_flipadst_identity_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -6662,7 +6899,8 @@ fn inv_txfm_add_flipadst_identity_4x4_8bpc_inner(
     }
 }
 
-fn inv_txfm_add_identity_flipadst_4x4_8bpc_inner(
+#[autoversion]
+pub(crate) fn inv_txfm_add_identity_flipadst_4x4_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
     dst_stride: isize,
@@ -6732,6 +6970,13 @@ pub unsafe extern "C" fn inv_txfm_add_dct_identity_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_dct_identity_4x4_8bpc_neon_inner(
+            token, dst_slice, base, dst_stride, coeff_slice, eob, bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_dct_identity_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -6769,6 +7014,13 @@ pub unsafe extern "C" fn inv_txfm_add_identity_dct_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_identity_dct_4x4_8bpc_neon_inner(
+            token, dst_slice, base, dst_stride, coeff_slice, eob, bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_identity_dct_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -6806,6 +7058,13 @@ pub unsafe extern "C" fn inv_txfm_add_adst_identity_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_adst_identity_4x4_8bpc_neon_inner(
+            token, dst_slice, base, dst_stride, coeff_slice, eob, bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_adst_identity_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -6843,6 +7102,13 @@ pub unsafe extern "C" fn inv_txfm_add_identity_adst_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_identity_adst_4x4_8bpc_neon_inner(
+            token, dst_slice, base, dst_stride, coeff_slice, eob, bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_identity_adst_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -6880,6 +7146,13 @@ pub unsafe extern "C" fn inv_txfm_add_flipadst_identity_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_flipadst_identity_4x4_8bpc_neon_inner(
+            token, dst_slice, base, dst_stride, coeff_slice, eob, bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_flipadst_identity_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -6917,6 +7190,13 @@ pub unsafe extern "C" fn inv_txfm_add_identity_flipadst_4x4_8bpc_neon(
             rows * abs_stride,
         )
     };
+    #[cfg(target_arch = "aarch64")]
+    if let Some(token) = archmage::Arm64::summon() {
+        super::itx_arm_neon_4x4::inv_txfm_add_identity_flipadst_4x4_8bpc_neon_inner(
+            token, dst_slice, base, dst_stride, coeff_slice, eob, bitdepth_max,
+        );
+        return;
+    }
     inv_txfm_add_identity_flipadst_4x4_8bpc_inner(
         dst_slice,
         base,
@@ -6931,6 +7211,7 @@ pub unsafe extern "C" fn inv_txfm_add_identity_flipadst_4x4_8bpc_neon(
 // DCT_DCT 16x64 and 64x16
 // ============================================================================
 
+#[autoversion]
 fn inv_txfm_add_dct_dct_16x64_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -6973,6 +7254,7 @@ fn inv_txfm_add_dct_dct_16x64_8bpc_inner(
     }
 }
 
+#[autoversion]
 fn inv_txfm_add_dct_dct_16x64_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -7015,6 +7297,7 @@ fn inv_txfm_add_dct_dct_16x64_16bpc_inner(
     }
 }
 
+#[autoversion]
 fn inv_txfm_add_dct_dct_64x16_8bpc_inner(
     dst: &mut [u8],
     dst_base: usize,
@@ -7057,6 +7340,7 @@ fn inv_txfm_add_dct_dct_64x16_8bpc_inner(
     }
 }
 
+#[autoversion]
 fn inv_txfm_add_dct_dct_64x16_16bpc_inner(
     dst: &mut [u16],
     dst_base: usize,
@@ -7999,12 +8283,419 @@ pub fn itxfm_add_dispatch<BD: BitDepth>(
     eob: i32,
     bd: BD,
 ) -> bool {
-    // When asm feature is not enabled, FFI wrappers are not compiled.
-    // Fall back to scalar path.
+    // When asm feature is not enabled, dispatch to NEON inner functions directly
+    // for transform sizes that have been ported. Fall back to scalar for the rest.
     #[cfg(not(feature = "asm"))]
     {
-        let _ = (tx_size, tx_type, &dst, coeff, eob, &bd);
-        return false;
+        #[cfg(target_arch = "aarch64")]
+        {
+            use crate::include::common::bitdepth::BPC;
+            use crate::src::levels::{self, TxfmSize};
+            use crate::src::strided::Strided as _;
+            use zerocopy::IntoBytes;
+
+            use archmage::SimdToken;
+            let Some(token) = archmage::Arm64::summon() else {
+                return false;
+            };
+
+            let txfm = match TxfmSize::from_repr(tx_size) {
+                Some(t) => t,
+                None => return false,
+            };
+            let (w, h) = txfm.to_wh();
+
+            // Only 4x4 8bpc transforms are ported to NEON so far
+            if w == 4 && h == 4 && BD::BPC == BPC::BPC8 {
+                let byte_stride_i = dst.stride();
+                let bd_c = bd.into_c();
+
+                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
+                let dst_u8: &mut [u8] = guard.as_mut_bytes();
+                let coeff_i16: &mut [i16] =
+                    zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
+                        .expect("coeff alignment/size mismatch for i16 reinterpretation");
+
+                use super::itx_arm_neon_4x4::*;
+                let tx_t = tx_type as u8;
+                match tx_t {
+                    levels::DCT_DCT => inv_txfm_add_dct_dct_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::ADST_ADST => inv_txfm_add_adst_adst_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::FLIPADST_FLIPADST => inv_txfm_add_flipadst_flipadst_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::IDTX => inv_txfm_add_identity_identity_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::ADST_DCT => inv_txfm_add_dct_adst_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::DCT_ADST => inv_txfm_add_adst_dct_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::FLIPADST_DCT => inv_txfm_add_dct_flipadst_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::DCT_FLIPADST => inv_txfm_add_flipadst_dct_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::ADST_FLIPADST => inv_txfm_add_flipadst_adst_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::FLIPADST_ADST => inv_txfm_add_adst_flipadst_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::H_DCT => inv_txfm_add_dct_identity_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::V_DCT => inv_txfm_add_identity_dct_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::H_ADST => inv_txfm_add_adst_identity_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::V_ADST => inv_txfm_add_identity_adst_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::H_FLIPADST => inv_txfm_add_flipadst_identity_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::V_FLIPADST => inv_txfm_add_identity_flipadst_4x4_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::WHT_WHT => {
+                        super::itx_arm_neon_wht::inv_txfm_add_wht_wht_4x4_8bpc_neon_inner(
+                            token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                        );
+                    }
+                    _ => return false,
+                }
+                return true;
+            }
+
+            // 16x16 8bpc transforms via NEON
+            if w == 16 && h == 16 && BD::BPC == BPC::BPC8 {
+                let byte_stride_i = dst.stride();
+                let bd_c = bd.into_c();
+
+                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
+                let dst_u8: &mut [u8] = guard.as_mut_bytes();
+                let coeff_i16: &mut [i16] =
+                    zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
+                        .expect("coeff alignment/size mismatch for i16 reinterpretation");
+
+                use super::itx_arm_neon_16x16::*;
+                let tx_t = tx_type as u8;
+                match tx_t {
+                    levels::DCT_DCT => inv_txfm_add_dct_dct_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::IDTX => inv_txfm_add_identity_identity_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::ADST_ADST => inv_txfm_add_adst_adst_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::ADST_DCT => inv_txfm_add_dct_adst_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::DCT_ADST => inv_txfm_add_adst_dct_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::FLIPADST_DCT => inv_txfm_add_dct_flipadst_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::DCT_FLIPADST => inv_txfm_add_flipadst_dct_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::FLIPADST_FLIPADST => inv_txfm_add_flipadst_flipadst_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::ADST_FLIPADST => inv_txfm_add_flipadst_adst_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::FLIPADST_ADST => inv_txfm_add_adst_flipadst_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::H_DCT => inv_txfm_add_dct_identity_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::V_DCT => inv_txfm_add_identity_dct_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::H_ADST => inv_txfm_add_adst_identity_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::V_ADST => inv_txfm_add_identity_adst_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::H_FLIPADST => inv_txfm_add_flipadst_identity_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::V_FLIPADST => inv_txfm_add_identity_flipadst_16x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    _ => return false,
+                }
+                return true;
+            }
+
+            // 32x32 8bpc transforms via NEON (DCT_DCT and IDTX only)
+            if w == 32 && h == 32 && BD::BPC == BPC::BPC8 {
+                let byte_stride_i = dst.stride();
+                let bd_c = bd.into_c();
+
+                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
+                let dst_u8: &mut [u8] = guard.as_mut_bytes();
+                let coeff_i16: &mut [i16] =
+                    zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
+                        .expect("coeff alignment/size mismatch for i16 reinterpretation");
+
+                use super::itx_arm_neon_32::*;
+                let tx_t = tx_type as u8;
+                match tx_t {
+                    levels::DCT_DCT => inv_txfm_add_dct_dct_32x32_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::IDTX => inv_txfm_add_identity_identity_32x32_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    _ => return false,
+                }
+                return true;
+            }
+
+            // 8x32, 32x8 8bpc transforms via NEON (DCT_DCT and IDTX only)
+            if w == 8 && h == 32 && BD::BPC == BPC::BPC8 {
+                let byte_stride_i = dst.stride();
+                let bd_c = bd.into_c();
+
+                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
+                let dst_u8: &mut [u8] = guard.as_mut_bytes();
+                let coeff_i16: &mut [i16] =
+                    zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
+                        .expect("coeff alignment/size mismatch for i16 reinterpretation");
+
+                use super::itx_arm_neon_large_rect::*;
+                let tx_t = tx_type as u8;
+                match tx_t {
+                    levels::DCT_DCT => inv_txfm_add_dct_dct_8x32_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::IDTX => inv_txfm_add_identity_identity_8x32_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    _ => return false,
+                }
+                return true;
+            }
+
+            if w == 32 && h == 8 && BD::BPC == BPC::BPC8 {
+                let byte_stride_i = dst.stride();
+                let bd_c = bd.into_c();
+
+                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
+                let dst_u8: &mut [u8] = guard.as_mut_bytes();
+                let coeff_i16: &mut [i16] =
+                    zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
+                        .expect("coeff alignment/size mismatch for i16 reinterpretation");
+
+                use super::itx_arm_neon_large_rect::*;
+                let tx_t = tx_type as u8;
+                match tx_t {
+                    levels::DCT_DCT => inv_txfm_add_dct_dct_32x8_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::IDTX => inv_txfm_add_identity_identity_32x8_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    _ => return false,
+                }
+                return true;
+            }
+
+            // 16x32, 32x16 8bpc transforms via NEON (DCT_DCT and IDTX only)
+            if w == 16 && h == 32 && BD::BPC == BPC::BPC8 {
+                let byte_stride_i = dst.stride();
+                let bd_c = bd.into_c();
+
+                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
+                let dst_u8: &mut [u8] = guard.as_mut_bytes();
+                let coeff_i16: &mut [i16] =
+                    zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
+                        .expect("coeff alignment/size mismatch for i16 reinterpretation");
+
+                use super::itx_arm_neon_large_rect::*;
+                let tx_t = tx_type as u8;
+                match tx_t {
+                    levels::DCT_DCT => inv_txfm_add_dct_dct_16x32_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::IDTX => inv_txfm_add_identity_identity_16x32_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    _ => return false,
+                }
+                return true;
+            }
+
+            if w == 32 && h == 16 && BD::BPC == BPC::BPC8 {
+                let byte_stride_i = dst.stride();
+                let bd_c = bd.into_c();
+
+                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
+                let dst_u8: &mut [u8] = guard.as_mut_bytes();
+                let coeff_i16: &mut [i16] =
+                    zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
+                        .expect("coeff alignment/size mismatch for i16 reinterpretation");
+
+                use super::itx_arm_neon_large_rect::*;
+                let tx_t = tx_type as u8;
+                match tx_t {
+                    levels::DCT_DCT => inv_txfm_add_dct_dct_32x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::IDTX => inv_txfm_add_identity_identity_32x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    _ => return false,
+                }
+                return true;
+            }
+
+            // 64x64, 64x32, 32x64, 16x64, 64x16 8bpc transforms via NEON
+            if w == 64 && h == 64 && BD::BPC == BPC::BPC8 {
+                let byte_stride_i = dst.stride();
+                let bd_c = bd.into_c();
+
+                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
+                let dst_u8: &mut [u8] = guard.as_mut_bytes();
+                let coeff_i16: &mut [i16] =
+                    zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
+                        .expect("coeff alignment/size mismatch for i16 reinterpretation");
+
+                use super::itx_arm_neon_64::*;
+                let tx_t = tx_type as u8;
+                match tx_t {
+                    levels::DCT_DCT => inv_txfm_add_dct_dct_64x64_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::IDTX => inv_txfm_add_identity_identity_64x64_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    _ => return false,
+                }
+                return true;
+            }
+
+            if w == 64 && h == 32 && BD::BPC == BPC::BPC8 {
+                let byte_stride_i = dst.stride();
+                let bd_c = bd.into_c();
+
+                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
+                let dst_u8: &mut [u8] = guard.as_mut_bytes();
+                let coeff_i16: &mut [i16] =
+                    zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
+                        .expect("coeff alignment/size mismatch for i16 reinterpretation");
+
+                use super::itx_arm_neon_64::*;
+                let tx_t = tx_type as u8;
+                match tx_t {
+                    levels::DCT_DCT => inv_txfm_add_dct_dct_64x32_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::IDTX => inv_txfm_add_identity_identity_64x32_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    _ => return false,
+                }
+                return true;
+            }
+
+            if w == 32 && h == 64 && BD::BPC == BPC::BPC8 {
+                let byte_stride_i = dst.stride();
+                let bd_c = bd.into_c();
+
+                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
+                let dst_u8: &mut [u8] = guard.as_mut_bytes();
+                let coeff_i16: &mut [i16] =
+                    zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
+                        .expect("coeff alignment/size mismatch for i16 reinterpretation");
+
+                use super::itx_arm_neon_64::*;
+                let tx_t = tx_type as u8;
+                match tx_t {
+                    levels::DCT_DCT => inv_txfm_add_dct_dct_32x64_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::IDTX => inv_txfm_add_identity_identity_32x64_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    _ => return false,
+                }
+                return true;
+            }
+
+            if w == 16 && h == 64 && BD::BPC == BPC::BPC8 {
+                let byte_stride_i = dst.stride();
+                let bd_c = bd.into_c();
+
+                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
+                let dst_u8: &mut [u8] = guard.as_mut_bytes();
+                let coeff_i16: &mut [i16] =
+                    zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
+                        .expect("coeff alignment/size mismatch for i16 reinterpretation");
+
+                use super::itx_arm_neon_64::*;
+                let tx_t = tx_type as u8;
+                match tx_t {
+                    levels::DCT_DCT => inv_txfm_add_dct_dct_16x64_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::IDTX => inv_txfm_add_identity_identity_16x64_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    _ => return false,
+                }
+                return true;
+            }
+
+            if w == 64 && h == 16 && BD::BPC == BPC::BPC8 {
+                let byte_stride_i = dst.stride();
+                let bd_c = bd.into_c();
+
+                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
+                let dst_u8: &mut [u8] = guard.as_mut_bytes();
+                let coeff_i16: &mut [i16] =
+                    zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
+                        .expect("coeff alignment/size mismatch for i16 reinterpretation");
+
+                use super::itx_arm_neon_64::*;
+                let tx_t = tx_type as u8;
+                match tx_t {
+                    levels::DCT_DCT => inv_txfm_add_dct_dct_64x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    levels::IDTX => inv_txfm_add_identity_identity_64x16_8bpc_neon_inner(
+                        token, dst_u8, base, byte_stride_i, coeff_i16, eob, bd_c,
+                    ),
+                    _ => return false,
+                }
+                return true;
+            }
+
+            return false;
+        }
+
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            let _ = (tx_size, tx_type, &dst, coeff, eob, &bd);
+            return false;
+        }
     }
 
     #[cfg(feature = "asm")]
