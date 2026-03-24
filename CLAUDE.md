@@ -610,6 +610,33 @@ cd /home/lilith/work/zenavif
 
 ## Known Issues
 
+### DisjointMut overlaps with tile threading (partially fixed)
+
+**Status:** Level cache overlap FIXED. Picture plane overlap OPEN.
+
+With `threads > 1` and `max_frame_delay = 1` (tile threading, no frame threading),
+DisjointMut guards overlap between concurrent tile tasks:
+
+**FIXED (e2de9f1):** `f.lf.level` (loopfilter level cache) — SIMD loopfilter dispatch
+acquired an immutable guard spanning the entire remaining buffer. Fix: gather ~32 needed
+level entries into a `[[u8; 4]; 34]` stack buffer, drop the DisjointMut guard immediately,
+pass the compact buffer to inner functions with `b4_stride=1`. Zero allocations, ~128 bytes
+copied. Both x86_64 and aarch64/wasm paths fixed. 784/784 conformance vectors pass.
+
+**OPEN:** Picture plane pixel data — `backup2lines` in `cdef_apply.rs` reads 2 rows of
+pixels from the current frame (immutable guard ~1536 bytes at 768w 8bpc), while a concurrent
+tile thread writes reconstructed pixels in an adjacent SB row (mutable guard). The 40-byte
+overlap is at the SB row boundary. Fix requires tightening pixel data guards in:
+- `cdef_apply.rs`: `backup2lines` reads (line 55, 75)
+- `safe_simd/mc.rs`: 15 `full_guard`/`full_guard_mut` calls (x86_64)
+- `safe_simd/mc_arm.rs`: 18 `full_guard` calls (aarch64)
+- `safe_simd/loopfilter_arm.rs`: 9 `full_guard` + whole-buffer lvl guards
+
+The pattern is the same as the level cache fix: acquire a narrow guard covering only the
+rows actually accessed, or copy needed data to a local buffer and drop the guard immediately.
+
+Reproducer: `cargo test --release --test reproduce_overlap -- --ignored`
+
 ### ARM loopfilter_arm.rs:69 — index out of bounds on aarch64
 
 Discovered during `just test-aarch64` (QEMU emulation). The scalar loopfilter fallback in
