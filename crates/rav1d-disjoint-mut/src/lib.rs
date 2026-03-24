@@ -583,6 +583,73 @@ impl<T: ?Sized + AsMutPtr> DisjointMut<T> {
         }
     }
 
+    /// Mutably borrow a range with stride-aware tracking.
+    ///
+    /// Like `index_mut`, but registers the borrow with stride information
+    /// so that two strided borrows on the same buffer with non-overlapping
+    /// 2D rectangles (row × column) are permitted concurrently.
+    ///
+    /// `stride` = distance between row starts (in bytes).
+    /// `width` = bytes actually accessed per row.
+    #[inline]
+    #[track_caller]
+    pub fn index_mut_strided<'a, I>(
+        &'a self,
+        index: I,
+        stride: usize,
+        width: usize,
+    ) -> DisjointMutGuard<'a, T, I::Output>
+    where
+        I: Into<Bounds> + Clone,
+        I: DisjointMutIndex<[<T as AsMutPtr>::Target]>,
+    {
+        let bounds = index.clone().into();
+        let borrow_id = match &self.tracker {
+            Some(tracker) => tracker.add_mut_strided(&bounds, stride, width),
+            None => checked::BorrowId::UNCHECKED,
+        };
+        let parent = self.tracker.as_ref().map(|_| self);
+        let cleanup = BorrowCleanup { parent };
+        let slice = unsafe { &mut *index.get_mut(self.as_mut_slice()) };
+        mem::forget(cleanup);
+        DisjointMutGuard {
+            slice,
+            parent,
+            borrow_id,
+            phantom: PhantomData,
+        }
+    }
+
+    /// Immutably borrow a range with stride-aware tracking.
+    #[inline]
+    #[track_caller]
+    pub fn index_strided<'a, I>(
+        &'a self,
+        index: I,
+        stride: usize,
+        width: usize,
+    ) -> DisjointImmutGuard<'a, T, I::Output>
+    where
+        I: Into<Bounds> + Clone,
+        I: DisjointMutIndex<[<T as AsMutPtr>::Target]>,
+    {
+        let bounds = index.clone().into();
+        let borrow_id = match &self.tracker {
+            Some(tracker) => tracker.add_immut_strided(&bounds, stride, width),
+            None => checked::BorrowId::UNCHECKED,
+        };
+        let parent = self.tracker.as_ref().map(|_| self);
+        let cleanup = BorrowCleanup { parent };
+        let slice = unsafe { &*index.get_mut(self.as_mut_slice()).cast_const() };
+        mem::forget(cleanup);
+        DisjointImmutGuard {
+            slice,
+            parent,
+            borrow_id,
+            phantom: PhantomData,
+        }
+    }
+
     /// Immutably borrow a slice or element.
     ///
     /// Validates that the requested range doesn't overlap with any outstanding
@@ -640,6 +707,52 @@ impl<T: AsMutPtr<Target = u8>> DisjointMut<T> {
         V: IntoBytes + FromBytes + KnownLayout,
     {
         let slice = self.index_mut(index.mul(mem::size_of::<V>())).cast_slice();
+        self.check_cast_slice_len(index, &slice);
+        slice
+    }
+
+    /// Mutably borrow a typed slice with stride-aware tracking.
+    ///
+    /// `stride` and `width` are in units of `V` (pixels), not bytes.
+    #[inline]
+    #[track_caller]
+    pub fn mut_slice_as_strided<'a, I, V>(
+        &'a self,
+        index: I,
+        stride: usize,
+        width: usize,
+    ) -> DisjointMutGuard<'a, T, [V]>
+    where
+        I: SliceBounds,
+        V: IntoBytes + FromBytes + KnownLayout,
+    {
+        let byte_stride = stride * mem::size_of::<V>();
+        let byte_width = width * mem::size_of::<V>();
+        let slice = self
+            .index_mut_strided(index.mul(mem::size_of::<V>()), byte_stride, byte_width)
+            .cast_slice();
+        self.check_cast_slice_len(index, &slice);
+        slice
+    }
+
+    /// Immutably borrow a typed slice with stride-aware tracking.
+    #[inline]
+    #[track_caller]
+    pub fn slice_as_strided<'a, I, V>(
+        &'a self,
+        index: I,
+        stride: usize,
+        width: usize,
+    ) -> DisjointImmutGuard<'a, T, [V]>
+    where
+        I: SliceBounds,
+        V: FromBytes + KnownLayout + Immutable,
+    {
+        let byte_stride = stride * mem::size_of::<V>();
+        let byte_width = width * mem::size_of::<V>();
+        let slice = self
+            .index_strided(index.mul(mem::size_of::<V>()), byte_stride, byte_width)
+            .cast_slice();
         self.check_cast_slice_len(index, &slice);
         slice
     }
@@ -1025,10 +1138,16 @@ mod checked {
         starts: [usize; INLINE_SLOTS],
         ends: [usize; INLINE_SLOTS],
         mutable: [bool; INLINE_SLOTS],
+        /// Stride info for strided borrows. stride=0 means contiguous (default).
+        /// When stride > 0, the borrow covers rows of `width` elements separated
+        /// by `stride` elements, enabling 2D rectangle overlap checks.
+        strides: [usize; INLINE_SLOTS],
+        widths: [usize; INLINE_SLOTS],
         /// Bitmask of occupied inline slots. Bit `i` set iff slot `i` is active.
         occupied: u64,
         /// Overflow storage, allocated only when >64 concurrent borrows.
-        overflow: Vec<(usize, usize, bool)>,
+        /// (start, end, mutable, stride, width)
+        overflow: Vec<(usize, usize, bool, usize, usize)>,
     }
 
     impl BorrowSlots {
@@ -1040,6 +1159,8 @@ mod checked {
                 starts: [0; INLINE_SLOTS],
                 ends: [0; INLINE_SLOTS],
                 mutable: [false; INLINE_SLOTS],
+                strides: [0; INLINE_SLOTS],
+                widths: [0; INLINE_SLOTS],
                 occupied: 0,
                 overflow: Vec::new(),
             }
@@ -1048,46 +1169,64 @@ mod checked {
         /// Allocate a slot and return its BorrowId encoding.
         #[inline(always)]
         fn alloc(&mut self, start: usize, end: usize, is_mutable: bool) -> u8 {
+            self.alloc_strided(start, end, is_mutable, 0, 0)
+        }
+
+        /// Allocate a strided slot. stride=0 means contiguous (legacy behavior).
+        /// When stride > 0, the borrow covers rows of `width` pixels separated
+        /// by `stride` pixels. This enables precise 2D overlap checking.
+        #[inline(always)]
+        fn alloc_strided(
+            &mut self,
+            start: usize,
+            end: usize,
+            is_mutable: bool,
+            stride: usize,
+            width: usize,
+        ) -> u8 {
             if start >= end {
                 return Self::EMPTY_SLOT;
             }
             let free = self.occupied.trailing_ones() as usize;
             if free < INLINE_SLOTS {
-                // Fast path: inline slot available.
                 self.starts[free] = start;
                 self.ends[free] = end;
                 self.mutable[free] = is_mutable;
+                self.strides[free] = stride;
+                self.widths[free] = width;
                 self.occupied |= 1u64 << free;
                 free as u8
             } else {
-                // Slow path: spill to Vec.
-                self.alloc_overflow(start, end, is_mutable)
+                self.alloc_overflow(start, end, is_mutable, stride, width)
             }
         }
 
         /// Overflow allocation — cold path, never inlined.
         #[cold]
         #[inline(never)]
-        fn alloc_overflow(&mut self, start: usize, end: usize, is_mutable: bool) -> u8 {
+        fn alloc_overflow(
+            &mut self,
+            start: usize,
+            end: usize,
+            is_mutable: bool,
+            stride: usize,
+            width: usize,
+        ) -> u8 {
             #[cfg(feature = "instrument")]
             crate::instrument::record_overflow();
-            // Find a free slot in the overflow Vec (tombstoned entries have start >= end).
             for (i, entry) in self.overflow.iter_mut().enumerate() {
                 if entry.0 >= entry.1 {
-                    // Reuse tombstoned slot.
-                    *entry = (start, end, is_mutable);
+                    *entry = (start, end, is_mutable, stride, width);
                     return (INLINE_SLOTS + i) as u8;
                 }
             }
             let idx = self.overflow.len();
-            // BorrowId is u8, with 254/255 reserved. Max overflow index:
-            // INLINE_SLOTS + idx must be < 254, so idx < 254 - 64 = 190.
             assert!(
                 INLINE_SLOTS + idx < Self::EMPTY_SLOT as usize,
                 "DisjointMut: too many concurrent borrows (max {})",
                 Self::EMPTY_SLOT as usize
             );
-            self.overflow.push((start, end, is_mutable));
+            self.overflow.push((start, end, is_mutable, stride, width));
             (INLINE_SLOTS + idx) as u8
         }
 
@@ -1108,28 +1247,92 @@ mod checked {
                 // Overflow slot — tombstone it (set start >= end).
                 let ov_idx = idx - INLINE_SLOTS;
                 debug_assert!(ov_idx < self.overflow.len(), "overflow index out of range");
-                self.overflow[ov_idx] = (1, 0, false); // tombstone
+                self.overflow[ov_idx] = (1, 0, false, 0, 0); // tombstone
             }
+        }
+
+        /// Check if two borrows truly overlap, accounting for stride.
+        ///
+        /// When both borrows have the same non-zero stride, they represent 2D
+        /// rectangles in a strided buffer. Two rectangles overlap iff their row
+        /// ranges AND column ranges both overlap.
+        ///
+        /// When strides differ or either is 0, falls back to 1D range check.
+        #[inline(always)]
+        fn ranges_overlap(
+            a_start: usize,
+            a_end: usize,
+            a_stride: usize,
+            a_width: usize,
+            b_start: usize,
+            b_end: usize,
+            b_stride: usize,
+            b_width: usize,
+        ) -> bool {
+            // Fast 1D check first — if contiguous ranges don't overlap, nothing does.
+            if a_start >= b_end || b_start >= a_end {
+                return false;
+            }
+            // If both are strided with the same stride, use 2D rectangle check.
+            if a_stride > 0 && a_stride == b_stride && a_width > 0 && b_width > 0 {
+                let stride = a_stride;
+                // Column overlap: [a_col..a_col+a_width) vs [b_col..b_col+b_width)
+                let a_col = a_start % stride;
+                let b_col = b_start % stride;
+                if a_col >= b_col + b_width || b_col >= a_col + a_width {
+                    return false; // columns don't overlap
+                }
+                // Row overlap: [a_row..a_row+a_h) vs [b_row..b_row+b_h)
+                let a_row = a_start / stride;
+                let b_row = b_start / stride;
+                let a_h = if a_end > a_start {
+                    (a_end - a_start + stride - 1) / stride
+                } else {
+                    0
+                };
+                let b_h = if b_end > b_start {
+                    (b_end - b_start + stride - 1) / stride
+                } else {
+                    0
+                };
+                if a_row >= b_row + b_h || b_row >= a_row + a_h {
+                    return false; // rows don't overlap
+                }
+            }
+            true
         }
 
         /// Check if the range [start, end) overlaps any active borrow.
         #[inline(always)]
-        fn find_overlap_any(&self, start: usize, end: usize) -> Option<(usize, usize, bool)> {
+        fn find_overlap_any(
+            &self,
+            start: usize,
+            end: usize,
+            stride: usize,
+            width: usize,
+        ) -> Option<(usize, usize, bool)> {
             if start >= end {
                 return None;
             }
-            // Scan inline slots.
             let mut mask = self.occupied;
             while mask != 0 {
                 let i = mask.trailing_zeros() as usize;
-                if self.starts[i] < end && start < self.ends[i] {
+                if Self::ranges_overlap(
+                    start,
+                    end,
+                    stride,
+                    width,
+                    self.starts[i],
+                    self.ends[i],
+                    self.strides[i],
+                    self.widths[i],
+                ) {
                     return Some((self.starts[i], self.ends[i], self.mutable[i]));
                 }
                 mask &= mask - 1;
             }
-            // Scan overflow (cold — only reached if overflow is non-empty).
             if !self.overflow.is_empty() {
-                return self.find_overlap_any_overflow(start, end);
+                return self.find_overlap_any_overflow(start, end, stride, width);
             }
             None
         }
@@ -1140,9 +1343,13 @@ mod checked {
             &self,
             start: usize,
             end: usize,
+            stride: usize,
+            width: usize,
         ) -> Option<(usize, usize, bool)> {
-            for &(s, e, m) in &self.overflow {
-                if s < e && s < end && start < e {
+            for &(s, e, m, os, ow) in &self.overflow {
+                if s < e
+                    && Self::ranges_overlap(start, end, stride, width, s, e, os, ow)
+                {
                     return Some((s, e, m));
                 }
             }
@@ -1151,20 +1358,37 @@ mod checked {
 
         /// Check if the range [start, end) overlaps any active MUTABLE borrow.
         #[inline(always)]
-        fn find_overlap_mut(&self, start: usize, end: usize) -> Option<(usize, usize, bool)> {
+        fn find_overlap_mut(
+            &self,
+            start: usize,
+            end: usize,
+            stride: usize,
+            width: usize,
+        ) -> Option<(usize, usize, bool)> {
             if start >= end {
                 return None;
             }
             let mut mask = self.occupied;
             while mask != 0 {
                 let i = mask.trailing_zeros() as usize;
-                if self.mutable[i] && self.starts[i] < end && start < self.ends[i] {
+                if self.mutable[i]
+                    && Self::ranges_overlap(
+                        start,
+                        end,
+                        stride,
+                        width,
+                        self.starts[i],
+                        self.ends[i],
+                        self.strides[i],
+                        self.widths[i],
+                    )
+                {
                     return Some((self.starts[i], self.ends[i], true));
                 }
                 mask &= mask - 1;
             }
             if !self.overflow.is_empty() {
-                return self.find_overlap_mut_overflow(start, end);
+                return self.find_overlap_mut_overflow(start, end, stride, width);
             }
             None
         }
@@ -1175,9 +1399,13 @@ mod checked {
             &self,
             start: usize,
             end: usize,
+            stride: usize,
+            width: usize,
         ) -> Option<(usize, usize, bool)> {
-            for &(s, e, m) in &self.overflow {
-                if m && s < e && s < end && start < e {
+            for &(s, e, m, os, ow) in &self.overflow {
+                if m && s < e
+                    && Self::ranges_overlap(start, end, stride, width, s, e, os, ow)
+                {
                     return Some((s, e, true));
                 }
             }
@@ -1284,7 +1512,7 @@ mod checked {
             let _guard = self.lock.lock();
             // SAFETY: TinyLock is held, so we have exclusive access to slots.
             let slots = unsafe { &mut *self.slots.get() };
-            if let Some((es, ee, em)) = slots.find_overlap_any(start, end) {
+            if let Some((es, ee, em)) = slots.find_overlap_any(start, end, 0, 0) {
                 Self::overlap_panic(start, end, true, es, ee, em);
             }
             #[cfg(feature = "instrument")]
@@ -1293,6 +1521,36 @@ mod checked {
                 crate::instrument::record_mut_borrow(end - start, concurrent);
             }
             BorrowId(slots.alloc(start, end, true))
+        }
+
+        /// Register a strided mutable borrow with 2D overlap checking.
+        ///
+        /// `stride` is the distance between row starts (in elements).
+        /// `width` is the number of elements actually accessed per row.
+        /// The contiguous range [start..end) covers the full strided extent,
+        /// but only `width` elements per row are actually borrowed.
+        #[inline]
+        #[track_caller]
+        pub fn add_mut_strided(
+            &self,
+            bounds: &Bounds,
+            stride: usize,
+            width: usize,
+        ) -> BorrowId {
+            let start = bounds.range.start;
+            let end = bounds.range.end;
+            if start >= end {
+                return BorrowId(BorrowSlots::EMPTY_SLOT);
+            }
+            self.check_poisoned();
+            let _guard = self.lock.lock();
+            let slots = unsafe { &mut *self.slots.get() };
+            if let Some((es, ee, em)) =
+                slots.find_overlap_any(start, end, stride, width)
+            {
+                Self::overlap_panic(start, end, true, es, ee, em);
+            }
+            BorrowId(slots.alloc_strided(start, end, true, stride, width))
         }
 
         /// Register an immutable borrow. Only checks against mutable borrows.
@@ -1310,7 +1568,7 @@ mod checked {
             let _guard = self.lock.lock();
             // SAFETY: TinyLock is held, so we have exclusive access to slots.
             let slots = unsafe { &mut *self.slots.get() };
-            if let Some((es, ee, em)) = slots.find_overlap_mut(start, end) {
+            if let Some((es, ee, em)) = slots.find_overlap_mut(start, end, 0, 0) {
                 Self::overlap_panic(start, end, false, es, ee, em);
             }
             #[cfg(feature = "instrument")]
@@ -1319,6 +1577,31 @@ mod checked {
                 crate::instrument::record_immut_borrow(end - start, concurrent);
             }
             BorrowId(slots.alloc(start, end, false))
+        }
+
+        /// Register a strided immutable borrow with 2D overlap checking.
+        #[inline]
+        #[track_caller]
+        pub fn add_immut_strided(
+            &self,
+            bounds: &Bounds,
+            stride: usize,
+            width: usize,
+        ) -> BorrowId {
+            let start = bounds.range.start;
+            let end = bounds.range.end;
+            if start >= end {
+                return BorrowId(BorrowSlots::EMPTY_SLOT);
+            }
+            self.check_poisoned();
+            let _guard = self.lock.lock();
+            let slots = unsafe { &mut *self.slots.get() };
+            if let Some((es, ee, em)) =
+                slots.find_overlap_mut(start, end, stride, width)
+            {
+                Self::overlap_panic(start, end, false, es, ee, em);
+            }
+            BorrowId(slots.alloc_strided(start, end, false, stride, width))
         }
 
         /// Remove a borrow by slot index. O(1).
