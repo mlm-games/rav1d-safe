@@ -37,6 +37,37 @@ For same-stride, the check reduces to:
 
 This is a 2D rectangle overlap test when strides are equal, which they always are for the same picture plane.
 
+### Prior Art Search
+No existing strided guard implementation found in zen/. The DisjointMut crate has:
+- `PicBuf` (line 1680) — owned buffer, no strided tracking
+- `instrument.rs` — 1D borrow size histograms, no strided support
+- `pixel_access.rs:540` — `strided_slice_from_ptr` (unsafe raw pointer helper, no guards)
+- `picture.rs:610` — `strided_slice_mut` creates contiguous guards via `(h-1)*stride+w`
+
+The `BorrowSlots` uses parallel arrays (SoA layout) for O(popcount) scanning:
+```
+starts: [usize; 64], ends: [usize; 64], mutable: [bool; 64], occupied: u64
+```
+
+### Implementation Plan
+Add `strides: [usize; 64]` and `widths: [usize; 64]` to `BorrowSlots`. A stride of 0 means "contiguous range" (current behavior, backwards compatible). When stride > 0, the borrow covers rows `[start + i*stride .. start + i*stride + width)` for `i` in `0..((end - start - width) / stride + 1)`.
+
+Overlap check: when both borrows have the same non-zero stride, decompose into 2D rectangle overlap:
+- Vertical: `row_a_start..row_a_end` vs `row_b_start..row_b_end` (in stride units)
+- Horizontal: `col_a_start..col_a_start+w_a` vs `col_b_start..col_b_start+w_b`
+This is O(1) — no per-row iteration needed.
+
+When strides differ or one is 0: fall back to contiguous range check (conservative, may false-positive).
+
+### New API
+```rust
+// In picture.rs, replace:
+self.data.slice_mut::<BD, _>((self.offset.., ..total))
+// With:
+self.data.strided_slice_mut_tracked::<BD>(self.offset, w, h, stride)
+// Which registers (start, start + (h-1)*stride + w, mutable, stride, w)
+```
+
 ### Performance Constraint
 Guard acquisition is on every DSP function call (~1000s per frame). The overlap check must be fast — ideally O(1) per existing borrow, not O(h_a * h_b). The 2D rectangle test for same-stride is O(1).
 
