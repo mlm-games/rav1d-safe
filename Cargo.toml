@@ -109,6 +109,10 @@ harness = false
 name = "tango_decode"
 harness = false
 
+[[bench]]
+name = "threading_bench"
+harness = false
+
 [profile.bench]
 codegen-units = 1
 lto = "fat"

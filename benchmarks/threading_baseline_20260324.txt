@@ -1,0 +1,19 @@
+# rav1d-safe threading baseline (2026-03-24)
+# CPU: x86_64 (WSL2), checked mode, no unchecked feature
+# Configs: 0 = simd_1t (Native AVX2, 1 thread), 1 = scalar_1t (Scalar, 1 thread)
+#
+# Result: SIMD is 1.47-1.58x faster than scalar single-threaded.
+# Multi-threaded scalar would need ~2 tile threads to break even with SIMD 1t.
+# Multi-threaded SIMD is blocked by DisjointMut strided guard overlaps.
+
+Image          | SIMD 1t (ms) | Scalar 1t (ms) | SIMD speedup
+photo_2k.avif  | 65.3         | 95.8            | 1.47x
+photo_4k.avif  | 233.3        | 350.9           | 1.50x
+photo_8k.avif  | 1071         | 1697            | 1.58x
+
+# DisjointMut overlap status:
+# - f.lf.level (loopfilter level cache): FIXED via stack gather (e2de9f1)
+# - Picture plane pixels: BLOCKED by strided_slice_mut creating
+#   contiguous guards that span stride*h bytes for an w*h block.
+#   Fix requires either strided guard support in DisjointMut or
+#   per-row guard acquisition in SIMD functions.

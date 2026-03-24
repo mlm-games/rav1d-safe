@@ -1,0 +1,49 @@
+   Compiling rav1d-safe v0.3.1 (/home/lilith/work/zen/rav1d-safe)
+    Finished `bench` profile [optimized + debuginfo] target(s) in 36.43s
+     Running benches/threading_bench.rs (target/release/deps/threading_bench-a72de7ec6cd189a1)
+loaded photo_2k.avif (626.9 KB OBU from 627.2 KB AVIF)
+loaded photo_4k.avif (2038.4 KB OBU from 2038.7 KB AVIF)
+loaded photo_8k.avif (6433.7 KB OBU from 6433.9 KB AVIF)
+Timer precision: 10 ns
+threading_bench            fastest       │ slowest       │ median        │ mean          │ samples │ iters
+╰─ decode_threading                      │               │               │               │         │
+   ╰─ decode                             │               │               │               │         │
+      ├─ 0                               │               │               │               │         │
+      │  ├─ photo_2k.avif  67.39 ms      │ 75.18 ms      │ 68.67 ms      │ 69.48 ms      │ 10      │ 10
+      │  │                 9.525 MB/s    │ 8.538 MB/s    │ 9.347 MB/s    │ 9.238 MB/s    │         │
+      │  ├─ photo_4k.avif  231.6 ms      │ 242.6 ms      │ 234.3 ms      │ 235.4 ms      │ 10      │ 10
+      │  │                 9.01 MB/s     │ 8.603 MB/s    │ 8.908 MB/s    │ 8.865 MB/s    │         │
+      │  ╰─ photo_8k.avif  1.068 s       │ 1.094 s       │ 1.082 s       │ 1.081 s       │ 10      │ 10
+      │                    6.165 MB/s    │ 6.018 MB/s    │ 6.086 MB/s    │ 6.091 MB/s    │         │
+      ├─ 1                               │               │               │               │         │
+      │  ├─ photo_2k.avif  
+thread 'rav1d-worker-2' (2844700) panicked at include/dav1d/picture.rs:559:19:
+	overlapping DisjointMut:
+ current: &mut _[47104..47136] on ThreadId(4) at include/dav1d/picture.rs:559:19
+existing:    & _[46135..59576]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'rav1d-worker-7' (2844705) panicked at include/dav1d/picture.rs:559:19:
+	overlapping DisjointMut:
+ current: &mut _[1476096..1476112] on ThreadId(9) at include/dav1d/picture.rs:559:19
+existing:    & _[1475072..1503888]
+
+thread 'rav1d-worker-0' (2844698) panicked at include/dav1d/picture.rs:559:19:
+	overlapping DisjointMut:
+ current: &mut _[92160..92176] on ThreadId(2) at include/dav1d/picture.rs:559:19
+existing:    & _[63007..122528]
+
+thread 'rav1d-worker-5' (2844703) panicked at include/dav1d/picture.rs:546:19:
+	overlapping DisjointMut:
+ current:    & _[1475087..1488528] on ThreadId(7) at include/dav1d/picture.rs:546:19
+existing: &mut _[1488000..1488032]
+
+thread 'rav1d-worker-6' (2844704) panicked at include/dav1d/picture.rs:559:19:
+	overlapping DisjointMut:
+ current: &mut _[1490960..1490968] on ThreadId(8) at include/dav1d/picture.rs:559:19
+existing:    & _[1474592..1534144]
+
+thread 'rav1d-worker-3' (2844701) panicked at include/dav1d/picture.rs:546:19:
+	overlapping DisjointMut:
+ current:    & _[63071..122592] on ThreadId(5) at include/dav1d/picture.rs:546:19
+existing: &mut _[104224..104256]
