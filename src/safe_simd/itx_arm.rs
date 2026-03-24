@@ -8726,3 +8726,130 @@ pub fn itxfm_add_dispatch<BD: BitDepth>(
         }
     }
 }
+
+// ============================================================================
+// AUTOVERSION vs HAND-WRITTEN NEON BENCHMARK
+// ============================================================================
+
+/// Benchmark comparing autoversioned (LLVM auto-vectorized) scalar fallbacks
+/// against hand-written NEON intrinsic implementations.
+///
+/// Run on aarch64: `cargo test --release -- --ignored bench_autoversion_vs_neon --nocapture`
+#[cfg(all(test, target_arch = "aarch64"))]
+mod bench_autoversion_vs_neon {
+    use std::time::Instant;
+
+    fn bench_fn(name: &str, iters: u32, mut f: impl FnMut()) -> u64 {
+        for _ in 0..100 { f(); }
+        let mut times = Vec::with_capacity(iters as usize);
+        for _ in 0..iters {
+            let start = Instant::now();
+            f();
+            times.push(start.elapsed().as_nanos() as u64);
+        }
+        times.sort();
+        let median = times[times.len() / 2];
+        let mean: u64 = times.iter().sum::<u64>() / times.len() as u64;
+        println!("  {name}: median={median}ns mean={mean}ns");
+        median
+    }
+
+    macro_rules! bench_transform {
+        ($test_name:ident, $w:expr, $h:expr,
+         autoversioned: $av_fn:path,
+         neon: $neon_mod:path :: $neon_fn:ident,
+         $coeff_count:expr) => {
+            #[test]
+            #[ignore]
+            fn $test_name() {
+                let token = archmage::Arm64::summon()
+                    .expect("NEON required");
+
+                let stride: isize = ($w + 16) as isize;
+                let dst_size = ($h as usize) * (stride as usize) + $w;
+                let mut dst_av = vec![128u8; dst_size];
+                let mut dst_neon = vec![128u8; dst_size];
+                let base = 0usize;
+
+                let mut coeff_template = vec![0i16; $coeff_count];
+                for (i, c) in coeff_template.iter_mut().enumerate() {
+                    *c = (((i * 37 + 13) % 512) as i16) - 256;
+                }
+                coeff_template[0] = 1000;
+
+                let iters = 100_000u32;
+                println!("\n=== {} ({}x{}) ===", stringify!($test_name), $w, $h);
+
+                let mut coeff = coeff_template.clone();
+                let av_ns = bench_fn("autoversioned", iters, || {
+                    dst_av.fill(128);
+                    coeff.copy_from_slice(&coeff_template);
+                    $av_fn(&mut dst_av, base, stride, &mut coeff, $coeff_count as i32 - 1, 255);
+                });
+
+                let neon_ns = bench_fn("hand-written NEON", iters, || {
+                    dst_neon.fill(128);
+                    coeff.copy_from_slice(&coeff_template);
+                    use $neon_mod::*;
+                    $neon_fn(token, &mut dst_neon, base, stride, &mut coeff, $coeff_count as i32 - 1, 255);
+                });
+
+                // Verify correctness
+                dst_av.fill(128);
+                dst_neon.fill(128);
+                let mut ca = coeff_template.clone();
+                let mut cb = coeff_template.clone();
+                $av_fn(&mut dst_av, base, stride, &mut ca, $coeff_count as i32 - 1, 255);
+                {
+                    use $neon_mod::*;
+                    $neon_fn(token, &mut dst_neon, base, stride, &mut cb, $coeff_count as i32 - 1, 255);
+                }
+                assert_eq!(dst_av, dst_neon, "Output mismatch!");
+
+                let ratio = av_ns as f64 / neon_ns as f64;
+                println!("  ratio: {ratio:.2}x (autoversioned / NEON, <1 = autoversioned faster)");
+            }
+        };
+    }
+
+    bench_transform!(bench_dct_dct_4x4, 4, 4,
+        autoversioned: super::inv_txfm_add_dct_dct_4x4_8bpc_inner,
+        neon: super::super::itx_arm_neon_4x4::inv_txfm_add_dct_dct_4x4_8bpc_neon_inner,
+        16
+    );
+    bench_transform!(bench_identity_4x4, 4, 4,
+        autoversioned: super::inv_txfm_add_identity_identity_4x4_8bpc_inner,
+        neon: super::super::itx_arm_neon_4x4::inv_txfm_add_identity_identity_4x4_8bpc_neon_inner,
+        16
+    );
+    bench_transform!(bench_adst_adst_4x4, 4, 4,
+        autoversioned: super::inv_txfm_add_adst_adst_4x4_8bpc_inner,
+        neon: super::super::itx_arm_neon_4x4::inv_txfm_add_adst_adst_4x4_8bpc_neon_inner,
+        16
+    );
+    bench_transform!(bench_wht_wht_4x4, 4, 4,
+        autoversioned: super::inv_txfm_add_wht_wht_4x4_8bpc_inner,
+        neon: super::super::itx_arm_neon_wht::inv_txfm_add_wht_wht_4x4_8bpc_neon_inner,
+        16
+    );
+    bench_transform!(bench_dct_dct_8x8, 8, 8,
+        autoversioned: super::inv_txfm_add_dct_dct_8x8_8bpc_inner,
+        neon: super::super::itx_arm_neon_8x8::inv_txfm_add_dct_dct_8x8_8bpc_neon_inner,
+        64
+    );
+    bench_transform!(bench_identity_8x8, 8, 8,
+        autoversioned: super::inv_txfm_add_identity_identity_8x8_8bpc_inner,
+        neon: super::super::itx_arm_neon_8x8::inv_txfm_add_identity_identity_8x8_8bpc_neon_inner,
+        64
+    );
+    bench_transform!(bench_dct_dct_16x16, 16, 16,
+        autoversioned: super::inv_txfm_add_dct_dct_16x16_8bpc_inner,
+        neon: super::super::itx_arm_neon_16x16::inv_txfm_add_dct_dct_16x16_8bpc_neon_inner,
+        256
+    );
+    bench_transform!(bench_dct_dct_32x32, 32, 32,
+        autoversioned: super::inv_txfm_add_dct_dct_32x32_8bpc_inner,
+        neon: super::super::itx_arm_neon_32::inv_txfm_add_dct_dct_32x32_8bpc_neon_inner,
+        1024
+    );
+}
