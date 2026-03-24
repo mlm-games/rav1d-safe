@@ -137,6 +137,16 @@ pub struct Settings {
     /// Which frame types to decode
     pub decode_frame_type: DecodeFrameType,
 
+    /// Maximum number of frames in flight for frame threading.
+    ///
+    /// * `0` = auto (default, derived from thread count: `min(sqrt(threads), 8)`)
+    /// * `1` = no frame threading (tile parallelism only — ideal for still images)
+    /// * `2+` = up to N frames decoded in parallel
+    ///
+    /// For still image formats (AVIF, HEIC), set this to `1` to get tile-level
+    /// parallelism without frame threading overhead or async decode behavior.
+    pub max_frame_delay: u32,
+
     /// Enforce strict standard compliance
     pub strict_std_compliance: bool,
 
@@ -163,6 +173,7 @@ impl Default for Settings {
             frame_size_limit: 8192 * 4320, // 8K UHD (~35MP)
             all_layers: true,
             operating_point: 0,
+            max_frame_delay: 0,
             output_invisible_frames: false,
             inloop_filters: InloopFilters::all(),
             decode_frame_type: DecodeFrameType::All,
@@ -176,7 +187,7 @@ impl From<Settings> for Rav1dSettings {
     fn from(settings: Settings) -> Self {
         Self {
             n_threads: settings.threads as i32,
-            max_frame_delay: 0,
+            max_frame_delay: settings.max_frame_delay as i32,
             apply_grain: settings.apply_grain,
             operating_point: settings.operating_point,
             all_layers: settings.all_layers,
