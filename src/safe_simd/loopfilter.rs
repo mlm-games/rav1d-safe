@@ -1387,94 +1387,34 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
     // Include lookback entries: when the current block's level is 0, the scalar
     // fallback reads the PREVIOUS block's level (lvl - 4*b4_strideb bytes).
     // We need to include those entries in the slice so the SIMD path can too.
-    let b4_stridea_entries = if !is_v {
-        b4_stride.unsigned_abs() as usize
-    } else {
-        1usize
-    };
     let b4_strideb_entries = if !is_v {
         1usize
     } else {
         b4_stride.unsigned_abs() as usize
     };
+    let lvl_lookback_bytes = b4_strideb_entries * 4;
+    let lvl_start = lvl.offset.saturating_sub(lvl_lookback_bytes);
+    // Round down to a 4-byte boundary for zerocopy alignment
+    let lvl_start = lvl_start & !3;
+    let lvl_remaining_bytes = lvl.data.len() - lvl_start;
+    let lvl_len = lvl_remaining_bytes / 4;
+    let lvl_byte_end = lvl_start + lvl_len * 4;
+    let lvl_byte_guard = lvl.data.index(lvl_start..lvl_byte_end);
+    let lvl_slice: &[[u8; 4]] = zerocopy::FromBytes::ref_from_bytes(&*lvl_byte_guard).unwrap();
+    // Which byte within each [u8;4] entry to read:
+    //   H Y → 0, V Y → 1, H U → 2, H V → 3
+    // This is encoded in lvl.offset % 4 by the caller (lf_apply.rs adds +0/+1/+2/+3).
+    let lvl_byte_idx = lvl.offset % 4;
+    // Base offset: how many [u8;4] entries from the start of lvl_slice to the
+    // original lvl.offset's 4-byte-aligned position
+    let lvl_base = (lvl.offset - lvl_byte_idx - lvl_start) / 4;
+
     // Compute actual iterations from vmask to tighten bounds check.
     let vm = mask[0] | mask[1] | mask[2];
     if vm == 0 {
         return true; // Nothing to filter
     }
     let max_iter = 32 - vm.leading_zeros() as usize;
-
-    // Which byte within each [u8;4] entry to read:
-    //   H Y → 0, V Y → 1, H U → 2, H V → 3
-    let lvl_byte_idx = lvl.offset % 4;
-    let lvl_base_entry = (lvl.offset - lvl_byte_idx) / 4;
-
-    // Gather the needed level entries into a compact stack buffer.
-    // The inner functions read at most max_iter entries at stride b4_stridea,
-    // plus 1 lookback at -b4_strideb. Gathering to a contiguous buffer allows
-    // dropping the DisjointMut guard immediately, preventing overlap with
-    // concurrent tile threads writing level entries for other SB rows.
-    //
-    // Layout: [lookback_entry, entry_0, entry_1, ..., entry_{max_iter-1}]
-    // Inner function receives b4_stridea=1, b4_strideb=1, lvl_base=1.
-    let mut lvl_local = [[0u8; 4]; 34]; // 1 lookback + 32 forward + 1 spare
-    {
-        // Gather level entries to a stack buffer, then drop the guard immediately.
-        // Uses strided tracking when entries are sparse (vertical filtering),
-        // or a single contiguous guard when entries are dense (horizontal filtering).
-        let lvl_len = lvl.data.len();
-        let entry_width = 4usize;
-
-        // Entry 0 in lvl_local = lookback entry
-        if let Some(lookback_entry) = lvl_base_entry.checked_sub(b4_strideb_entries) {
-            let byte_off = lookback_entry * entry_width;
-            if byte_off + entry_width <= lvl_len {
-                let guard = lvl.data.index(byte_off..byte_off + entry_width);
-                lvl_local[0] = *zerocopy::FromBytes::ref_from_bytes(&*guard)
-                    .unwrap_or(&[0u8; 4]);
-            }
-        }
-
-        // Entries 1..=max_iter at stride b4_stridea
-        if max_iter > 0 {
-            let first_byte = lvl_base_entry * entry_width;
-            let last_entry = lvl_base_entry + (max_iter - 1) * b4_stridea_entries;
-            let last_byte_end = (last_entry + 1) * entry_width;
-            let byte_end = last_byte_end.min(lvl_len);
-            if first_byte < byte_end {
-                #[cfg(feature = "mt")]
-                let guard = {
-                    let byte_stride = b4_stridea_entries * entry_width;
-                    let track_stride = if byte_stride <= entry_width {
-                        b4_strideb_entries * entry_width
-                    } else {
-                        byte_stride
-                    };
-                    let track_width = if byte_stride <= entry_width {
-                        (max_iter * entry_width).min(track_stride)
-                    } else {
-                        entry_width
-                    };
-                    lvl.data.index_strided(first_byte..byte_end, track_stride, track_width)
-                };
-                #[cfg(not(feature = "mt"))]
-                let guard = lvl.data.index(first_byte..byte_end);
-                let src: &[u8] = &*guard;
-                for i in 0..max_iter {
-                    let src_off = i * b4_stridea_entries * entry_width;
-                    if src_off + entry_width <= src.len() {
-                        lvl_local[1 + i] = *zerocopy::FromBytes::ref_from_bytes(
-                            &src[src_off..src_off + entry_width],
-                        )
-                        .unwrap_or(&[0u8; 4]);
-                    }
-                }
-            }
-        }
-    }
-    let lvl_slice: &[[u8; 4]] = &lvl_local[..];
-    // Inner function will use: lvl_base=1, b4_stridea=1, b4_strideb=1
-    let lvl_base = 1usize;
 
     match BD::BPC {
         BPC::BPC8 => {
@@ -1521,13 +1461,15 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
             let mut buf_guard = {
                 let guard_width = (w as usize + 23).min(byte_stride);
                 dst.data.dm().mut_slice_as_strided::<_, u8>(
-                    (start_pixel.., ..total_pixels), byte_stride, guard_width,
+                    (start_pixel.., ..total_pixels),
+                    byte_stride,
+                    guard_width,
                 )
             };
             #[cfg(not(feature = "mt"))]
-            let mut buf_guard = dst.data.slice_mut::<BitDepth8, _>(
-                (start_pixel.., ..total_pixels),
-            );
+            let mut buf_guard = dst
+                .data
+                .slice_mut::<BitDepth8, _>((start_pixel.., ..total_pixels));
             let buf: &mut [u8] = &mut *buf_guard;
             let base = reach_before;
 
@@ -1540,7 +1482,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
@@ -1553,7 +1495,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
@@ -1566,7 +1508,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
@@ -1579,7 +1521,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
@@ -1624,7 +1566,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
@@ -1637,7 +1579,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
@@ -1650,7 +1592,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
@@ -1663,7 +1605,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
@@ -1697,64 +1639,27 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
     assert!(lvl.offset <= lvl.data.len());
 
     // Safe slice access for lvl data: reinterpret u8 data as &[[u8; 4]] entries
-    let b4_stridea_entries = if !is_v {
-        b4_stride.unsigned_abs() as usize
-    } else {
-        1usize
-    };
     let b4_strideb_entries = if !is_v {
         1usize
     } else {
         b4_stride.unsigned_abs() as usize
     };
+    let lvl_lookback_bytes = b4_strideb_entries * 4;
+    let lvl_start = lvl.offset.saturating_sub(lvl_lookback_bytes);
+    let lvl_start = lvl_start & !3;
+    let lvl_remaining_bytes = lvl.data.len() - lvl_start;
+    let lvl_len = lvl_remaining_bytes / 4;
+    let lvl_byte_end = lvl_start + lvl_len * 4;
+    let lvl_byte_guard = lvl.data.index(lvl_start..lvl_byte_end);
+    let lvl_slice: &[[u8; 4]] = zerocopy::FromBytes::ref_from_bytes(&*lvl_byte_guard).unwrap();
+    let lvl_byte_idx = lvl.offset % 4;
+    let lvl_base = (lvl.offset - lvl_byte_idx - lvl_start) / 4;
 
     let vm = mask[0] | mask[1] | mask[2];
     if vm == 0 {
         return true;
     }
     let max_iter = 32 - vm.leading_zeros() as usize;
-
-    let lvl_byte_idx = lvl.offset % 4;
-    let lvl_base_entry = (lvl.offset - lvl_byte_idx) / 4;
-
-    // Gather needed level entries to stack buffer (same as x86_64 path).
-    let mut lvl_local = [[0u8; 4]; 34];
-    {
-        let lvl_gather_start = lvl_base_entry.saturating_sub(b4_strideb_entries);
-        let lvl_gather_end_entry = lvl_base_entry + max_iter * b4_stridea_entries;
-        let byte_start = lvl_gather_start * 4;
-        let byte_end = ((lvl_gather_end_entry + 1) * 4).min(lvl.data.len());
-        if byte_start < byte_end {
-            // Use strided tracking: we read ~32 entries at stride b4_stridea,
-            // spanning the full level cache stripe. Strided tracking avoids false
-            // overlap with concurrent writes to adjacent tile rows' entries.
-            let entry_width = 4usize; // each level entry is [u8; 4]
-            let byte_stride = b4_stridea_entries * entry_width;
-            let guard = lvl.data.index_strided(
-                byte_start..byte_end,
-                byte_stride,
-                entry_width,
-            );
-            let src: &[[u8; 4]] =
-                zerocopy::FromBytes::ref_from_bytes(&*guard).unwrap_or(&[]);
-            let lookback_src = lvl_base_entry
-                .checked_sub(b4_strideb_entries)
-                .and_then(|idx| idx.checked_sub(lvl_gather_start))
-                .and_then(|idx| src.get(idx));
-            if let Some(entry) = lookback_src {
-                lvl_local[0] = *entry;
-            }
-            let base_in_src = lvl_base_entry - lvl_gather_start;
-            for i in 0..max_iter {
-                let src_idx = base_in_src + i * b4_stridea_entries;
-                if let Some(entry) = src.get(src_idx) {
-                    lvl_local[1 + i] = *entry;
-                }
-            }
-        }
-    }
-    let lvl_slice: &[[u8; 4]] = &lvl_local[..];
-    let lvl_base = 1usize;
 
     match BD::BPC {
         BPC::BPC8 => {
@@ -1790,7 +1695,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
@@ -1803,7 +1708,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
@@ -1816,7 +1721,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
@@ -1829,7 +1734,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
@@ -1869,7 +1774,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
@@ -1882,7 +1787,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
@@ -1895,7 +1800,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
@@ -1908,7 +1813,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     lvl_slice,
                     lvl_base,
                     lvl_byte_idx,
-                    1, // gathered: b4_stride=1
+                    b4_stride,
                     lut,
                     w,
                     bitdepth_max,
