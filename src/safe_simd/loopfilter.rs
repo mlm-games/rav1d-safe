@@ -1505,9 +1505,21 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 return false;
             }
 
-            // Safe slice access: get a mutable guard covering the full filter reach
             let start_pixel = dst.offset - reach_before;
             let total_pixels = (reach_before + reach_after).min(buf_pixel_len - start_pixel);
+
+            // With mt: fall back to scalar when the filter reach crosses a
+            // 64-row SB boundary, to avoid overlapping mutable guards between
+            // concurrent tile threads.
+            #[cfg(feature = "mt")]
+            {
+                let start_row = start_pixel / byte_stride;
+                let end_row = (start_pixel + total_pixels + byte_stride - 1) / byte_stride;
+                if (start_row >> 6) != ((end_row - 1) >> 6) {
+                    return false;
+                }
+            }
+
             let mut buf_guard = dst
                 .data
                 .slice_mut::<BitDepth8, _>((start_pixel.., ..total_pixels));
