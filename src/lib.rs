@@ -163,6 +163,9 @@ pub(crate) fn rav1d_open(
 
     let NumThreads { n_tc, n_fc } = get_num_threads(s);
 
+    // Tell dispatch functions whether narrow guards are needed
+    crate::src::cpu::set_multithreaded(n_tc > 1);
+
     let ttd = TaskThreadData {
         cur: (n_fc as u32).into(),
         reset_task_cur: AtomicU32::new(u32::MAX),

@@ -39,7 +39,7 @@ libc = { version = "0.2", optional = true }
 parking_lot = "0.12.2"
 paste = "1.0.14"
 raw-cpuid = "11.0.1"
-strum = { version = "0.27", features = ["derive"] }
+strum = { version = "0.28", features = ["derive"] }
 to_method = "1.1.0"
 zerocopy = { version = "0.8", features = ["derive"] }
 
@@ -51,11 +51,11 @@ safe_unaligned_simd = { version = "0.2.5", features = ["avx512"] }
 archmage = { path = "/home/lilith/work/archmage", features = ["macros", "avx512", "testable_dispatch"] }
 divan = "0.1"
 md5 = "0.8.0"
-zenavif-parse = { version = "0.3", features = ["eager"] }
+zenavif-parse = { version = "0.4", features = ["eager"] }
 
 # tango-bench depends on libloading which doesn't support wasm32
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
-tango-bench = "0.6"
+tango-bench = "0.7"
 
 [build-dependencies]
 cc = "1.0.79"
@@ -88,7 +88,11 @@ asm_arm64_dotprod = ["asm"]
 asm_arm64_i8mm = ["asm"]
 asm_arm64_sve2 = ["asm"]
 
-# Force scalar fallback for all SIMD dispatch (testing only)
+# Safe multithreading: strided DisjointMut guards, SB boundary checks,
+# narrow src guards. Required for tile/frame threading without panics.
+# Adds ~17% single-threaded overhead from LTO codegen layout changes.
+# Without this feature, threads>1 will panic on DisjointMut overlaps.
+mt = []
 
 # Run SIMD and scalar side-by-side, panic on any mismatch (testing only)
 simd_test = []

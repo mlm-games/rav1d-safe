@@ -6,7 +6,7 @@ use crate::src::const_fn::const_for;
 use bitflags::bitflags;
 use std::ffi::c_uint;
 use std::num::NonZero;
-use std::sync::atomic::AtomicU32;
+use std::sync::atomic::{AtomicBool, AtomicU32};
 use std::sync::atomic::Ordering;
 use std::thread::available_parallelism;
 
@@ -297,6 +297,24 @@ pub(crate) fn rav1d_init_cpu() {
     rav1d_cpu_flags_init.call_once(|| {
         rav1d_cpu_flags.store(CpuFlags::run_time_detect().bits(), Ordering::SeqCst);
     });
+}
+
+/// Whether the current decoder uses multiple threads.
+/// When false, SIMD dispatch skips strided guard tracking and SB boundary
+/// checks — the single-threaded guarantee means no concurrent overlaps.
+static RAV1D_MULTITHREADED: AtomicBool = AtomicBool::new(false);
+
+/// Check if we need narrow guards for thread safety.
+/// Returns false for single-threaded decoders, allowing fast-path dispatch.
+#[inline(always)]
+pub(crate) fn is_multithreaded() -> bool {
+    RAV1D_MULTITHREADED.load(Ordering::Relaxed)
+}
+
+/// Set the threading mode. Called by the decoder on context creation.
+#[cold]
+pub(crate) fn set_multithreaded(multi: bool) {
+    RAV1D_MULTITHREADED.store(multi, Ordering::SeqCst);
 }
 
 #[cold]
