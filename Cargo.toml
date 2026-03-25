@@ -50,6 +50,7 @@ safe_unaligned_simd = { version = "0.2.5", features = ["avx512"] }
 [dev-dependencies]
 archmage = { path = "/home/lilith/work/archmage", features = ["macros", "avx512", "testable_dispatch"] }
 divan = "0.1"
+zenbench = { path = "/home/lilith/work/zen/zenbench" }
 md5 = "0.8.0"
 zenavif-parse = { version = "0.3", features = ["eager"] }
 
@@ -117,6 +118,10 @@ harness = false
 
 [[bench]]
 name = "threading_bench"
+harness = false
+
+[[bench]]
+name = "thread_scaling"
 harness = false
 
 [profile.bench]
