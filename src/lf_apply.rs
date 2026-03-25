@@ -368,7 +368,7 @@ pub(crate) fn rav1d_copy_lpf<BD: BitDepth>(
 fn filter_plane_cols_y<BD: BitDepth>(
     f: &Rav1dFrameData,
     have_left: bool,
-    lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+    lvl: WithOffset<&crate::src::atomic_level_cache::AtomicLevelCache>,
     mask: &[[[RelaxedAtomic<u16>; 2]; 3]; 32],
     y_dst: PicOffset,
     w: usize,
@@ -408,7 +408,7 @@ fn filter_plane_cols_y<BD: BitDepth>(
 fn filter_plane_rows_y<BD: BitDepth>(
     f: &Rav1dFrameData,
     have_top: bool,
-    lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+    lvl: WithOffset<&crate::src::atomic_level_cache::AtomicLevelCache>,
     b4_stride: usize,
     mask: &[[[RelaxedAtomic<u16>; 2]; 3]; 32],
     y_dst: PicOffset,
@@ -443,7 +443,7 @@ fn filter_plane_rows_y<BD: BitDepth>(
 fn filter_plane_cols_uv<BD: BitDepth>(
     f: &Rav1dFrameData,
     have_left: bool,
-    lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+    lvl: WithOffset<&crate::src::atomic_level_cache::AtomicLevelCache>,
     mask: &[[[RelaxedAtomic<u16>; 2]; 2]; 32],
     u_dst: PicOffset,
     v_dst: PicOffset,
@@ -492,7 +492,7 @@ fn filter_plane_cols_uv<BD: BitDepth>(
 fn filter_plane_rows_uv<BD: BitDepth>(
     f: &Rav1dFrameData,
     have_top: bool,
-    lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+    lvl: WithOffset<&crate::src::atomic_level_cache::AtomicLevelCache>,
     b4_stride: usize,
     mask: &[[[RelaxedAtomic<u16>; 2]; 2]; 32],
     u_dst: PicOffset,

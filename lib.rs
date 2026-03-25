@@ -60,6 +60,7 @@ pub mod src {
     pub(crate) mod c_arc;
     #[cfg_attr(feature = "c-ffi", allow(unsafe_code))]
     pub(crate) mod c_box;
+    pub(crate) mod atomic_level_cache;
     #[cfg(feature = "mt")]
     pub(crate) mod copy_guard;
     pub(crate) mod cpu;

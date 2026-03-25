@@ -407,7 +407,7 @@ fn mask_edges_chroma(
 #[inline(never)]
 pub(crate) fn rav1d_create_lf_mask_intra(
     lflvl: &Av1Filter,
-    level_cache: &DisjointMut<Vec<u8>>,
+    level_cache: &crate::src::atomic_level_cache::AtomicLevelCache,
     b4_stride: ptrdiff_t,
     filter_level: &Align16<[[[u8; 2]; 8]; 4]>,
     b: Bxy,
@@ -437,9 +437,7 @@ pub(crate) fn rav1d_create_lf_mask_intra(
             for x in 0..bw4 {
                 let idx = 4 * (level_cache_off + x);
                 // `0.., ..2` is for Y
-                let lvl = &mut *level_cache.index_mut((idx + 0.., ..2));
-                lvl[0] = filter_level[0][0][0];
-                lvl[1] = filter_level[1][0][0];
+                level_cache.write2(idx + 0, [filter_level[0][0][0], filter_level[1][0][0]]);
             }
             level_cache_off += b4_stride;
         }
@@ -475,9 +473,7 @@ pub(crate) fn rav1d_create_lf_mask_intra(
         for x in 0..cbw4 {
             let idx = 4 * (level_cache_off + x);
             // `2.., ..2` is for UV
-            let lvl = &mut *level_cache.index_mut((idx + 2.., ..2));
-            lvl[0] = filter_level[2][0][0];
-            lvl[1] = filter_level[3][0][0];
+            level_cache.write2(idx + 2, [filter_level[2][0][0], filter_level[3][0][0]]);
         }
         level_cache_off += b4_stride;
     }
@@ -500,7 +496,7 @@ pub(crate) fn rav1d_create_lf_mask_intra(
 #[inline(never)]
 pub(crate) fn rav1d_create_lf_mask_inter(
     lflvl: &Av1Filter,
-    level_cache: &DisjointMut<Vec<u8>>,
+    level_cache: &crate::src::atomic_level_cache::AtomicLevelCache,
     b4_stride: ptrdiff_t,
     filter_level: &Align16<[[[u8; 2]; 8]; 4]>,
     r#ref: usize,
@@ -535,9 +531,7 @@ pub(crate) fn rav1d_create_lf_mask_inter(
             for x in 0..bw4 {
                 let idx = 4 * (level_cache_off + x);
                 // `0.., ..2` is for Y
-                let lvl = &mut *level_cache.index_mut((idx + 0.., ..2));
-                lvl[0] = filter_level[0][r#ref][is_gmv];
-                lvl[1] = filter_level[1][r#ref][is_gmv];
+                level_cache.write2(idx + 0, [filter_level[0][r#ref][is_gmv], filter_level[1][r#ref][is_gmv]]);
             }
             level_cache_off += b4_stride;
         }
@@ -584,9 +578,7 @@ pub(crate) fn rav1d_create_lf_mask_inter(
         for x in 0..cbw4 {
             let idx = 4 * (level_cache_off + x);
             // `2.., ..2` is for UV
-            let lvl = &mut *level_cache.index_mut((idx + 2.., ..2));
-            lvl[0] = filter_level[2][r#ref][is_gmv];
-            lvl[1] = filter_level[3][r#ref][is_gmv];
+            level_cache.write2(idx + 2, [filter_level[2][r#ref][is_gmv], filter_level[3][r#ref][is_gmv]]);
         }
         level_cache_off += b4_stride;
     }

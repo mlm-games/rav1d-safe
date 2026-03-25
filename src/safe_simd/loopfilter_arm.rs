@@ -348,7 +348,7 @@ pub unsafe extern "C" fn lpf_h_sb_y_8bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&crate::src::atomic_level_cache::AtomicLevelCache>>,
 ) {
     use crate::include::common::bitdepth::BitDepth8;
     let dst = unsafe { *FFISafe::get(dst) };
@@ -383,7 +383,7 @@ pub unsafe extern "C" fn lpf_v_sb_y_8bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&crate::src::atomic_level_cache::AtomicLevelCache>>,
 ) {
     use crate::include::common::bitdepth::BitDepth8;
     let dst = unsafe { *FFISafe::get(dst) };
@@ -418,7 +418,7 @@ pub unsafe extern "C" fn lpf_h_sb_uv_8bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&crate::src::atomic_level_cache::AtomicLevelCache>>,
 ) {
     use crate::include::common::bitdepth::BitDepth8;
     let dst = unsafe { *FFISafe::get(dst) };
@@ -453,7 +453,7 @@ pub unsafe extern "C" fn lpf_v_sb_uv_8bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&crate::src::atomic_level_cache::AtomicLevelCache>>,
 ) {
     use crate::include::common::bitdepth::BitDepth8;
     let dst = unsafe { *FFISafe::get(dst) };
@@ -492,7 +492,7 @@ pub unsafe extern "C" fn lpf_h_sb_y_16bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&crate::src::atomic_level_cache::AtomicLevelCache>>,
 ) {
     use crate::include::common::bitdepth::BitDepth16;
     let dst = unsafe { *FFISafe::get(dst) };
@@ -527,7 +527,7 @@ pub unsafe extern "C" fn lpf_v_sb_y_16bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&crate::src::atomic_level_cache::AtomicLevelCache>>,
 ) {
     use crate::include::common::bitdepth::BitDepth16;
     let dst = unsafe { *FFISafe::get(dst) };
@@ -562,7 +562,7 @@ pub unsafe extern "C" fn lpf_h_sb_uv_16bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&crate::src::atomic_level_cache::AtomicLevelCache>>,
 ) {
     use crate::include::common::bitdepth::BitDepth16;
     let dst = unsafe { *FFISafe::get(dst) };
@@ -597,7 +597,7 @@ pub unsafe extern "C" fn lpf_v_sb_uv_16bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&crate::src::atomic_level_cache::AtomicLevelCache>>,
 ) {
     use crate::include::common::bitdepth::BitDepth16;
     let dst = unsafe { *FFISafe::get(dst) };
@@ -626,7 +626,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
     dst: PicOffset,
     stride: ptrdiff_t,
     mask: &[u32; 3],
-    lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+    lvl: WithOffset<&crate::src::atomic_level_cache::AtomicLevelCache>,
     b4_stride: isize,
     lut: &Align16<Av1FilterLUT>,
     w: c_int,

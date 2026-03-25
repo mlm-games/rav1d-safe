@@ -4540,9 +4540,7 @@ pub(crate) fn rav1d_decode_frame_init(c: &Rav1dContext, fc: &Rav1dFrameContext) 
         .map_err(|_| ENOMEM)?;
     // over-allocate by 3 bytes since some of the SIMD implementations
     // index this from the level type and can thus over-read by up to 3 bytes.
-    f.lf.level
-        .try_resize_with(4 * num_sb128 as usize * 32 * 32 + 3, Default::default)
-        .map_err(|_| ENOMEM)?;
+    f.lf.level.resize(4 * num_sb128 as usize * 32 * 32 + 3);
     if c.fc.len() > 1 {
         f.frame_thread
             .b
