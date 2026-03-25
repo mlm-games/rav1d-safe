@@ -11624,21 +11624,37 @@ pub fn mask_dispatch<BD: BitDepth>(
     mask: &[u8],
     bd: BD,
 ) -> bool {
+    let Some(_token) = crate::src::cpu::summon_avx2() else {
+        return false;
+    };
+    use zerocopy::IntoBytes;
+    let pixel_size = std::mem::size_of::<BD::Pixel>();
+    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
+    let dst_bytes = dst_guard.as_mut_bytes();
+    let dst_offset = dst_base * pixel_size;
+    let dst_stride = dst.stride();
+    mask_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, mask, bd)
+}
+
+/// Inner mask dispatch — operates on pre-acquired byte slice.
+/// Can be called directly with scheduler-owned guards.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn mask_dispatch_inner<BD: BitDepth>(
+    dst_bytes: &mut [u8],
+    dst_offset: usize,
+    dst_stride: isize,
+    tmp1: &[i16; COMPINTER_LEN],
+    tmp2: &[i16; COMPINTER_LEN],
+    w: i32,
+    h: i32,
+    mask: &[u8],
+    bd: BD,
+) -> bool {
     use crate::include::common::bitdepth::BPC;
     let avx512_token = crate::src::cpu::summon_avx512();
     let Some(token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
-    use zerocopy::IntoBytes;
-    #[cfg(feature = "mt")]
-    if crosses_sb_boundary::<BD>(&dst, h) {
-        return false;
-    }
-    let (mut dst_guard, dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride() as usize;
     let bd_c = bd.into_c();
     match BD::BPC {
         BPC::BPC8 => {
@@ -11646,7 +11662,7 @@ pub fn mask_dispatch<BD: BitDepth>(
                 mask_8bpc_avx512_safe(
                     t512,
                     &mut dst_bytes[dst_offset..],
-                    dst_stride,
+                    dst_stride as usize,
                     tmp1,
                     tmp2,
                     w,
@@ -11657,7 +11673,7 @@ pub fn mask_dispatch<BD: BitDepth>(
                 mask_8bpc_avx2_safe(
                     token,
                     &mut dst_bytes[dst_offset..],
-                    dst_stride,
+                    dst_stride as usize,
                     tmp1,
                     tmp2,
                     w,
@@ -11671,7 +11687,7 @@ pub fn mask_dispatch<BD: BitDepth>(
                 mask_16bpc_avx512_safe(
                     t512,
                     &mut dst_bytes[dst_offset..],
-                    dst_stride,
+                    dst_stride as usize,
                     tmp1,
                     tmp2,
                     w,
@@ -11683,7 +11699,7 @@ pub fn mask_dispatch<BD: BitDepth>(
                 mask_16bpc_avx2_safe(
                     token,
                     &mut dst_bytes[dst_offset..],
-                    dst_stride,
+                    dst_stride as usize,
                     tmp1,
                     tmp2,
                     w,
@@ -11705,26 +11721,40 @@ pub fn blend_dispatch<BD: BitDepth>(
     h: i32,
     mask: &[u8],
 ) -> bool {
+    let Some(_token) = crate::src::cpu::summon_avx2() else {
+        return false;
+    };
+    use zerocopy::IntoBytes;
+    let pixel_size = std::mem::size_of::<BD::Pixel>();
+    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
+    let dst_bytes = dst_guard.as_mut_bytes();
+    let dst_offset = dst_base * pixel_size;
+    let dst_stride = dst.stride();
+    let tmp_bytes = tmp.as_bytes();
+    blend_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp_bytes, w, h, mask)
+}
+
+/// Inner blend dispatch — operates on pre-acquired byte slice.
+/// Can be called directly with scheduler-owned guards.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn blend_dispatch_inner<BD: BitDepth>(
+    dst_bytes: &mut [u8],
+    dst_offset: usize,
+    dst_stride: isize,
+    tmp_bytes: &[u8],
+    w: i32,
+    h: i32,
+    mask: &[u8],
+) -> bool {
     use crate::include::common::bitdepth::BPC;
     let Some(token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
-    use zerocopy::IntoBytes;
-    #[cfg(feature = "mt")]
-    if crosses_sb_boundary::<BD>(&dst, h) {
-        return false;
-    }
-    let (mut dst_guard, dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride() as usize;
-    let tmp_bytes = tmp.as_bytes();
     match BD::BPC {
         BPC::BPC8 => blend_8bpc_avx2_safe(
             token,
             &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_stride as usize,
             tmp_bytes,
             w,
             h,
@@ -11733,7 +11763,7 @@ pub fn blend_dispatch<BD: BitDepth>(
         BPC::BPC16 => blend_16bpc_avx2_safe(
             token,
             &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_stride as usize,
             tmp_bytes,
             w,
             h,
@@ -11751,26 +11781,40 @@ pub fn blend_dir_dispatch<BD: BitDepth>(
     w: i32,
     h: i32,
 ) -> bool {
+    let Some(_token) = crate::src::cpu::summon_avx2() else {
+        return false;
+    };
+    use zerocopy::IntoBytes;
+    let pixel_size = std::mem::size_of::<BD::Pixel>();
+    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
+    let dst_bytes = dst_guard.as_mut_bytes();
+    let dst_offset = dst_base * pixel_size;
+    let dst_stride = dst.stride();
+    let tmp_bytes = tmp.as_bytes();
+    blend_dir_dispatch_inner::<BD>(is_h, dst_bytes, dst_offset, dst_stride, tmp_bytes, w, h)
+}
+
+/// Inner blend_dir dispatch — operates on pre-acquired byte slice.
+/// Can be called directly with scheduler-owned guards.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn blend_dir_dispatch_inner<BD: BitDepth>(
+    is_h: bool,
+    dst_bytes: &mut [u8],
+    dst_offset: usize,
+    dst_stride: isize,
+    tmp_bytes: &[u8],
+    w: i32,
+    h: i32,
+) -> bool {
     use crate::include::common::bitdepth::BPC;
     let Some(token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
-    use zerocopy::IntoBytes;
-    #[cfg(feature = "mt")]
-    if crosses_sb_boundary::<BD>(&dst, h) {
-        return false;
-    }
-    let (mut dst_guard, dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride() as usize;
-    let tmp_bytes = tmp.as_bytes();
     match (BD::BPC, is_h) {
         (BPC::BPC8, true) => blend_h_8bpc_avx2_safe(
             token,
             &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_stride as usize,
             tmp_bytes,
             w,
             h,
@@ -11778,7 +11822,7 @@ pub fn blend_dir_dispatch<BD: BitDepth>(
         (BPC::BPC8, false) => blend_v_8bpc_avx2_safe(
             token,
             &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_stride as usize,
             tmp_bytes,
             w,
             h,
@@ -11786,7 +11830,7 @@ pub fn blend_dir_dispatch<BD: BitDepth>(
         (BPC::BPC16, true) => blend_h_16bpc_avx2_safe(
             token,
             &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_stride as usize,
             tmp_bytes,
             w,
             h,
@@ -11794,7 +11838,7 @@ pub fn blend_dir_dispatch<BD: BitDepth>(
         (BPC::BPC16, false) => blend_v_16bpc_avx2_safe(
             token,
             &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_stride as usize,
             tmp_bytes,
             w,
             h,
@@ -11815,26 +11859,46 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
     sign: i32,
     bd: BD,
 ) -> bool {
+    let Some(_token) = crate::src::cpu::summon_avx2() else {
+        return false;
+    };
+    use zerocopy::IntoBytes;
+    let pixel_size = std::mem::size_of::<BD::Pixel>();
+    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
+    let dst_bytes = dst_guard.as_mut_bytes();
+    let dst_offset = dst_base * pixel_size;
+    let dst_stride = dst.stride();
+    w_mask_dispatch_inner::<BD>(
+        layout, dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, mask, sign, bd,
+    )
+}
+
+/// Inner w_mask dispatch — operates on pre-acquired byte slice.
+/// Can be called directly with scheduler-owned guards.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn w_mask_dispatch_inner<BD: BitDepth>(
+    layout: Rav1dPixelLayoutSubSampled,
+    dst_bytes: &mut [u8],
+    dst_offset: usize,
+    dst_stride: isize,
+    tmp1: &[i16; COMPINTER_LEN],
+    tmp2: &[i16; COMPINTER_LEN],
+    w: i32,
+    h: i32,
+    mask: &mut [u8; SEG_MASK_LEN],
+    sign: i32,
+    bd: BD,
+) -> bool {
     use crate::include::common::bitdepth::BPC;
     let Some(token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
-    use zerocopy::IntoBytes;
-    #[cfg(feature = "mt")]
-    if crosses_sb_boundary::<BD>(&dst, h) {
-        return false;
-    }
-    let (mut dst_guard, dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride() as usize;
     let bd_c = bd.into_c();
     match (BD::BPC, layout) {
         (BPC::BPC8, Rav1dPixelLayoutSubSampled::I420) => w_mask_420_8bpc_avx2_safe(
             token,
             &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_stride as usize,
             tmp1,
             tmp2,
             w,
@@ -11845,7 +11909,7 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
         (BPC::BPC8, Rav1dPixelLayoutSubSampled::I422) => w_mask_422_8bpc_avx2_safe(
             token,
             &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_stride as usize,
             tmp1,
             tmp2,
             w,
@@ -11856,7 +11920,7 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
         (BPC::BPC8, Rav1dPixelLayoutSubSampled::I444) => w_mask_444_8bpc_avx2_safe(
             token,
             &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_stride as usize,
             tmp1,
             tmp2,
             w,
@@ -11867,7 +11931,7 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
         (BPC::BPC16, Rav1dPixelLayoutSubSampled::I420) => w_mask_420_16bpc_avx2_safe(
             token,
             &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_stride as usize,
             tmp1,
             tmp2,
             w,
@@ -11879,7 +11943,7 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
         (BPC::BPC16, Rav1dPixelLayoutSubSampled::I422) => w_mask_422_16bpc_avx2_safe(
             token,
             &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_stride as usize,
             tmp1,
             tmp2,
             w,
@@ -11891,7 +11955,7 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
         (BPC::BPC16, Rav1dPixelLayoutSubSampled::I444) => w_mask_444_16bpc_avx2_safe(
             token,
             &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_stride as usize,
             tmp1,
             tmp2,
             w,
@@ -12095,9 +12159,7 @@ pub fn mc_put_dispatch<BD: BitDepth>(
     my: i32,
     bd: BD,
 ) -> bool {
-    use crate::include::common::bitdepth::BPC;
-    use zerocopy::IntoBytes;
-    let Some(token) = crate::src::cpu::summon_avx2() else {
+    let Some(_token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
 
@@ -12108,27 +12170,58 @@ pub fn mc_put_dispatch<BD: BitDepth>(
         return false;
     }
 
+    use zerocopy::IntoBytes;
+    let pixel_size = std::mem::size_of::<BD::Pixel>();
+    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
+    let dst_bytes = dst_guard.as_mut_bytes();
+    let dst_offset = dst_base * pixel_size;
     let dst_stride = dst.stride();
+    mc_put_dispatch_inner::<BD>(
+        filter, dst_bytes, dst_offset, dst_stride, src, w, h, mx, my, bd,
+    )
+}
+
+/// Inner mc_put dispatch — operates on pre-acquired dst byte slice.
+/// src guard is acquired inside since src is from a different frame's DisjointMut.
+/// Can be called directly with scheduler-owned dst guards.
+#[cfg(target_arch = "x86_64")]
+pub(crate) fn mc_put_dispatch_inner<BD: BitDepth>(
+    filter: Filter2d,
+    dst_bytes: &mut [u8],
+    dst_offset: usize,
+    dst_stride: isize,
+    src: PicOffset,
+    w: i32,
+    h: i32,
+    mx: i32,
+    my: i32,
+    bd: BD,
+) -> bool {
+    use crate::include::common::bitdepth::BPC;
+    use zerocopy::IntoBytes;
+    let Some(token) = crate::src::cpu::summon_avx2() else {
+        return false;
+    };
+
     let src_stride = src.stride();
     let pixel_size = std::mem::size_of::<BD::Pixel>();
     match BD::BPC {
         BPC::BPC8 => {
-            #[cfg(feature = "mt")]
-            if crosses_sb_boundary::<BD>(&dst, h) {
-                return false;
-            }
-            let (mut dst_guard, dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
-            let dst_bytes = &mut dst_guard.as_mut_bytes()[dst_base * pixel_size..];
-            #[cfg(feature = "mt")]
-            let (src_guard, src_base) = narrow_src_guard::<BD>(&src, w, h, 3);
-            #[cfg(not(feature = "mt"))]
             let (src_guard, src_base) = src.full_guard::<BD>();
             match filter {
                 Filter2d::Bilinear => {
                     // Bilinear only accesses current + next row, no negative offsets
                     let src_bytes = &src_guard.as_bytes()[src_base * pixel_size..];
                     put_bilin_8bpc_dispatch_inner(
-                        token, dst_bytes, dst_stride, src_bytes, src_stride, w, h, mx, my,
+                        token,
+                        &mut dst_bytes[dst_offset..],
+                        dst_stride,
+                        src_bytes,
+                        src_stride,
+                        w,
+                        h,
+                        mx,
+                        my,
                     );
                 }
                 _ => {
@@ -12137,7 +12230,7 @@ pub fn mc_put_dispatch<BD: BitDepth>(
                     let (h_filter, v_filter) = filter.hv();
                     put_8tap_8bpc_dispatch_inner(
                         token,
-                        dst_bytes,
+                        &mut dst_bytes[dst_offset..],
                         dst_stride,
                         src_bytes,
                         src_base * pixel_size,
@@ -12153,20 +12246,10 @@ pub fn mc_put_dispatch<BD: BitDepth>(
             }
         }
         BPC::BPC16 => {
-            // TEMPORARY: debug - force scalar for put 16bpc
-            // return false;
-            #[cfg(feature = "mt")]
-            if crosses_sb_boundary::<BD>(&dst, h) {
-                return false;
-            }
-            let (mut dst_guard, dst_base) = dst.strided_slice_mut::<BD>(w as usize, h as usize);
-            let dst_bytes = &mut dst_guard.as_mut_bytes()[dst_base * pixel_size..];
-            let dst_u16: &mut [u16] = zerocopy::Ref::<_, [u16]>::new_slice(dst_bytes)
-                .expect("u16 alignment")
-                .into_mut_slice();
-            #[cfg(feature = "mt")]
-            let (src_guard, src_base) = narrow_src_guard::<BD>(&src, w, h, 3);
-            #[cfg(not(feature = "mt"))]
+            let dst_u16: &mut [u16] =
+                zerocopy::Ref::<_, [u16]>::new_slice(&mut dst_bytes[dst_offset..])
+                    .expect("u16 alignment")
+                    .into_mut_slice();
             let (src_guard, src_base) = src.full_guard::<BD>();
             let bd_c = bd.into_c();
             match filter {
