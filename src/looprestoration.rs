@@ -587,8 +587,7 @@ fn wiener_rust<BD: BitDepth>(
     let round_bits_v = 11 - (bitdepth == 12) as c_int * 2;
     let rounding_off_v = 1 << round_bits_v - 1;
     let round_offset = 1 << bitdepth + (round_bits_v - 1);
-    let stride = p.pixel_stride::<BD>();
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BD>(w, h);
+    let (mut p_guard, p_base, stride) = p.strided_slice_mut::<BD>(w, h);
     for j in 0..h {
         let row_off = p_base.wrapping_add_signed(j as isize * stride);
         for i in 0..w {
@@ -977,8 +976,7 @@ fn sgr_5x5_rust<BD: BitDepth>(
     selfguided_filter(&mut dst, &mut tmp, w, h, 25, sgr.s0, bd);
 
     let w0 = sgr.w0 as c_int;
-    let stride = p.pixel_stride::<BD>();
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BD>(w, h);
+    let (mut p_guard, p_base, stride) = p.strided_slice_mut::<BD>(w, h);
     for j in 0..h {
         let row_off = p_base.wrapping_add_signed(j as isize * stride);
         for i in 0..w {
@@ -1041,8 +1039,7 @@ fn sgr_3x3_rust<BD: BitDepth>(
     selfguided_filter(&mut dst, &mut tmp, w, h, 9, sgr.s1, bd);
 
     let w1 = sgr.w1 as c_int;
-    let stride = p.pixel_stride::<BD>();
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BD>(w, h);
+    let (mut p_guard, p_base, stride) = p.strided_slice_mut::<BD>(w, h);
     for j in 0..h {
         let row_off = p_base.wrapping_add_signed(j as isize * stride);
         for i in 0..w {
@@ -1108,8 +1105,7 @@ fn sgr_mix_rust<BD: BitDepth>(
 
     let w0 = sgr.w0 as c_int;
     let w1 = sgr.w1 as c_int;
-    let stride = p.pixel_stride::<BD>();
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BD>(w, h);
+    let (mut p_guard, p_base, stride) = p.strided_slice_mut::<BD>(w, h);
     for j in 0..h {
         let row_off = p_base.wrapping_add_signed(j as isize * stride);
         for i in 0..w {

@@ -634,6 +634,10 @@ impl<'a> Rav1dPictureDataComponentOffset<'a> {
     ///
     /// Returns `(guard, base_offset_within_guard)` where `base_offset_within_guard`
     /// is the index within the guard's slice that corresponds to `self.offset`.
+    /// Mutable strided guard. Without `mt`: direct DisjointMut guard over the
+    /// picture plane (fast, single-threaded only). With `mt`: copy-buffer guard
+    /// that copies pixels per-row (safe for concurrent tile threads).
+    #[cfg(not(feature = "mt"))]
     #[inline]
     #[cfg_attr(debug_assertions, track_caller)]
     pub fn strided_slice_mut<BD: BitDepth>(
@@ -643,24 +647,44 @@ impl<'a> Rav1dPictureDataComponentOffset<'a> {
     ) -> (
         DisjointMutGuard<'a, Rav1dPictureDataComponentInner, [BD::Pixel]>,
         usize,
+        isize, // pixel stride
     ) {
+        let byte_stride = self.stride();
         let pxstride = self.data.pixel_stride::<BD>();
         if pxstride >= 0 {
-            let total = if h == 0 {
-                0
-            } else {
-                (h - 1) * pxstride as usize + w
-            };
+            let abs_pxstride = pxstride as usize;
+            let total = if h == 0 { 0 } else { (h - 1) * abs_pxstride + w };
             let guard = self.data.slice_mut::<BD, _>((self.offset.., ..total));
-            (guard, 0)
+            (guard, 0, byte_stride)
         } else {
-            let abs_stride = pxstride.unsigned_abs();
-            let total = if h == 0 { 0 } else { (h - 1) * abs_stride + w };
-            let start = self.offset - (h - 1) * abs_stride;
+            let abs_pxstride = pxstride.unsigned_abs();
+            let total = if h == 0 { 0 } else { (h - 1) * abs_pxstride + w };
+            let start = self.offset - (h - 1) * abs_pxstride;
             let guard = self.data.slice_mut::<BD, _>((start.., ..total));
-            // base_offset = how far into the guard our logical row 0 is
-            (guard, (h - 1) * abs_stride)
+            (guard, (h - 1) * abs_pxstride, byte_stride)
         }
+    }
+
+    /// With `mt`: returns a CopyGuard that copies pixels to a compact w×h
+    /// buffer (stride=w), runs SIMD, and writes back per-row on drop.
+    #[cfg(feature = "mt")]
+    #[inline]
+    #[cfg_attr(debug_assertions, track_caller)]
+    pub fn strided_slice_mut<BD: BitDepth>(
+        &self,
+        w: usize,
+        h: usize,
+    ) -> (
+        crate::src::copy_guard::CopyGuard<'a, BD::Pixel>,
+        usize,
+        isize, // pixel stride (compact = w)
+    )
+    where
+        BD::Pixel: zerocopy::FromBytes + zerocopy::IntoBytes,
+    {
+        let guard = crate::src::copy_guard::CopyGuard::new::<BD>(*self, w, h);
+        let byte_stride = (w * core::mem::size_of::<BD::Pixel>()) as isize;
+        (guard, 0, byte_stride)
     }
 
     /// Create a tracked immutable guard covering a strided w×h pixel region.

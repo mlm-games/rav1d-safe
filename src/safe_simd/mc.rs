@@ -11358,8 +11358,8 @@ macro_rules! with_dst {
                 let mut _copy_guard = crate::src::copy_guard::CopyGuard::new::<$bd>(
                     $dst, $w as usize, $h as usize,
                 );
-                let $dst_stride_val = _copy_guard.compact_stride();
-                let $dst_slice = &mut *_copy_guard;
+                let $dst_stride_val = _copy_guard.compact_stride() * std::mem::size_of::<<$bd as BitDepth>::Pixel>();
+                let $dst_slice = zerocopy::IntoBytes::as_mut_bytes(&mut *_copy_guard);
                 $body
                 // _copy_guard drops here → writes back per-row
             } else {

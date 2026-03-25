@@ -108,7 +108,7 @@ fn cdef_filter_block_simd_8bpc(
     let zero = _mm_setzero_si128();
 
     // Single guard for entire output region
-    let (mut p_guard, p_base) = dst.strided_slice_mut::<BitDepth8>(w, h);
+    let (mut p_guard, p_base, stride) = dst.strided_slice_mut::<BitDepth8>(w, h);
 
     if pri_strength != 0 {
         let pri_tap = 4 - (pri_strength & 1);
@@ -781,7 +781,7 @@ pub(super) fn cdef_filter_block_scalar_8bpc(
     use crate::include::common::bitdepth::BitDepth8;
 
     // Single guard for entire output region
-    let (mut p_guard, p_base) = dst.strided_slice_mut::<BitDepth8>(w, h);
+    let (mut p_guard, p_base, stride) = dst.strided_slice_mut::<BitDepth8>(w, h);
     let tmp = tmp.flex();
     let mut p_guard = p_guard.flex_mut();
 
@@ -1455,7 +1455,7 @@ fn cdef_filter_block_simd_16bpc(
     let bitdepth_min_8 = ((bitdepth_max + 1) as u32).ilog2() as c_int - 8;
 
     // Single guard for entire output region
-    let (mut p_guard, p_base) = dst.strided_slice_mut::<BitDepth16>(w, h);
+    let (mut p_guard, p_base, stride) = dst.strided_slice_mut::<BitDepth16>(w, h);
 
     if pri_strength != 0 {
         let pri_tap = 4 - (pri_strength >> bitdepth_min_8 & 1);
@@ -1648,7 +1648,7 @@ pub(super) fn cdef_filter_block_scalar_16bpc(
     let bitdepth_min_8 = ((bitdepth_max + 1) as u32).ilog2() as c_int - 8;
 
     // Single guard for entire output region
-    let (mut p_guard, p_base) = dst.strided_slice_mut::<BitDepth16>(w, h);
+    let (mut p_guard, p_base, stride) = dst.strided_slice_mut::<BitDepth16>(w, h);
     let tmp = tmp.flex();
     let mut p_guard = p_guard.flex_mut();
 

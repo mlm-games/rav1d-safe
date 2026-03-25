@@ -462,7 +462,7 @@ impl itxfm::Fn {
 
                         // Restore pre-SIMD state
                         {
-                            let (mut guard, _) = dst.strided_slice_mut::<BD>(w, h);
+                            let (mut guard, _, _byte_stride) = dst.strided_slice_mut::<BD>(w, h);
                             guard.copy_from_slice(&orig_pixels);
                         }
                         coeff.copy_from_slice(&orig_coeff);
@@ -490,7 +490,7 @@ impl itxfm::Fn {
 
                         // Restore SIMD output so decoder proceeds correctly
                         {
-                            let (mut guard, _) = dst.strided_slice_mut::<BD>(w, h);
+                            let (mut guard, _, _byte_stride) = dst.strided_slice_mut::<BD>(w, h);
                             guard.copy_from_slice(&simd_pixels);
                         }
                         // Re-zero coefficients (both paths should have zeroed them)

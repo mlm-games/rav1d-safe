@@ -1,15 +1,8 @@
 //! Copy-buffer guard for safe multithreaded pixel access.
 //!
-//! `CopyGuard` copies pixels from a picture plane into a compact buffer
-//! (no stride gaps), lets SIMD operate on the compact buffer, then copies
-//! the results back on drop via per-row guards.
-//!
-//! This is sound because:
-//! - The compact buffer is owned (no aliasing)
-//! - Picture access uses narrow per-row guards (w bytes, no stride gaps)
-//! - Per-row guards are acquired and released immediately (no held borrows)
-//! - Two tile threads can hold CopyGuards for non-overlapping columns
-//!   because their per-row guards cover disjoint byte ranges
+//! `CopyGuard<P>` copies pixels from a picture plane into a compact buffer
+//! (stride = w, no gaps), lets SIMD operate on the buffer, then copies
+//! the results back on drop via per-row guards. Generic over pixel type.
 
 #![forbid(unsafe_code)]
 
@@ -17,28 +10,28 @@ use crate::include::common::bitdepth::BitDepth;
 use crate::include::dav1d::picture::Rav1dPictureDataComponentOffset;
 use crate::src::strided::Strided as _;
 use core::ops::{Deref, DerefMut};
-use zerocopy::IntoBytes;
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 
 pub type PicOffset<'a> = Rav1dPictureDataComponentOffset<'a>;
 
 /// A compact w×h pixel buffer that writes back to the picture on drop.
-pub struct CopyGuard<'a> {
-    buf: Vec<u8>,
+/// Generic over pixel type P (u8 for 8bpc, u16 for 16bpc).
+pub struct CopyGuard<'a, P: Copy + FromBytes + IntoBytes + Immutable> {
+    buf: Vec<P>,
     pic: PicOffset<'a>,
-    w_bytes: usize,
+    w: usize,
     h: usize,
-    byte_stride: isize,
+    pixel_stride: isize, // in pixels, not bytes
 }
 
-impl<'a> CopyGuard<'a> {
+impl<'a, P: Copy + FromBytes + IntoBytes + Immutable> CopyGuard<'a, P> {
     /// Create by copying w×h pixels from the picture into a compact buffer.
-    pub fn new<BD: BitDepth>(pic: PicOffset<'a>, w: usize, h: usize) -> Self {
-        let pixel_size = core::mem::size_of::<BD::Pixel>();
-        let w_bytes = w * pixel_size;
+    pub fn new<BD: BitDepth<Pixel = P>>(pic: PicOffset<'a>, w: usize, h: usize) -> Self {
+        let pixel_stride = pic.data.pixel_stride::<BD>();
+        let pixel_size = core::mem::size_of::<P>();
         let byte_stride = pic.stride();
-        let abs_byte_stride = byte_stride.unsigned_abs();
 
-        let mut buf = vec![0u8; w_bytes * h];
+        let mut buf = vec![P::new_zeroed(); w * h];
 
         // Copy-in: read each row via narrow per-row guard
         for y in 0..h {
@@ -48,53 +41,57 @@ impl<'a> CopyGuard<'a> {
             } else {
                 pic.offset - (-row_byte_off) as usize
             };
-            let guard = pic.data.slice_bytes(row_start, w_bytes);
-            let dst_start = y * w_bytes;
-            buf[dst_start..dst_start + w_bytes].copy_from_slice(&*guard);
+            let guard = pic.data.slice_bytes(row_start * pixel_size, w * pixel_size);
+            let src_pixels: &[P] = FromBytes::ref_from_bytes(&*guard).unwrap();
+            buf[y * w..(y + 1) * w].copy_from_slice(&src_pixels[..w]);
         }
 
         Self {
             buf,
             pic,
-            w_bytes,
+            w,
             h,
-            byte_stride,
+            pixel_stride,
         }
     }
 
-    /// The byte stride of the compact buffer (= w_bytes, contiguous).
+    /// The pixel stride of the compact buffer (= w, contiguous).
     pub fn compact_stride(&self) -> usize {
-        self.w_bytes
+        self.w
     }
 }
 
-impl Deref for CopyGuard<'_> {
-    type Target = [u8];
-    fn deref(&self) -> &[u8] {
+impl<P: Copy + FromBytes + IntoBytes + Immutable> Deref for CopyGuard<'_, P> {
+    type Target = [P];
+    fn deref(&self) -> &[P] {
         &self.buf
     }
 }
 
-impl DerefMut for CopyGuard<'_> {
-    fn deref_mut(&mut self) -> &mut [u8] {
+impl<P: Copy + FromBytes + IntoBytes + Immutable> DerefMut for CopyGuard<'_, P> {
+    fn deref_mut(&mut self) -> &mut [P] {
         &mut self.buf
     }
 }
 
-impl Drop for CopyGuard<'_> {
+impl<P: Copy + FromBytes + IntoBytes + Immutable> Drop for CopyGuard<'_, P> {
     fn drop(&mut self) {
+        let pixel_size = core::mem::size_of::<P>();
+        let byte_stride = self.pic.stride();
         // Copy-out: write each modified row back via narrow per-row guard
         for y in 0..self.h {
-            let src_start = y * self.w_bytes;
-            let src = &self.buf[src_start..src_start + self.w_bytes];
-            let row_byte_off = y as isize * self.byte_stride;
+            let row_byte_off = y as isize * byte_stride;
             let row_start = if row_byte_off >= 0 {
                 self.pic.offset + row_byte_off as usize
             } else {
                 self.pic.offset - (-row_byte_off) as usize
             };
-            let mut guard = self.pic.data.slice_mut_bytes(row_start, self.w_bytes);
-            guard.copy_from_slice(src);
+            let mut guard =
+                self.pic
+                    .data
+                    .slice_mut_bytes(row_start * pixel_size, self.w * pixel_size);
+            let dst_pixels: &mut [P] = FromBytes::mut_from_bytes(&mut *guard).unwrap();
+            dst_pixels[..self.w].copy_from_slice(&self.buf[y * self.w..(y + 1) * self.w]);
         }
     }
 }

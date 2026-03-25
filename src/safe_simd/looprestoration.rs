@@ -175,7 +175,7 @@ fn wiener_filter7_8bpc_avx2_inner(
     let v_rounding = _mm256_set1_epi32(rounding_off_v);
 
     // Single guard for entire output region
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth8>(w, h);
+    let (mut p_guard, p_base, p_stride) = p.strided_slice_mut::<BitDepth8>(w, h);
     for j in 0..h {
         let row_off = p_base.wrapping_add_signed(j as isize * stride);
         let mut i = 0usize;
@@ -380,7 +380,7 @@ fn wiener_filter7_8bpc_avx512_inner(
     let v_rounding = _mm512_set1_epi32(rounding_off_v);
     let zero_512 = _mm512_setzero_si512();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth8>(w, h);
+    let (mut p_guard, p_base, p_stride) = p.strided_slice_mut::<BitDepth8>(w, h);
     for j in 0..h {
         let row_off = p_base.wrapping_add_signed(j as isize * stride);
         let mut i = 0usize;
@@ -659,7 +659,7 @@ fn wiener_filter7_16bpc_avx512_inner(
     let zero_512 = _mm512_setzero_si512();
     let max_512 = _mm512_set1_epi32(bitdepth_max);
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth16>(w, h);
+    let (mut p_guard, p_base, p_stride) = p.strided_slice_mut::<BitDepth16>(w, h);
     for j in 0..h {
         let row_off = p_base.wrapping_add_signed(j as isize * stride);
         let mut i = 0usize;
@@ -893,7 +893,7 @@ fn wiener_filter7_16bpc_avx2_inner(
     let v_max = _mm256_set1_epi32(bitdepth_max);
     let v_zero = _mm256_setzero_si256();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth16>(w, h);
+    let (mut p_guard, p_base, p_stride) = p.strided_slice_mut::<BitDepth16>(w, h);
     for j in 0..h {
         let row_off = p_base.wrapping_add_signed(j as isize * stride);
         let mut i = 0usize;
@@ -3461,7 +3461,7 @@ fn sgr_5x5_8bpc_avx2_inner(
     let w0 = sgr.w0 as i32;
     let stride = p.pixel_stride::<BitDepth8>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth8>(w, h);
+    let (mut p_guard, p_base, p_stride) = p.strided_slice_mut::<BitDepth8>(w, h);
     if let Some(token) = summon_avx2() {
         sgr_apply_8bpc(token, &mut p_guard, p_base, stride, &dst, w, h, w0);
     } else {
@@ -3510,7 +3510,7 @@ fn sgr_3x3_8bpc_avx2_inner(
     let w1 = sgr.w1 as i32;
     let stride = p.pixel_stride::<BitDepth8>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth8>(w, h);
+    let (mut p_guard, p_base, p_stride) = p.strided_slice_mut::<BitDepth8>(w, h);
     if let Some(token) = summon_avx2() {
         sgr_apply_8bpc(token, &mut p_guard, p_base, stride, &dst, w, h, w1);
     } else {
@@ -3567,7 +3567,7 @@ fn sgr_mix_8bpc_avx2_inner(
     let w1 = sgr.w1 as i32;
     let stride = p.pixel_stride::<BitDepth8>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth8>(w, h);
+    let (mut p_guard, p_base, p_stride) = p.strided_slice_mut::<BitDepth8>(w, h);
     if let Some(token) = summon_avx2() {
         sgr_apply_mix_8bpc(
             token,
@@ -5447,7 +5447,7 @@ fn sgr_5x5_16bpc_avx2_inner(
     let w0 = sgr.w0 as i32;
     let stride = p.pixel_stride::<BitDepth16>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth16>(w, h);
+    let (mut p_guard, p_base, p_stride) = p.strided_slice_mut::<BitDepth16>(w, h);
     if let Some(token) = summon_avx2() {
         sgr_apply_16bpc(
             token,
@@ -5510,7 +5510,7 @@ fn sgr_3x3_16bpc_avx2_inner(
     let w1 = sgr.w1 as i32;
     let stride = p.pixel_stride::<BitDepth16>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth16>(w, h);
+    let (mut p_guard, p_base, p_stride) = p.strided_slice_mut::<BitDepth16>(w, h);
     if let Some(token) = summon_avx2() {
         sgr_apply_16bpc(
             token,
@@ -5581,7 +5581,7 @@ fn sgr_mix_16bpc_avx2_inner(
     let w1 = sgr.w1 as i32;
     let stride = p.pixel_stride::<BitDepth16>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth16>(w, h);
+    let (mut p_guard, p_base, p_stride) = p.strided_slice_mut::<BitDepth16>(w, h);
     if let Some(token) = summon_avx2() {
         sgr_apply_mix_16bpc(
             token,

@@ -16335,7 +16335,7 @@ pub fn itxfm_add_dispatch<BD: BitDepth>(
 
         match BD::BPC {
             BPC::BPC8 => {
-                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
+                let (mut guard, base, _byte_stride) = dst.strided_slice_mut::<BD>(w, h);
                 let dst_u8: &mut [u8] = guard.as_mut_bytes();
                 itxfm_dispatch_8bpc(
                     token,
@@ -16351,7 +16351,7 @@ pub fn itxfm_add_dispatch<BD: BitDepth>(
                 )
             }
             BPC::BPC16 => {
-                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
+                let (mut guard, base, _byte_stride) = dst.strided_slice_mut::<BD>(w, h);
                 let dst_bytes: &mut [u8] = guard.as_mut_bytes();
                 let dst_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(dst_bytes)
                     .expect("dst alignment/size mismatch for u16 reinterpretation");
@@ -16399,7 +16399,7 @@ pub fn itxfm_add_dispatch<BD: BitDepth>(
     let (w, h) = txfm.to_wh();
 
     // Create tracked guard — ensures borrow tracker knows about this access
-    let (mut dst_guard, _dst_base) = dst.strided_slice_mut::<BD>(w, h);
+    let (mut dst_guard, _dst_base, _byte_stride) = dst.strided_slice_mut::<BD>(w, h);
     let dst_ptr: *mut DynPixel = dst_guard.as_mut_bytes().as_mut_ptr() as *mut DynPixel;
     let dst_stride = dst.stride();
     let coeff_len = coeff.len() as u16;

@@ -4914,11 +4914,10 @@ pub fn intra_pred_dispatch<BD: BitDepth>(
 
     let w = width as usize;
     let h = height as usize;
-    let byte_stride = dst.stride();
     let bd_c = bd.into_c();
 
     // Create tracked guard for the dst pixel region
-    let (mut dst_guard, dst_base) = dst.strided_slice_mut::<BD>(w, h);
+    let (mut dst_guard, dst_base, byte_stride) = dst.strided_slice_mut::<BD>(w, h);
     let dst_base_bytes = dst_base * std::mem::size_of::<BD::Pixel>();
 
     // Get byte-level views (safe via zerocopy IntoBytes)
