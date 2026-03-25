@@ -1419,28 +1419,47 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
     // Inner function receives b4_stridea=1, b4_strideb=1, lvl_base=1.
     let mut lvl_local = [[0u8; 4]; 34]; // 1 lookback + 32 forward + 1 spare
     {
-        // Gather per-entry to avoid holding a wide guard that would overlap
-        // with concurrent level cache writes from other tile threads.
+        // Gather level entries to a stack buffer, then drop the guard immediately.
+        // Uses strided tracking when entries are sparse (vertical filtering),
+        // or a single contiguous guard when entries are dense (horizontal filtering).
         let lvl_len = lvl.data.len();
+        let entry_width = 4usize;
 
         // Entry 0 in lvl_local = lookback entry
         if let Some(lookback_entry) = lvl_base_entry.checked_sub(b4_strideb_entries) {
-            let byte_off = lookback_entry * 4;
-            if byte_off + 4 <= lvl_len {
-                let guard = lvl.data.index(byte_off..byte_off + 4);
+            let byte_off = lookback_entry * entry_width;
+            if byte_off + entry_width <= lvl_len {
+                let guard = lvl.data.index(byte_off..byte_off + entry_width);
                 lvl_local[0] = *zerocopy::FromBytes::ref_from_bytes(&*guard)
                     .unwrap_or(&[0u8; 4]);
             }
         }
 
-        // Entries 1..=max_iter = forward entries at stride b4_stridea
-        for i in 0..max_iter {
-            let entry_idx = lvl_base_entry + i * b4_stridea_entries;
-            let byte_off = entry_idx * 4;
-            if byte_off + 4 <= lvl_len {
-                let guard = lvl.data.index(byte_off..byte_off + 4);
-                lvl_local[1 + i] = *zerocopy::FromBytes::ref_from_bytes(&*guard)
-                    .unwrap_or(&[0u8; 4]);
+        // Entries 1..=max_iter at stride b4_stridea
+        if max_iter > 0 {
+            let first_byte = lvl_base_entry * entry_width;
+            let last_entry = lvl_base_entry + (max_iter - 1) * b4_stridea_entries;
+            let last_byte_end = (last_entry + 1) * entry_width;
+            let byte_end = last_byte_end.min(lvl_len);
+            if first_byte < byte_end {
+                let byte_stride = b4_stridea_entries * entry_width;
+                let guard = if byte_stride <= entry_width {
+                    // Dense (horizontal): consecutive entries, one contiguous guard
+                    lvl.data.index(first_byte..byte_end)
+                } else {
+                    // Sparse (vertical): strided guard to avoid overlap
+                    lvl.data.index_strided(first_byte..byte_end, byte_stride, entry_width)
+                };
+                let src: &[u8] = &*guard;
+                for i in 0..max_iter {
+                    let src_off = i * b4_stridea_entries * entry_width;
+                    if src_off + entry_width <= src.len() {
+                        lvl_local[1 + i] = *zerocopy::FromBytes::ref_from_bytes(
+                            &src[src_off..src_off + entry_width],
+                        )
+                        .unwrap_or(&[0u8; 4]);
+                    }
+                }
             }
         }
     }
