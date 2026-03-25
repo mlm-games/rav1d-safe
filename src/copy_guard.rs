@@ -33,15 +33,13 @@ impl<'a, P: Copy + FromBytes + IntoBytes + Immutable> CopyGuard<'a, P> {
 
         let mut buf = vec![P::new_zeroed(); w * h];
 
-        // Copy-in: read each row via narrow per-row guard
+        // Copy-in: read each row via narrow per-row guard.
+        // pic.offset is in PIXEL units. byte_stride is in BYTES.
+        // slice_bytes expects BYTE offset and length.
+        let base_byte_offset = pic.offset * pixel_size;
         for y in 0..h {
-            let row_byte_off = y as isize * byte_stride;
-            let row_start = if row_byte_off >= 0 {
-                pic.offset + row_byte_off as usize
-            } else {
-                pic.offset - (-row_byte_off) as usize
-            };
-            let guard = pic.data.slice_bytes(row_start * pixel_size, w * pixel_size);
+            let row_byte_offset = base_byte_offset.wrapping_add_signed(y as isize * byte_stride);
+            let guard = pic.data.slice_bytes(row_byte_offset, w * pixel_size);
             let src_pixels: &[P] = FromBytes::ref_from_bytes(&*guard).unwrap();
             buf[y * w..(y + 1) * w].copy_from_slice(&src_pixels[..w]);
         }
@@ -78,18 +76,15 @@ impl<P: Copy + FromBytes + IntoBytes + Immutable> Drop for CopyGuard<'_, P> {
     fn drop(&mut self) {
         let pixel_size = core::mem::size_of::<P>();
         let byte_stride = self.pic.stride();
-        // Copy-out: write each modified row back via narrow per-row guard
+        // Copy-out: write each modified row back via narrow per-row guard.
+        let base_byte_offset = self.pic.offset * pixel_size;
         for y in 0..self.h {
-            let row_byte_off = y as isize * byte_stride;
-            let row_start = if row_byte_off >= 0 {
-                self.pic.offset + row_byte_off as usize
-            } else {
-                self.pic.offset - (-row_byte_off) as usize
-            };
+            let row_byte_offset =
+                base_byte_offset.wrapping_add_signed(y as isize * byte_stride);
             let mut guard =
                 self.pic
                     .data
-                    .slice_mut_bytes(row_start * pixel_size, self.w * pixel_size);
+                    .slice_mut_bytes(row_byte_offset, self.w * pixel_size);
             let dst_pixels: &mut [P] = FromBytes::mut_from_bytes(&mut *guard).unwrap();
             dst_pixels[..self.w].copy_from_slice(&self.buf[y * self.w..(y + 1) * self.w]);
         }

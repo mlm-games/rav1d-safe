@@ -649,19 +649,18 @@ impl<'a> Rav1dPictureDataComponentOffset<'a> {
         usize,
         isize, // pixel stride
     ) {
-        let byte_stride = self.stride();
         let pxstride = self.data.pixel_stride::<BD>();
         if pxstride >= 0 {
             let abs_pxstride = pxstride as usize;
             let total = if h == 0 { 0 } else { (h - 1) * abs_pxstride + w };
             let guard = self.data.slice_mut::<BD, _>((self.offset.., ..total));
-            (guard, 0, byte_stride)
+            (guard, 0, pxstride)
         } else {
             let abs_pxstride = pxstride.unsigned_abs();
             let total = if h == 0 { 0 } else { (h - 1) * abs_pxstride + w };
             let start = self.offset - (h - 1) * abs_pxstride;
             let guard = self.data.slice_mut::<BD, _>((start.., ..total));
-            (guard, (h - 1) * abs_pxstride, byte_stride)
+            (guard, (h - 1) * abs_pxstride, pxstride)
         }
     }
 
@@ -683,8 +682,7 @@ impl<'a> Rav1dPictureDataComponentOffset<'a> {
         BD::Pixel: zerocopy::FromBytes + zerocopy::IntoBytes,
     {
         let guard = crate::src::copy_guard::CopyGuard::new::<BD>(*self, w, h);
-        let byte_stride = (w * core::mem::size_of::<BD::Pixel>()) as isize;
-        (guard, 0, byte_stride)
+        (guard, 0, w as isize) // pixel stride = w (compact, no gaps)
     }
 
     /// Create a tracked immutable guard covering a strided w×h pixel region.
