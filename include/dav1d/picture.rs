@@ -615,6 +615,10 @@ impl<'a> Rav1dPictureDataComponentOffset<'a> {
         DisjointMutGuard<'a, Rav1dPictureDataComponentInner, [BD::Pixel]>,
         usize,
     ) {
+        // Single-threaded: use full_guard (original fast path, no narrow range)
+        if !crate::src::cpu::is_multithreaded() {
+            return self.full_guard_mut::<BD>();
+        }
         let pxstride = self.data.pixel_stride::<BD>();
         let abs_stride = pxstride.unsigned_abs();
         if pxstride >= 0 {
@@ -652,6 +656,9 @@ impl<'a> Rav1dPictureDataComponentOffset<'a> {
         DisjointImmutGuard<'a, Rav1dPictureDataComponentInner, [BD::Pixel]>,
         usize,
     ) {
+        if !crate::src::cpu::is_multithreaded() {
+            return self.full_guard::<BD>();
+        }
         let pxstride = self.data.pixel_stride::<BD>();
         let abs_stride = pxstride.unsigned_abs();
         if pxstride >= 0 {

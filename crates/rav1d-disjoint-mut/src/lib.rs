@@ -1133,18 +1133,22 @@ mod checked {
     /// If all 64 inline slots are occupied, borrows spill into a Vec that
     /// is allocated on demand. The Vec is never touched if inline capacity
     /// suffices.
+    /// Lazily-allocated stride info, only created when strided borrows are used.
+    /// Keeps the hot BorrowSlots struct small for single-threaded decoders.
+    struct StrideInfo {
+        strides: [usize; INLINE_SLOTS],
+        widths: [usize; INLINE_SLOTS],
+    }
+
     struct BorrowSlots {
         // Parallel arrays for cache efficiency during overlap scans.
         starts: [usize; INLINE_SLOTS],
         ends: [usize; INLINE_SLOTS],
         mutable: [bool; INLINE_SLOTS],
-        /// Stride info for strided borrows. stride=0 means contiguous (default).
-        /// When stride > 0, the borrow covers rows of `width` elements separated
-        /// by `stride` elements, enabling 2D rectangle overlap checks.
-        strides: [usize; INLINE_SLOTS],
-        widths: [usize; INLINE_SLOTS],
         /// Bitmask of occupied inline slots. Bit `i` set iff slot `i` is active.
         occupied: u64,
+        /// Stride info — only allocated when strided borrows are registered.
+        stride_info: Option<Box<StrideInfo>>,
         /// Overflow storage, allocated only when >64 concurrent borrows.
         /// (start, end, mutable, stride, width)
         overflow: Vec<(usize, usize, bool, usize, usize)>,
@@ -1159,11 +1163,20 @@ mod checked {
                 starts: [0; INLINE_SLOTS],
                 ends: [0; INLINE_SLOTS],
                 mutable: [false; INLINE_SLOTS],
-                strides: [0; INLINE_SLOTS],
-                widths: [0; INLINE_SLOTS],
                 occupied: 0,
+                stride_info: None,
                 overflow: Vec::new(),
             }
+        }
+
+        /// Get or create stride info for strided borrow registration.
+        fn stride_info_mut(&mut self) -> &mut StrideInfo {
+            self.stride_info.get_or_insert_with(|| {
+                Box::new(StrideInfo {
+                    strides: [0; INLINE_SLOTS],
+                    widths: [0; INLINE_SLOTS],
+                })
+            })
         }
 
         /// Allocate a slot and return its BorrowId encoding.
@@ -1192,8 +1205,11 @@ mod checked {
                 self.starts[free] = start;
                 self.ends[free] = end;
                 self.mutable[free] = is_mutable;
-                self.strides[free] = stride;
-                self.widths[free] = width;
+                if stride > 0 {
+                    let si = self.stride_info_mut();
+                    si.strides[free] = stride;
+                    si.widths[free] = width;
+                }
                 self.occupied |= 1u64 << free;
                 free as u8
             } else {
@@ -1347,15 +1363,14 @@ mod checked {
             let mut mask = self.occupied;
             while mask != 0 {
                 let i = mask.trailing_zeros() as usize;
+                let (i_stride, i_width) = self
+                    .stride_info
+                    .as_ref()
+                    .map(|si| (si.strides[i], si.widths[i]))
+                    .unwrap_or((0, 0));
                 if Self::ranges_overlap(
-                    start,
-                    end,
-                    stride,
-                    width,
-                    self.starts[i],
-                    self.ends[i],
-                    self.strides[i],
-                    self.widths[i],
+                    start, end, stride, width,
+                    self.starts[i], self.ends[i], i_stride, i_width,
                 ) {
                     return Some((self.starts[i], self.ends[i], self.mutable[i]));
                 }
@@ -1401,16 +1416,15 @@ mod checked {
             let mut mask = self.occupied;
             while mask != 0 {
                 let i = mask.trailing_zeros() as usize;
+                let (i_stride, i_width) = self
+                    .stride_info
+                    .as_ref()
+                    .map(|si| (si.strides[i], si.widths[i]))
+                    .unwrap_or((0, 0));
                 if self.mutable[i]
                     && Self::ranges_overlap(
-                        start,
-                        end,
-                        stride,
-                        width,
-                        self.starts[i],
-                        self.ends[i],
-                        self.strides[i],
-                        self.widths[i],
+                        start, end, stride, width,
+                        self.starts[i], self.ends[i], i_stride, i_width,
                     )
                 {
                     return Some((self.starts[i], self.ends[i], true));

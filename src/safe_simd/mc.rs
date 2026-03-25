@@ -11365,6 +11365,11 @@ fn narrow_src_guard<'a, BD: BitDepth>(
     rav1d_disjoint_mut::DisjointImmutGuard<'a, crate::include::dav1d::picture::Rav1dPictureDataComponentInner, [BD::Pixel]>,
     usize,
 ) {
+    // Single-threaded: no concurrent access, full_guard is fine and faster
+    if !crate::src::cpu::is_multithreaded() {
+        return src.full_guard::<BD>();
+    }
+
     use crate::src::strided::Strided as _;
     let pxstride = src.data.pixel_stride::<BD>();
     let abs_stride = pxstride.unsigned_abs();
@@ -11374,7 +11379,6 @@ fn narrow_src_guard<'a, BD: BitDepth>(
         return src.full_guard::<BD>();
     }
 
-    // Compute ideal read region, then clamp to buffer bounds
     let ideal_extend_back = filter_extend * abs_stride + filter_extend;
     let start = src.offset.saturating_sub(ideal_extend_back);
     let base_in_guard = src.offset - start;
@@ -11395,8 +11399,12 @@ fn narrow_src_guard<'a, BD: BitDepth>(
 /// Check if a dst block crosses a 64-row aligned boundary.
 /// When it does, fall back to scalar (per-row guards) to avoid overlapping
 /// mutable guards between concurrent tile threads at SB row boundaries.
+/// Returns false for single-threaded decoders (no concurrent access).
 #[inline(always)]
 pub(crate) fn crosses_sb_boundary<BD: BitDepth>(dst: &PicOffset, h: i32) -> bool {
+    if !crate::src::cpu::is_multithreaded() {
+        return false;
+    }
     use crate::src::strided::Strided as _;
     let stride = dst.data.pixel_stride::<BD>();
     if stride == 0 || h <= 1 {
