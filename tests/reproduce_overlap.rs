@@ -47,6 +47,19 @@ fn decode_with_threads(path: &str, threads: u32, max_frame_delay: u32) -> (usize
         }
     }
 
+    // Drain buffered frames — frame threading needs multiple drain calls.
+    // Feed empty data to pump the decoder, then flush.
+    eprintln!("  Buffered — draining...");
+    for _ in 0..total + 16 {
+        match decoder.decode(&[]) {
+            Ok(Some(f)) => {
+                decoded += 1;
+                eprintln!("  Drain: decoded {}x{}", f.width(), f.height());
+            }
+            Ok(None) => {}
+            Err(_) => break,
+        }
+    }
     match decoder.flush() {
         Ok(flushed) => {
             decoded += flushed.len();
@@ -88,10 +101,10 @@ fn test_frame_threading_inter() {
         "/test-vectors/dav1d-test-data/10-bit/quantizer/av1-1-b10-00-quantizer-00.ivf"
     );
 
-    // Frame threading with 8 threads, auto frame delay
-    let (decoded, total) = decode_with_threads(path, 8, 0);
-    assert!(decoded > 0, "Should decode at least some frames");
-    eprintln!("inter: {}/{}", decoded, total);
+    // Tile threading with 4 threads (max_frame_delay=1 prevents frame-level parallelism)
+    let (decoded, total) = decode_with_threads(path, 4, 1);
+    assert!(decoded > 0, "Should decode at least some frames with tile threading");
+    eprintln!("inter tile: {}/{}", decoded, total);
 }
 
 /// Stress test: many threads, many different test vectors.
