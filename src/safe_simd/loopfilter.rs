@@ -1442,25 +1442,23 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
             let last_byte_end = (last_entry + 1) * entry_width;
             let byte_end = last_byte_end.min(lvl_len);
             if first_byte < byte_end {
-                let byte_stride = b4_stridea_entries * entry_width;
-                // Always use strided tracking. For dense (horizontal) filtering
-                // where entries are consecutive (byte_stride=4), use the level
-                // cache row stride so the 2D check can distinguish tile rows.
-                let track_stride = if byte_stride <= entry_width {
-                    // Dense: use level cache row stride for 2D tracking
-                    b4_strideb_entries * entry_width
-                } else {
-                    byte_stride
+                #[cfg(feature = "mt")]
+                let guard = {
+                    let byte_stride = b4_stridea_entries * entry_width;
+                    let track_stride = if byte_stride <= entry_width {
+                        b4_strideb_entries * entry_width
+                    } else {
+                        byte_stride
+                    };
+                    let track_width = if byte_stride <= entry_width {
+                        (max_iter * entry_width).min(track_stride)
+                    } else {
+                        entry_width
+                    };
+                    lvl.data.index_strided(first_byte..byte_end, track_stride, track_width)
                 };
-                let track_width = if byte_stride <= entry_width {
-                    // Dense: width is the number of consecutive entries per row
-                    (max_iter * entry_width).min(track_stride)
-                } else {
-                    entry_width
-                };
-                let guard = lvl.data.index_strided(
-                    first_byte..byte_end, track_stride, track_width,
-                );
+                #[cfg(not(feature = "mt"))]
+                let guard = lvl.data.index(first_byte..byte_end);
                 let src: &[u8] = &*guard;
                 for i in 0..max_iter {
                     let src_off = i * b4_stridea_entries * entry_width;
@@ -1506,22 +1504,29 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 return false;
             }
 
-            // Check if the filter reach crosses a 64-row SB boundary.
-            // When it does, fall back to scalar (per-row guards) to avoid
-            // overlapping guards with concurrent tile threads at SB boundaries.
             let start_pixel = dst.offset - reach_before;
             let total_pixels = (reach_before + reach_after).min(buf_pixel_len - start_pixel);
-            let start_row = start_pixel / byte_stride;
-            let end_row = (start_pixel + total_pixels + byte_stride - 1) / byte_stride;
-            if (start_row >> 6) != ((end_row - 1) >> 6) {
-                return false; // crosses SB boundary — scalar handles per-row
+
+            #[cfg(feature = "mt")]
+            {
+                // Check if the filter reach crosses a 64-row SB boundary.
+                let start_row = start_pixel / byte_stride;
+                let end_row = (start_pixel + total_pixels + byte_stride - 1) / byte_stride;
+                if (start_row >> 6) != ((end_row - 1) >> 6) {
+                    return false; // crosses SB boundary — scalar handles per-row
+                }
             }
-            // Width is w (the block width being filtered) + filter tap extent (16+7=23)
-            let guard_width = (w as usize + 23).min(byte_stride);
-            let mut buf_guard = dst.data.dm().mut_slice_as_strided::<_, u8>(
+
+            #[cfg(feature = "mt")]
+            let mut buf_guard = {
+                let guard_width = (w as usize + 23).min(byte_stride);
+                dst.data.dm().mut_slice_as_strided::<_, u8>(
+                    (start_pixel.., ..total_pixels), byte_stride, guard_width,
+                )
+            };
+            #[cfg(not(feature = "mt"))]
+            let mut buf_guard = dst.data.slice_mut::<BitDepth8, _>(
                 (start_pixel.., ..total_pixels),
-                byte_stride,
-                guard_width,
             );
             let buf: &mut [u8] = &mut *buf_guard;
             let base = reach_before;

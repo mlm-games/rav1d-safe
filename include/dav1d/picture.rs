@@ -615,33 +615,32 @@ impl<'a> Rav1dPictureDataComponentOffset<'a> {
         DisjointMutGuard<'a, Rav1dPictureDataComponentInner, [BD::Pixel]>,
         usize,
     ) {
-        // Single-threaded: use full_guard (original fast path, no narrow range)
-        if !crate::src::cpu::is_multithreaded() {
+        #[cfg(not(feature = "mt"))]
+        {
+            let _ = (w, h);
             return self.full_guard_mut::<BD>();
         }
-        let pxstride = self.data.pixel_stride::<BD>();
-        let abs_stride = pxstride.unsigned_abs();
-        if pxstride >= 0 {
-            let total = if h == 0 {
-                0
+        #[cfg(feature = "mt")]
+        {
+            if !crate::src::cpu::is_multithreaded() {
+                return self.full_guard_mut::<BD>();
+            }
+            let pxstride = self.data.pixel_stride::<BD>();
+            let abs_stride = pxstride.unsigned_abs();
+            if pxstride >= 0 {
+                let total = if h == 0 { 0 } else { (h - 1) * abs_stride + w };
+                let guard = self.data.dm().mut_slice_as_strided::<_, BD::Pixel>(
+                    (self.offset.., ..total), abs_stride, w,
+                );
+                (guard, 0)
             } else {
-                (h - 1) * abs_stride + w
-            };
-            let guard = self.data.dm().mut_slice_as_strided::<_, BD::Pixel>(
-                (self.offset.., ..total),
-                abs_stride,
-                w,
-            );
-            (guard, 0)
-        } else {
-            let total = if h == 0 { 0 } else { (h - 1) * abs_stride + w };
-            let start = self.offset - (h - 1) * abs_stride;
-            let guard = self.data.dm().mut_slice_as_strided::<_, BD::Pixel>(
-                (start.., ..total),
-                abs_stride,
-                w,
-            );
-            (guard, (h - 1) * abs_stride)
+                let total = if h == 0 { 0 } else { (h - 1) * abs_stride + w };
+                let start = self.offset - (h - 1) * abs_stride;
+                let guard = self.data.dm().mut_slice_as_strided::<_, BD::Pixel>(
+                    (start.., ..total), abs_stride, w,
+                );
+                (guard, (h - 1) * abs_stride)
+            }
         }
     }
 
@@ -656,32 +655,32 @@ impl<'a> Rav1dPictureDataComponentOffset<'a> {
         DisjointImmutGuard<'a, Rav1dPictureDataComponentInner, [BD::Pixel]>,
         usize,
     ) {
-        if !crate::src::cpu::is_multithreaded() {
+        #[cfg(not(feature = "mt"))]
+        {
+            let _ = (w, h);
             return self.full_guard::<BD>();
         }
-        let pxstride = self.data.pixel_stride::<BD>();
-        let abs_stride = pxstride.unsigned_abs();
-        if pxstride >= 0 {
-            let total = if h == 0 {
-                0
+        #[cfg(feature = "mt")]
+        {
+            if !crate::src::cpu::is_multithreaded() {
+                return self.full_guard::<BD>();
+            }
+            let pxstride = self.data.pixel_stride::<BD>();
+            let abs_stride = pxstride.unsigned_abs();
+            if pxstride >= 0 {
+                let total = if h == 0 { 0 } else { (h - 1) * abs_stride + w };
+                let guard = self.data.dm().slice_as_strided::<_, BD::Pixel>(
+                    (self.offset.., ..total), abs_stride, w,
+                );
+                (guard, 0)
             } else {
-                (h - 1) * abs_stride + w
-            };
-            let guard = self.data.dm().slice_as_strided::<_, BD::Pixel>(
-                (self.offset.., ..total),
-                abs_stride,
-                w,
-            );
-            (guard, 0)
-        } else {
-            let total = if h == 0 { 0 } else { (h - 1) * abs_stride + w };
-            let start = self.offset - (h - 1) * abs_stride;
-            let guard = self.data.dm().slice_as_strided::<_, BD::Pixel>(
-                (start.., ..total),
-                abs_stride,
-                w,
-            );
-            (guard, (h - 1) * abs_stride)
+                let total = if h == 0 { 0 } else { (h - 1) * abs_stride + w };
+                let start = self.offset - (h - 1) * abs_stride;
+                let guard = self.data.dm().slice_as_strided::<_, BD::Pixel>(
+                    (start.., ..total), abs_stride, w,
+                );
+                (guard, (h - 1) * abs_stride)
+            }
         }
     }
 
