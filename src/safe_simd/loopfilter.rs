@@ -1419,44 +1419,30 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
     // Inner function receives b4_stridea=1, b4_strideb=1, lvl_base=1.
     let mut lvl_local = [[0u8; 4]; 34]; // 1 lookback + 32 forward + 1 spare
     {
-        // Brief guard: acquire, gather, drop
-        let lvl_gather_start = lvl_base_entry.saturating_sub(b4_strideb_entries);
-        let lvl_gather_end_entry = lvl_base_entry + max_iter * b4_stridea_entries;
-        let byte_start = lvl_gather_start * 4;
-        let byte_end = ((lvl_gather_end_entry + 1) * 4).min(lvl.data.len());
-        if byte_start < byte_end {
-            // Use strided tracking: we read ~32 entries at stride b4_stridea,
-            // spanning the full level cache stripe. Strided tracking avoids false
-            // overlap with concurrent writes to adjacent tile rows' entries.
-            let entry_width = 4usize; // each level entry is [u8; 4]
-            let byte_stride = b4_stridea_entries * entry_width;
-            let guard = lvl.data.index_strided(
-                byte_start..byte_end,
-                byte_stride,
-                entry_width,
-            );
-            let src: &[[u8; 4]] =
-                zerocopy::FromBytes::ref_from_bytes(&*guard).unwrap_or(&[]);
+        // Gather per-entry to avoid holding a wide guard that would overlap
+        // with concurrent level cache writes from other tile threads.
+        let lvl_len = lvl.data.len();
 
-            // Entry 0 in lvl_local = lookback entry
-            let lookback_src = lvl_base_entry
-                .checked_sub(b4_strideb_entries)
-                .and_then(|idx| idx.checked_sub(lvl_gather_start))
-                .and_then(|idx| src.get(idx));
-            if let Some(entry) = lookback_src {
-                lvl_local[0] = *entry;
-            }
-
-            // Entries 1..=max_iter = forward entries at stride b4_stridea
-            let base_in_src = lvl_base_entry - lvl_gather_start;
-            for i in 0..max_iter {
-                let src_idx = base_in_src + i * b4_stridea_entries;
-                if let Some(entry) = src.get(src_idx) {
-                    lvl_local[1 + i] = *entry;
-                }
+        // Entry 0 in lvl_local = lookback entry
+        if let Some(lookback_entry) = lvl_base_entry.checked_sub(b4_strideb_entries) {
+            let byte_off = lookback_entry * 4;
+            if byte_off + 4 <= lvl_len {
+                let guard = lvl.data.index(byte_off..byte_off + 4);
+                lvl_local[0] = *zerocopy::FromBytes::ref_from_bytes(&*guard)
+                    .unwrap_or(&[0u8; 4]);
             }
         }
-        // guard dropped here — DisjointMut immutable borrow released
+
+        // Entries 1..=max_iter = forward entries at stride b4_stridea
+        for i in 0..max_iter {
+            let entry_idx = lvl_base_entry + i * b4_stridea_entries;
+            let byte_off = entry_idx * 4;
+            if byte_off + 4 <= lvl_len {
+                let guard = lvl.data.index(byte_off..byte_off + 4);
+                lvl_local[1 + i] = *zerocopy::FromBytes::ref_from_bytes(&*guard)
+                    .unwrap_or(&[0u8; 4]);
+            }
+        }
     }
     let lvl_slice: &[[u8; 4]] = &lvl_local[..];
     // Inner function will use: lvl_base=1, b4_stridea=1, b4_strideb=1
@@ -1490,12 +1476,18 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 return false;
             }
 
-            // Safe slice access: get a mutable guard covering the full filter reach
+            // Safe slice access: get a mutable guard covering the full filter reach.
+            // Use strided tracking so concurrent tile threads working on different
+            // columns don't trigger false overlap on shared rows.
             let start_pixel = dst.offset - reach_before;
             let total_pixels = (reach_before + reach_after).min(buf_pixel_len - start_pixel);
-            let mut buf_guard = dst
-                .data
-                .slice_mut::<BitDepth8, _>((start_pixel.., ..total_pixels));
+            // Width is w (the block width being filtered) + filter tap extent (16+7=23)
+            let guard_width = (w as usize + 23).min(byte_stride);
+            let mut buf_guard = dst.data.dm().mut_slice_as_strided::<_, u8>(
+                (start_pixel.., ..total_pixels),
+                byte_stride,
+                guard_width,
+            );
             let buf: &mut [u8] = &mut *buf_guard;
             let base = reach_before;
 

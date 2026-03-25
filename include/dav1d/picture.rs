@@ -343,7 +343,7 @@ pub struct Rav1dPictureDataComponent {
 impl Rav1dPictureDataComponent {
     /// Access the inner [`DisjointMut`].
     #[inline(always)]
-    fn dm(&self) -> &DisjointMut<Rav1dPictureDataComponentInner> {
+    pub(crate) fn dm(&self) -> &DisjointMut<Rav1dPictureDataComponentInner> {
         &self.data
     }
 
