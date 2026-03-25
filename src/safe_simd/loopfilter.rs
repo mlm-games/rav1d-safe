@@ -1419,35 +1419,59 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
     // Inner function receives b4_stridea=1, b4_strideb=1, lvl_base=1.
     let mut lvl_local = [[0u8; 4]; 34]; // 1 lookback + 32 forward + 1 spare
     {
-        // Brief guard: acquire, gather, drop
-        let lvl_gather_start = lvl_base_entry.saturating_sub(b4_strideb_entries);
-        let lvl_gather_end_entry = lvl_base_entry + max_iter * b4_stridea_entries;
-        let byte_start = lvl_gather_start * 4;
-        let byte_end = ((lvl_gather_end_entry + 1) * 4).min(lvl.data.len());
-        if byte_start < byte_end {
-            let guard = lvl.data.index(byte_start..byte_end);
-            let src: &[[u8; 4]] =
-                zerocopy::FromBytes::ref_from_bytes(&*guard).unwrap_or(&[]);
+        let lvl_len = lvl.data.len();
+        let entry_width = 4usize;
 
-            // Entry 0 in lvl_local = lookback entry
-            let lookback_src = lvl_base_entry
-                .checked_sub(b4_strideb_entries)
-                .and_then(|idx| idx.checked_sub(lvl_gather_start))
-                .and_then(|idx| src.get(idx));
-            if let Some(entry) = lookback_src {
-                lvl_local[0] = *entry;
+        // Entry 0 = lookback entry
+        if let Some(lookback_entry) = lvl_base_entry.checked_sub(b4_strideb_entries) {
+            let byte_off = lookback_entry * entry_width;
+            if byte_off + entry_width <= lvl_len {
+                let guard = lvl.data.index(byte_off..byte_off + entry_width);
+                lvl_local[0] = *zerocopy::FromBytes::ref_from_bytes(&*guard)
+                    .unwrap_or(&[0u8; 4]);
             }
+        }
 
-            // Entries 1..=max_iter = forward entries at stride b4_stridea
-            let base_in_src = lvl_base_entry - lvl_gather_start;
-            for i in 0..max_iter {
-                let src_idx = base_in_src + i * b4_stridea_entries;
-                if let Some(entry) = src.get(src_idx) {
-                    lvl_local[1 + i] = *entry;
+        // Entries 1..=max_iter at stride b4_stridea.
+        // Use one contiguous guard when entries are dense (b4_stridea=1),
+        // or per-entry guards when sparse, to avoid holding a wide guard
+        // that conflicts with concurrent level cache writes.
+        if max_iter > 0 {
+            let first_byte = lvl_base_entry * entry_width;
+            let last_entry = lvl_base_entry + (max_iter - 1) * b4_stridea_entries;
+            let last_byte_end = (last_entry + 1) * entry_width;
+            let byte_end = last_byte_end.min(lvl_len);
+            if first_byte < byte_end {
+                #[cfg(feature = "mt")]
+                {
+                    // Per-entry gather: narrow guards avoid overlap with concurrent writes
+                    for i in 0..max_iter {
+                        let entry_idx = lvl_base_entry + i * b4_stridea_entries;
+                        let byte_off = entry_idx * entry_width;
+                        if byte_off + entry_width <= lvl_len {
+                            let guard = lvl.data.index(byte_off..byte_off + entry_width);
+                            lvl_local[1 + i] = *zerocopy::FromBytes::ref_from_bytes(&*guard)
+                                .unwrap_or(&[0u8; 4]);
+                        }
+                    }
+                }
+                #[cfg(not(feature = "mt"))]
+                {
+                    // Single wide guard: faster, safe when single-threaded
+                    let guard = lvl.data.index(first_byte..byte_end);
+                    let src: &[u8] = &*guard;
+                    for i in 0..max_iter {
+                        let src_off = i * b4_stridea_entries * entry_width;
+                        if src_off + entry_width <= src.len() {
+                            lvl_local[1 + i] = *zerocopy::FromBytes::ref_from_bytes(
+                                &src[src_off..src_off + entry_width],
+                            )
+                            .unwrap_or(&[0u8; 4]);
+                        }
+                    }
                 }
             }
         }
-        // guard dropped here — DisjointMut immutable borrow released
     }
     let lvl_slice: &[[u8; 4]] = &lvl_local[..];
     // Inner function will use: lvl_base=1, b4_stridea=1, b4_strideb=1

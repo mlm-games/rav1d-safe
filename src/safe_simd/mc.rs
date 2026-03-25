@@ -11461,19 +11461,15 @@ pub fn w_avg_dispatch<BD: BitDepth>(
         return false;
     };
     use zerocopy::IntoBytes;
-    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
     let bd_c = bd.into_c();
+    with_dst!(dst, w, h, BD, |dst_bytes, dst_stride_u| {
     match BD::BPC {
         BPC::BPC8 => {
             if let Some(t512) = avx512_token {
                 w_avg_8bpc_avx512_safe(
                     t512,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    dst_bytes,
+                    dst_stride_u,
                     tmp1,
                     tmp2,
                     w,
@@ -11483,8 +11479,8 @@ pub fn w_avg_dispatch<BD: BitDepth>(
             } else {
                 w_avg_8bpc_avx2_safe(
                     token,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    dst_bytes,
+                    dst_stride_u,
                     tmp1,
                     tmp2,
                     w,
@@ -11497,8 +11493,8 @@ pub fn w_avg_dispatch<BD: BitDepth>(
             if let Some(t512) = avx512_token {
                 w_avg_16bpc_avx512_safe(
                     t512,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    dst_bytes,
+                    dst_stride_u,
                     tmp1,
                     tmp2,
                     w,
@@ -11509,8 +11505,8 @@ pub fn w_avg_dispatch<BD: BitDepth>(
             } else {
                 w_avg_16bpc_avx2_safe(
                     token,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    dst_bytes,
+                    dst_stride_u,
                     tmp1,
                     tmp2,
                     w,
@@ -11521,6 +11517,7 @@ pub fn w_avg_dispatch<BD: BitDepth>(
             }
         }
     }
+    }); // with_dst!
     true
 }
 
@@ -11540,19 +11537,15 @@ pub fn mask_dispatch<BD: BitDepth>(
         return false;
     };
     use zerocopy::IntoBytes;
-    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride() as usize;
     let bd_c = bd.into_c();
+    with_dst!(dst, w, h, BD, |dst_bytes, dst_stride_u| {
     match BD::BPC {
         BPC::BPC8 => {
             if let Some(t512) = avx512_token {
                 mask_8bpc_avx512_safe(
                     t512,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride,
+                    dst_bytes,
+                    dst_stride_u,
                     tmp1,
                     tmp2,
                     w,
@@ -11562,8 +11555,8 @@ pub fn mask_dispatch<BD: BitDepth>(
             } else {
                 mask_8bpc_avx2_safe(
                     token,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride,
+                    dst_bytes,
+                    dst_stride_u,
                     tmp1,
                     tmp2,
                     w,
@@ -11576,8 +11569,8 @@ pub fn mask_dispatch<BD: BitDepth>(
             if let Some(t512) = avx512_token {
                 mask_16bpc_avx512_safe(
                     t512,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride,
+                    dst_bytes,
+                    dst_stride_u,
                     tmp1,
                     tmp2,
                     w,
@@ -11588,8 +11581,8 @@ pub fn mask_dispatch<BD: BitDepth>(
             } else {
                 mask_16bpc_avx2_safe(
                     token,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride,
+                    dst_bytes,
+                    dst_stride_u,
                     tmp1,
                     tmp2,
                     w,
@@ -11600,6 +11593,7 @@ pub fn mask_dispatch<BD: BitDepth>(
             }
         }
     }
+    }); // with_dst!
     true
 }
 
@@ -11616,17 +11610,13 @@ pub fn blend_dispatch<BD: BitDepth>(
         return false;
     };
     use zerocopy::IntoBytes;
-    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride() as usize;
     let tmp_bytes = tmp.as_bytes();
+    with_dst!(dst, w, h, BD, |dst_bytes, dst_stride_u| {
     match BD::BPC {
         BPC::BPC8 => blend_8bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_bytes,
+            dst_stride_u,
             tmp_bytes,
             w,
             h,
@@ -11634,14 +11624,15 @@ pub fn blend_dispatch<BD: BitDepth>(
         ),
         BPC::BPC16 => blend_16bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_bytes,
+            dst_stride_u,
             tmp_bytes,
             w,
             h,
             mask,
         ),
     }
+    }); // with_dst!
     true
 }
 
@@ -11658,46 +11649,43 @@ pub fn blend_dir_dispatch<BD: BitDepth>(
         return false;
     };
     use zerocopy::IntoBytes;
-    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride() as usize;
     let tmp_bytes = tmp.as_bytes();
+    with_dst!(dst, w, h, BD, |dst_bytes, dst_stride_u| {
     match (BD::BPC, is_h) {
         (BPC::BPC8, true) => blend_h_8bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_bytes,
+            dst_stride_u,
             tmp_bytes,
             w,
             h,
         ),
         (BPC::BPC8, false) => blend_v_8bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_bytes,
+            dst_stride_u,
             tmp_bytes,
             w,
             h,
         ),
         (BPC::BPC16, true) => blend_h_16bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_bytes,
+            dst_stride_u,
             tmp_bytes,
             w,
             h,
         ),
         (BPC::BPC16, false) => blend_v_16bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_bytes,
+            dst_stride_u,
             tmp_bytes,
             w,
             h,
         ),
     }
+    }); // with_dst!
     true
 }
 
@@ -11718,17 +11706,13 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
         return false;
     };
     use zerocopy::IntoBytes;
-    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride() as usize;
     let bd_c = bd.into_c();
+    with_dst!(dst, w, h, BD, |dst_bytes, dst_stride_u| {
     match (BD::BPC, layout) {
         (BPC::BPC8, Rav1dPixelLayoutSubSampled::I420) => w_mask_420_8bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_bytes,
+            dst_stride_u,
             tmp1,
             tmp2,
             w,
@@ -11738,8 +11722,8 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
         ),
         (BPC::BPC8, Rav1dPixelLayoutSubSampled::I422) => w_mask_422_8bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_bytes,
+            dst_stride_u,
             tmp1,
             tmp2,
             w,
@@ -11749,8 +11733,8 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
         ),
         (BPC::BPC8, Rav1dPixelLayoutSubSampled::I444) => w_mask_444_8bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_bytes,
+            dst_stride_u,
             tmp1,
             tmp2,
             w,
@@ -11760,8 +11744,8 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
         ),
         (BPC::BPC16, Rav1dPixelLayoutSubSampled::I420) => w_mask_420_16bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_bytes,
+            dst_stride_u,
             tmp1,
             tmp2,
             w,
@@ -11772,8 +11756,8 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
         ),
         (BPC::BPC16, Rav1dPixelLayoutSubSampled::I422) => w_mask_422_16bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_bytes,
+            dst_stride_u,
             tmp1,
             tmp2,
             w,
@@ -11784,8 +11768,8 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
         ),
         (BPC::BPC16, Rav1dPixelLayoutSubSampled::I444) => w_mask_444_16bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_bytes,
+            dst_stride_u,
             tmp1,
             tmp2,
             w,
@@ -11795,6 +11779,7 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
             bd_c,
         ),
     }
+    }); // with_dst!
     true
 }
 
@@ -12002,30 +11987,26 @@ pub fn mc_put_dispatch<BD: BitDepth>(
         return false;
     }
 
-    let dst_stride = dst.stride();
     let src_stride = src.stride();
     let pixel_size = std::mem::size_of::<BD::Pixel>();
     match BD::BPC {
         BPC::BPC8 => {
-            let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
-            let dst_bytes = &mut dst_guard.as_mut_bytes()[dst_base * pixel_size..];
+            with_dst!(dst, w, h, BD, |dst_bytes, dst_stride_u| {
             let (src_guard, src_base) = src.full_guard::<BD>();
             match filter {
                 Filter2d::Bilinear => {
-                    // Bilinear only accesses current + next row, no negative offsets
                     let src_bytes = &src_guard.as_bytes()[src_base * pixel_size..];
                     put_bilin_8bpc_dispatch_inner(
-                        token, dst_bytes, dst_stride, src_bytes, src_stride, w, h, mx, my,
+                        token, dst_bytes, dst_stride_u as isize, src_bytes, src_stride, w, h, mx, my,
                     );
                 }
                 _ => {
-                    // 8-tap needs rows above the block; pass full buffer + base offset
                     let src_bytes = src_guard.as_bytes();
                     let (h_filter, v_filter) = filter.hv();
                     put_8tap_8bpc_dispatch_inner(
                         token,
                         dst_bytes,
-                        dst_stride,
+                        dst_stride_u as isize,
                         src_bytes,
                         src_base * pixel_size,
                         src_stride,
@@ -12038,10 +12019,10 @@ pub fn mc_put_dispatch<BD: BitDepth>(
                     );
                 }
             }
+            }); // with_dst! 8bpc
         }
         BPC::BPC16 => {
-            // TEMPORARY: debug - force scalar for put 16bpc
-            // return false;
+            let dst_stride = dst.stride();
             let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
             let dst_bytes = &mut dst_guard.as_mut_bytes()[dst_base * pixel_size..];
             let dst_u16: &mut [u16] = zerocopy::Ref::<_, [u16]>::new_slice(dst_bytes)
