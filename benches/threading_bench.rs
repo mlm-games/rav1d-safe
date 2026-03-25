@@ -44,15 +44,23 @@ const CONFIGS: &[DecodeConfig] = &[
         label: "simd_1t",
     },
     DecodeConfig {
-        threads: 1,
+        threads: 2,
         max_frame_delay: 1,
-        cpu_level: CpuLevel::Scalar,
-        label: "scalar_1t",
+        cpu_level: CpuLevel::Native,
+        label: "simd_2t",
     },
-    // NOTE: scalar_auto_t (tile threading) is disabled because the SIMD dispatch
-    // wrappers use full_guard on pixel buffers even when CpuLevel::Scalar forces
-    // scalar computation. The wide guards overlap across SB rows.
-    // Enable once full_guard is replaced with tight row-range guards.
+    DecodeConfig {
+        threads: 4,
+        max_frame_delay: 1,
+        cpu_level: CpuLevel::Native,
+        label: "simd_4t",
+    },
+    DecodeConfig {
+        threads: 0,
+        max_frame_delay: 1,
+        cpu_level: CpuLevel::Native,
+        label: "simd_auto",
+    },
 ];
 
 fn configs() -> &'static [DecodeConfig] {

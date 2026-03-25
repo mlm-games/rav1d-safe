@@ -1443,13 +1443,24 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
             let byte_end = last_byte_end.min(lvl_len);
             if first_byte < byte_end {
                 let byte_stride = b4_stridea_entries * entry_width;
-                let guard = if byte_stride <= entry_width {
-                    // Dense (horizontal): consecutive entries, one contiguous guard
-                    lvl.data.index(first_byte..byte_end)
+                // Always use strided tracking. For dense (horizontal) filtering
+                // where entries are consecutive (byte_stride=4), use the level
+                // cache row stride so the 2D check can distinguish tile rows.
+                let track_stride = if byte_stride <= entry_width {
+                    // Dense: use level cache row stride for 2D tracking
+                    b4_strideb_entries * entry_width
                 } else {
-                    // Sparse (vertical): strided guard to avoid overlap
-                    lvl.data.index_strided(first_byte..byte_end, byte_stride, entry_width)
+                    byte_stride
                 };
+                let track_width = if byte_stride <= entry_width {
+                    // Dense: width is the number of consecutive entries per row
+                    (max_iter * entry_width).min(track_stride)
+                } else {
+                    entry_width
+                };
+                let guard = lvl.data.index_strided(
+                    first_byte..byte_end, track_stride, track_width,
+                );
                 let src: &[u8] = &*guard;
                 for i in 0..max_iter {
                     let src_off = i * b4_stridea_entries * entry_width;
