@@ -322,24 +322,24 @@ DisjointMut is:
 ### Critical Action Items
 
 **Priority 1: Audit**
-- [ ] Review all tile boundary calculations
-- [ ] Verify disjointness at each index_mut site
+- [x] Review all tile boundary calculations -- Level cache overlap fixed (e2de9f1). Picture plane overlap still open (see CLAUDE.md Known Issues).
+- [ ] Verify disjointness at each index_mut site -- Partially done; `mt` feature adds strided guards and SB boundary checks
 - [ ] Add disjointness proof comments
-- [ ] Test with Miri/cargo-careful
+- [x] Test with Miri/cargo-careful -- rav1d-disjoint-mut sub-crate is Miri-tested under both Stacked Borrows and Tree Borrows
 
 **Priority 2: Test**
 - [ ] Fuzz tile assignments in debug mode
 - [ ] Property-based tests for tile math
-- [ ] Stress test with varied frame sizes
+- [x] Stress test with varied frame sizes -- `mt` experiment branches tested 768x512, 4K, and 8K (see THREADING-HANDOFF.md)
 
 **Priority 3: Document**
-- [ ] Safety contract at module level
+- [x] Safety contract at module level -- See "Relationship to Safety Levels" section below
 - [ ] Invariants at each usage site
-- [ ] Known limitations and assumptions
+- [x] Known limitations and assumptions -- This document covers them
 
 **Priority 4: Consider (Optional)**
 - [ ] Evaluate crossbeam-based alternative
-- [ ] Add optional runtime checking feature
+- [x] Add optional runtime checking feature -- The `mt` feature provides strided DisjointMut guards for safe threading
 - [ ] Profile performance with RwLock baseline
 
 ## Relationship to Safety Levels
