@@ -1447,26 +1447,6 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
             let start_pixel = dst.offset - reach_before;
             let total_pixels = (reach_before + reach_after).min(buf_pixel_len - start_pixel);
 
-            #[cfg(feature = "mt")]
-            {
-                // Check if the filter reach crosses a 64-row SB boundary.
-                let start_row = start_pixel / byte_stride;
-                let end_row = (start_pixel + total_pixels + byte_stride - 1) / byte_stride;
-                if (start_row >> 6) != ((end_row - 1) >> 6) {
-                    return false; // crosses SB boundary — scalar handles per-row
-                }
-            }
-
-            #[cfg(feature = "mt")]
-            let mut buf_guard = {
-                let guard_width = (w as usize + 23).min(byte_stride);
-                dst.data.dm().mut_slice_as_strided::<_, u8>(
-                    (start_pixel.., ..total_pixels),
-                    byte_stride,
-                    guard_width,
-                )
-            };
-            #[cfg(not(feature = "mt"))]
             let mut buf_guard = dst
                 .data
                 .slice_mut::<BitDepth8, _>((start_pixel.., ..total_pixels));
