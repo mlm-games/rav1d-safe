@@ -107,6 +107,20 @@ fn test_frame_threading_inter() {
     eprintln!("inter tile: {}/{}", decoded, total);
 }
 
+/// Test true frame threading (max_frame_delay=0 = auto) with inter content.
+#[test]
+#[ignore]
+fn test_true_frame_threading() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/test-vectors/dav1d-test-data/10-bit/quantizer/av1-1-b10-00-quantizer-00.ivf"
+    );
+
+    let (decoded, total) = decode_with_threads(path, 4, 0);
+    eprintln!("frame threading inter: {}/{}", decoded, total);
+    assert!(decoded > 0, "Should decode at least some frames with frame threading");
+}
+
 /// Stress test: many threads, many different test vectors.
 #[test]
 #[ignore]
