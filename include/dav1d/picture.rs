@@ -558,6 +558,35 @@ impl Rav1dPictureDataComponent {
     {
         self.dm().mut_slice_as(index)
     }
+
+    /// Mutably borrow raw bytes at a given byte offset and length.
+    /// Used by CopyGuard for per-row writeback without a BitDepth type parameter.
+    #[cfg(feature = "mt")]
+    #[inline]
+    #[cfg_attr(debug_assertions, track_caller)]
+    /// Immutably borrow raw bytes at a given byte offset and length.
+    #[cfg(feature = "mt")]
+    #[inline]
+    #[cfg_attr(debug_assertions, track_caller)]
+    pub(crate) fn slice_bytes(
+        &self,
+        byte_offset: usize,
+        byte_len: usize,
+    ) -> DisjointImmutGuard<'_, Rav1dPictureDataComponentInner, [u8]> {
+        self.dm().index(byte_offset..byte_offset + byte_len)
+    }
+
+    /// Mutably borrow raw bytes at a given byte offset and length.
+    #[cfg(feature = "mt")]
+    #[inline]
+    #[cfg_attr(debug_assertions, track_caller)]
+    pub(crate) fn slice_mut_bytes(
+        &self,
+        byte_offset: usize,
+        byte_len: usize,
+    ) -> DisjointMutGuard<'_, Rav1dPictureDataComponentInner, [u8]> {
+        self.dm().index_mut(byte_offset..byte_offset + byte_len)
+    }
 }
 
 pub type Rav1dPictureDataComponentOffset<'a> = WithOffset<&'a Rav1dPictureDataComponent>;

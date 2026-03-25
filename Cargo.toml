@@ -90,6 +90,12 @@ asm_arm64_sve2 = ["asm"]
 
 # Force scalar fallback for all SIMD dispatch (testing only)
 
+# Safe multithreading via copy-buffer guards. Required for tile/frame
+# threading. Zero overhead when disabled (default). When enabled,
+# SIMD dispatch copies pixels to/from compact stack buffers via per-row
+# guards, eliminating stride-gap aliasing.
+mt = []
+
 # Run SIMD and scalar side-by-side, panic on any mismatch (testing only)
 simd_test = []
 

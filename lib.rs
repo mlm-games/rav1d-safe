@@ -60,6 +60,8 @@ pub mod src {
     pub(crate) mod c_arc;
     #[cfg_attr(feature = "c-ffi", allow(unsafe_code))]
     pub(crate) mod c_box;
+    #[cfg(feature = "mt")]
+    pub(crate) mod copy_guard;
     pub(crate) mod cpu;
     pub(crate) mod disjoint_mut;
     mod ffi_safe;

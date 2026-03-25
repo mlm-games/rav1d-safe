@@ -11344,6 +11344,36 @@ fn prep_bilin_16bpc_avx2_impl_inner_safe(
 // Each returns true if SIMD was used (i.e., AVX2 is available).
 // ============================================================================
 
+/// Acquire a mutable dst guard and run the body with `$dst_slice` and `$dst_stride_val`.
+///
+/// With `mt` feature: copies pixels to a compact buffer (no stride gaps),
+/// runs the body, then copies back on drop. Per-row guards ensure soundness.
+///
+/// Without `mt`: uses full_guard_mut (single contiguous guard, original behavior).
+macro_rules! with_dst {
+    ($dst:expr, $w:expr, $h:expr, $bd:ty,
+     |$dst_slice:ident, $dst_stride_val:ident| $body:expr) => {{
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "mt")] {
+                let mut _copy_guard = crate::src::copy_guard::CopyGuard::new::<$bd>(
+                    $dst, $w as usize, $h as usize,
+                );
+                let $dst_stride_val = _copy_guard.compact_stride();
+                let $dst_slice = &mut *_copy_guard;
+                $body
+                // _copy_guard drops here → writes back per-row
+            } else {
+                let (mut _full_guard, _dst_base) = $dst.full_guard_mut::<$bd>();
+                let _pixel_size = std::mem::size_of::<<$bd as BitDepth>::Pixel>();
+                let _dst_offset = _dst_base * _pixel_size;
+                let $dst_stride_val = $dst.stride().unsigned_abs();
+                let $dst_slice = &mut _full_guard.as_mut_bytes()[_dst_offset..];
+                $body
+            }
+        }
+    }};
+}
+
 #[cfg(target_arch = "x86_64")]
 pub fn avg_dispatch<BD: BitDepth>(
     dst: PicOffset,
@@ -11359,19 +11389,15 @@ pub fn avg_dispatch<BD: BitDepth>(
         return false;
     };
     use zerocopy::IntoBytes;
-    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
     let bd_c = bd.into_c();
+    with_dst!(dst, w, h, BD, |dst_bytes, dst_stride_u| {
     match BD::BPC {
         BPC::BPC8 => {
             if let Some(t512) = avx512_token {
                 avg_8bpc_avx512_safe(
                     t512,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    dst_bytes,
+                    dst_stride_u,
                     tmp1,
                     tmp2,
                     w,
@@ -11380,8 +11406,8 @@ pub fn avg_dispatch<BD: BitDepth>(
             } else {
                 avg_8bpc_avx2_safe(
                     token,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    dst_bytes,
+                    dst_stride_u,
                     tmp1,
                     tmp2,
                     w,
@@ -11393,8 +11419,8 @@ pub fn avg_dispatch<BD: BitDepth>(
             if let Some(t512) = avx512_token {
                 avg_16bpc_avx512_safe(
                     t512,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    dst_bytes,
+                    dst_stride_u,
                     tmp1,
                     tmp2,
                     w,
@@ -11404,8 +11430,8 @@ pub fn avg_dispatch<BD: BitDepth>(
             } else {
                 avg_16bpc_avx2_safe(
                     token,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    dst_bytes,
+                    dst_stride_u,
                     tmp1,
                     tmp2,
                     w,
@@ -11415,6 +11441,7 @@ pub fn avg_dispatch<BD: BitDepth>(
             }
         }
     }
+    }); // with_dst!
     true
 }
 
