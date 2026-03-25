@@ -557,16 +557,32 @@ pub fn avg_dispatch<BD: BitDepth>(
     h: i32,
     bd: BD,
 ) -> bool {
+    use zerocopy::IntoBytes;
+    let pixel_size = std::mem::size_of::<BD::Pixel>();
+    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
+    let dst_bytes = dst_guard.as_mut_bytes();
+    let dst_offset = dst_base * pixel_size;
+    let dst_stride = dst.stride();
+    avg_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, bd)
+}
+
+/// Inner avg dispatch — operates on pre-acquired byte slice.
+/// Can be called directly with scheduler-owned guards.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn avg_dispatch_inner<BD: BitDepth>(
+    dst_bytes: &mut [u8],
+    dst_offset: usize,
+    dst_stride: isize,
+    tmp1: &[i16; COMPINTER_LEN],
+    tmp2: &[i16; COMPINTER_LEN],
+    w: i32,
+    h: i32,
+    bd: BD,
+) -> bool {
     use crate::include::common::bitdepth::BPC;
     let Some(token) = crate::src::cpu::summon_wasm128() else {
         return false;
     };
-    use zerocopy::IntoBytes;
-    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
     let bd_c = bd.into_c();
     match BD::BPC {
         BPC::BPC8 => avg_8bpc_wasm128(
@@ -602,16 +618,33 @@ pub fn w_avg_dispatch<BD: BitDepth>(
     weight: i32,
     bd: BD,
 ) -> bool {
+    use zerocopy::IntoBytes;
+    let pixel_size = std::mem::size_of::<BD::Pixel>();
+    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
+    let dst_bytes = dst_guard.as_mut_bytes();
+    let dst_offset = dst_base * pixel_size;
+    let dst_stride = dst.stride();
+    w_avg_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, weight, bd)
+}
+
+/// Inner w_avg dispatch — operates on pre-acquired byte slice.
+/// Can be called directly with scheduler-owned guards.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn w_avg_dispatch_inner<BD: BitDepth>(
+    dst_bytes: &mut [u8],
+    dst_offset: usize,
+    dst_stride: isize,
+    tmp1: &[i16; COMPINTER_LEN],
+    tmp2: &[i16; COMPINTER_LEN],
+    w: i32,
+    h: i32,
+    weight: i32,
+    bd: BD,
+) -> bool {
     use crate::include::common::bitdepth::BPC;
     let Some(token) = crate::src::cpu::summon_wasm128() else {
         return false;
     };
-    use zerocopy::IntoBytes;
-    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
     let bd_c = bd.into_c();
     match BD::BPC {
         BPC::BPC8 => w_avg_8bpc_wasm128(
@@ -649,22 +682,39 @@ pub fn mask_dispatch<BD: BitDepth>(
     mask: &[u8],
     bd: BD,
 ) -> bool {
+    use zerocopy::IntoBytes;
+    let pixel_size = std::mem::size_of::<BD::Pixel>();
+    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
+    let dst_bytes = dst_guard.as_mut_bytes();
+    let dst_offset = dst_base * pixel_size;
+    let dst_stride = dst.stride();
+    mask_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, mask, bd)
+}
+
+/// Inner mask dispatch — operates on pre-acquired byte slice.
+/// Can be called directly with scheduler-owned guards.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn mask_dispatch_inner<BD: BitDepth>(
+    dst_bytes: &mut [u8],
+    dst_offset: usize,
+    dst_stride: isize,
+    tmp1: &[i16; COMPINTER_LEN],
+    tmp2: &[i16; COMPINTER_LEN],
+    w: i32,
+    h: i32,
+    mask: &[u8],
+    bd: BD,
+) -> bool {
     use crate::include::common::bitdepth::BPC;
     let Some(token) = crate::src::cpu::summon_wasm128() else {
         return false;
     };
-    use zerocopy::IntoBytes;
-    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride() as usize;
     let bd_c = bd.into_c();
     match BD::BPC {
         BPC::BPC8 => mask_8bpc_wasm128(
             token,
             &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_stride as usize,
             tmp1,
             tmp2,
             w,
@@ -674,7 +724,7 @@ pub fn mask_dispatch<BD: BitDepth>(
         BPC::BPC16 => mask_16bpc_wasm128(
             token,
             &mut dst_bytes[dst_offset..],
-            dst_stride,
+            dst_stride as usize,
             tmp1,
             tmp2,
             w,
