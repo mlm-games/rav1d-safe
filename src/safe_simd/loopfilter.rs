@@ -1476,11 +1476,16 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 return false;
             }
 
-            // Safe slice access: get a mutable guard covering the full filter reach.
-            // Use strided tracking so concurrent tile threads working on different
-            // columns don't trigger false overlap on shared rows.
+            // Check if the filter reach crosses a 64-row SB boundary.
+            // When it does, fall back to scalar (per-row guards) to avoid
+            // overlapping guards with concurrent tile threads at SB boundaries.
             let start_pixel = dst.offset - reach_before;
             let total_pixels = (reach_before + reach_after).min(buf_pixel_len - start_pixel);
+            let start_row = start_pixel / byte_stride;
+            let end_row = (start_pixel + total_pixels + byte_stride - 1) / byte_stride;
+            if (start_row >> 6) != ((end_row - 1) >> 6) {
+                return false; // crosses SB boundary — scalar handles per-row
+            }
             // Width is w (the block width being filtered) + filter tap extent (16+7=23)
             let guard_width = (w as usize + 23).min(byte_stride);
             let mut buf_guard = dst.data.dm().mut_slice_as_strided::<_, u8>(
