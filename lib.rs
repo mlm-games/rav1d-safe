@@ -145,6 +145,7 @@ pub mod src {
     pub mod plane_rows;
     pub(crate) mod progressive_frame;
     pub(crate) mod rayon_pipeline;
+    pub(crate) mod tile_workers;
     pub(crate) mod strided;
     mod thread_task;
     mod warpmv;
