@@ -119,6 +119,10 @@ name = "tile_threading"
 harness = false
 
 [[bench]]
+name = "rayon_overhead"
+harness = false
+
+[[bench]]
 name = "checked_vs_unchecked"
 harness = false
 

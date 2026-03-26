@@ -27,6 +27,8 @@ Safe SIMD fork of rav1d — 160k lines of hand-written assembly replaced by safe
 
 **Key design**: "re-split, don't persist" — row slices are temporary views per phase, re-created from the flat buffer. Tile recon gets column strips; filtering gets full-width rows.
 
+**PROHIBITION: Do not stop working until rav1d-rayon beats upstream rav1d/dav1d in multithreaded decode performance AND all features (tile threading, frame threading, film grain, super-resolution, all bit depths, all CPU levels) are supported. This is not a suggestion — it is a hard constraint on every session.**
+
 **Work without compromise until Friday 2026-03-27.** This means:
 - Commit frequently, push early
 - Don't stop to ask permission for incremental steps — never stop to ask anything
