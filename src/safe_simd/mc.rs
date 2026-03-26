@@ -120,14 +120,12 @@ const PW_1024: i16 = 1024;
 #[arcane]
 fn avg_8bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
     h: i32,
 ) {
-    let mut dst = dst.flex_mut();
     let w = w as usize;
     let h = h as usize;
 
@@ -138,7 +136,7 @@ fn avg_8bpc_avx2_safe(
     for row in 0..h {
         let tmp1_row = &tmp1[row * w..][..w];
         let tmp2_row = &tmp2[row * w..][..w];
-        let dst_row = &mut dst[row * dst_stride..][..w];
+        let dst_row = &mut dst_rows[row][..w];
 
         // Process 32 pixels at a time (64 bytes of i16 input → 32 bytes of u8 output)
         let mut col = 0;
@@ -208,13 +206,14 @@ pub unsafe extern "C" fn avg_8bpc_avx2(
     _bitdepth_max: i32,
     _dst: *const FFISafe<PicOffset>,
 ) {
+    let stride = dst_stride as usize;
     let dst = unsafe {
-        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
+        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * stride)
     };
+    let mut rows: Vec<&mut [u8]> = dst.chunks_mut(stride).take(h as usize).collect();
     avg_8bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut rows,
         tmp1,
         tmp2,
         w,
@@ -229,14 +228,12 @@ pub unsafe extern "C" fn avg_8bpc_avx2(
 #[arcane]
 fn avg_8bpc_avx512_safe(
     _token: Server64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
     h: i32,
 ) {
-    let mut dst = dst.flex_mut();
     let w = w as usize;
     let h = h as usize;
 
@@ -246,7 +243,7 @@ fn avg_8bpc_avx512_safe(
     for row in 0..h {
         let tmp1_row = &tmp1[row * w..][..w];
         let tmp2_row = &tmp2[row * w..][..w];
-        let dst_row = &mut dst[row * dst_stride..][..w];
+        let dst_row = &mut dst_rows[row][..w];
 
         let mut col = 0;
 
@@ -324,15 +321,13 @@ fn avg_8bpc_avx512_safe(
 #[arcane]
 fn avg_16bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
     h: i32,
     bitdepth_max: i32,
 ) {
-    let mut dst = dst.flex_mut();
     let w = w as usize;
     let h = h as usize;
 
@@ -355,7 +350,7 @@ fn avg_16bpc_avx2_safe(
         let tmp1_row = &tmp1[row * w..][..w];
         let tmp2_row = &tmp2[row * w..][..w];
         // dst is bytes, but we write u16 pixels — each pixel is 2 bytes
-        let dst_row_bytes = &mut dst[row * dst_stride..][..w * 2];
+        let dst_row_bytes = &mut dst_rows[row][..w * 2];
         // Reinterpret as u16 slice
         let dst_row: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(dst_row_bytes).unwrap();
 
@@ -412,13 +407,14 @@ pub unsafe extern "C" fn avg_16bpc_avx2(
     bitdepth_max: i32,
     _dst: *const FFISafe<PicOffset>,
 ) {
+    let stride = dst_stride as usize;
     let dst = unsafe {
-        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
+        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * stride)
     };
+    let mut rows: Vec<&mut [u8]> = dst.chunks_mut(stride).take(h as usize).collect();
     avg_16bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut rows,
         tmp1,
         tmp2,
         w,
@@ -434,15 +430,13 @@ pub unsafe extern "C" fn avg_16bpc_avx2(
 #[arcane]
 fn avg_16bpc_avx512_safe(
     _token: Server64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
     h: i32,
     bitdepth_max: i32,
 ) {
-    let mut dst = dst.flex_mut();
     let w = w as usize;
     let h = h as usize;
 
@@ -462,7 +456,7 @@ fn avg_16bpc_avx512_safe(
     for row in 0..h {
         let tmp1_row = &tmp1[row * w..][..w];
         let tmp2_row = &tmp2[row * w..][..w];
-        let dst_row_bytes = &mut dst[row * dst_stride..][..w * 2];
+        let dst_row_bytes = &mut dst_rows[row][..w * 2];
         let dst_row: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(dst_row_bytes).unwrap();
 
         let mut col = 0usize;
@@ -11385,13 +11379,17 @@ pub(crate) fn avg_dispatch_inner<BD: BitDepth>(
         return false;
     };
     let bd_c = bd.into_c();
+    let stride = dst_stride.unsigned_abs();
     match BD::BPC {
         BPC::BPC8 => {
+            let mut rows: Vec<&mut [u8]> = dst_bytes[dst_offset..]
+                .chunks_mut(stride)
+                .take(h as usize)
+                .collect();
             if let Some(t512) = avx512_token {
                 avg_8bpc_avx512_safe(
                     t512,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    &mut rows,
                     tmp1,
                     tmp2,
                     w,
@@ -11400,8 +11398,7 @@ pub(crate) fn avg_dispatch_inner<BD: BitDepth>(
             } else {
                 avg_8bpc_avx2_safe(
                     token,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    &mut rows,
                     tmp1,
                     tmp2,
                     w,
@@ -11410,11 +11407,14 @@ pub(crate) fn avg_dispatch_inner<BD: BitDepth>(
             }
         }
         BPC::BPC16 => {
+            let mut rows: Vec<&mut [u8]> = dst_bytes[dst_offset..]
+                .chunks_mut(stride)
+                .take(h as usize)
+                .collect();
             if let Some(t512) = avx512_token {
                 avg_16bpc_avx512_safe(
                     t512,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    &mut rows,
                     tmp1,
                     tmp2,
                     w,
@@ -11424,8 +11424,7 @@ pub(crate) fn avg_dispatch_inner<BD: BitDepth>(
             } else {
                 avg_16bpc_avx2_safe(
                     token,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    &mut rows,
                     tmp1,
                     tmp2,
                     w,
@@ -12996,9 +12995,15 @@ mod tests {
                 dst_avx2.fill(0);
                 dst_scalar.fill(0);
 
-                avg_8bpc_avx2_safe(token, &mut dst_scalar, w as usize, &tmp1, &tmp2, w, h);
+                let w_usize = w as usize;
+                let h_usize = h as usize;
+                let mut rows_scalar: Vec<&mut [u8]> =
+                    dst_scalar.chunks_mut(w_usize).take(h_usize).collect();
+                avg_8bpc_avx2_safe(token, &mut rows_scalar, &tmp1, &tmp2, w, h);
 
-                avg_8bpc_avx2_safe(token, &mut dst_avx2, w as usize, &tmp1, &tmp2, w, h);
+                let mut rows_avx2: Vec<&mut [u8]> =
+                    dst_avx2.chunks_mut(w_usize).take(h_usize).collect();
+                avg_8bpc_avx2_safe(token, &mut rows_avx2, &tmp1, &tmp2, w, h);
 
                 assert_eq!(
                     dst_avx2,
@@ -13033,9 +13038,13 @@ mod tests {
         let mut dst_a = vec![0u8; (w * h) as usize];
         let mut dst_b = vec![0u8; (w * h) as usize];
 
-        avg_8bpc_avx2_safe(token, &mut dst_a, w as usize, &tmp1, &tmp2, w, h);
+        let w_usize = w as usize;
+        let h_usize = h as usize;
+        let mut rows_a: Vec<&mut [u8]> = dst_a.chunks_mut(w_usize).take(h_usize).collect();
+        avg_8bpc_avx2_safe(token, &mut rows_a, &tmp1, &tmp2, w, h);
 
-        avg_8bpc_avx2_safe(token, &mut dst_b, w as usize, &tmp1, &tmp2, w, h);
+        let mut rows_b: Vec<&mut [u8]> = dst_b.chunks_mut(w_usize).take(h_usize).collect();
+        avg_8bpc_avx2_safe(token, &mut rows_b, &tmp1, &tmp2, w, h);
 
         assert_eq!(dst_a, dst_b, "Results differ for varying data");
     }
@@ -13153,6 +13162,9 @@ mod tests {
             tmp2[i] = ((i * 73 + 500) % 4096) as i16;
         }
 
+        let w_usize = w as usize;
+        let h_usize = h as usize;
+
         // Compute reference with tokens fully enabled
         let reference = {
             let Some(token) = crate::src::cpu::summon_avx2() else {
@@ -13160,14 +13172,16 @@ mod tests {
                 return;
             };
             let mut dst = vec![0u8; size];
-            avg_8bpc_avx2_safe(token, &mut dst, w as usize, &tmp1, &tmp2, w, h);
+            let mut rows: Vec<&mut [u8]> = dst.chunks_mut(w_usize).take(h_usize).collect();
+            avg_8bpc_avx2_safe(token, &mut rows, &tmp1, &tmp2, w, h);
             dst
         };
 
         let report = for_each_token_permutation(CompileTimePolicy::WarnStderr, |perm| {
             if let Some(token) = crate::src::cpu::summon_avx2() {
                 let mut dst = vec![0u8; size];
-                avg_8bpc_avx2_safe(token, &mut dst, w as usize, &tmp1, &tmp2, w, h);
+                let mut rows: Vec<&mut [u8]> = dst.chunks_mut(w_usize).take(h_usize).collect();
+                avg_8bpc_avx2_safe(token, &mut rows, &tmp1, &tmp2, w, h);
                 assert_eq!(dst, reference, "avg output mismatch at: {perm}");
             }
         });
