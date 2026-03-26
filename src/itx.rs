@@ -505,6 +505,97 @@ impl itxfm::Fn {
             }
         }
     }
+
+    /// Row-slice variant: writes to `&mut [&mut [BD::Pixel]]` instead of PicOffset.
+    ///
+    /// `dst_rows[0..h]`: destination rows, reads prediction + writes reconstructed pixels
+    /// at columns `dst_x..dst_x+w`.
+    #[cfg(not(feature = "asm"))]
+    #[allow(dead_code)]
+    pub fn call_rows<BD: BitDepth>(
+        &self,
+        tx_size: usize,
+        tx_type: usize,
+        dst_rows: &mut [&mut [BD::Pixel]],
+        dst_x: usize,
+        coeff: &mut [BD::Coef],
+        eob: i32,
+        bd: BD,
+    ) {
+        use crate::src::itx_rows;
+
+        let txsz = TxfmSize::from_repr(tx_size).unwrap();
+        let (w, h) = txsz.to_wh();
+        let tx_type = tx_type as TxfmType;
+
+        let shift = match (w, h) {
+            (4, 4) => 0u8,
+            (4, 8) | (8, 4) => 0,
+            (4, 16) | (16, 4) | (8, 8) | (16, 8) | (8, 16) => 1,
+            (8, 32) | (16, 16) | (32, 8) | (16, 64) | (64, 16) | (32, 32) | (64, 64) => 2,
+            (16, 32) | (32, 16) | (32, 64) | (64, 32) => 1,
+            _ => unreachable!(),
+        };
+        let has_dc_only = tx_type == DCT_DCT;
+
+        if tx_type == WHT_WHT && (w, h) == (4, 4) {
+            // WHT 4x4: special case, use the existing PicOffset path
+            // TODO: port WHT to row-slice
+            unimplemented!("WHT 4x4 not yet ported to row slices");
+        }
+
+        enum Type { Identity, Dct, Adst, FlipAdst }
+        use Type::*;
+
+        let (second, first) = match tx_type {
+            IDTX => (Identity, Identity),
+            DCT_DCT => (Dct, Dct),
+            ADST_DCT => (Adst, Dct),
+            FLIPADST_DCT => (FlipAdst, Dct),
+            H_DCT => (Identity, Dct),
+            DCT_ADST => (Dct, Adst),
+            ADST_ADST => (Adst, Adst),
+            FLIPADST_ADST => (FlipAdst, Adst),
+            DCT_FLIPADST => (Dct, FlipAdst),
+            ADST_FLIPADST => (Adst, FlipAdst),
+            FLIPADST_FLIPADST => (FlipAdst, FlipAdst),
+            V_DCT => (Dct, Identity),
+            H_ADST => (Identity, Adst),
+            H_FLIPADST => (Identity, FlipAdst),
+            V_ADST => (Adst, Identity),
+            V_FLIPADST => (FlipAdst, Identity),
+            _ => unreachable!(),
+        };
+
+        fn resolve_1d_fn(r#type: Type, n: usize) -> Itx1dFn {
+            match (r#type, n) {
+                (Identity, 4) => rav1d_inv_identity4_1d_c,
+                (Identity, 8) => rav1d_inv_identity8_1d_c,
+                (Identity, 16) => rav1d_inv_identity16_1d_c,
+                (Identity, 32) => rav1d_inv_identity32_1d_c,
+                (Dct, 4) => rav1d_inv_dct4_1d_c,
+                (Dct, 8) => rav1d_inv_dct8_1d_c,
+                (Dct, 16) => rav1d_inv_dct16_1d_c,
+                (Dct, 32) => rav1d_inv_dct32_1d_c,
+                (Dct, 64) => rav1d_inv_dct64_1d_c,
+                (Adst, 4) => rav1d_inv_adst4_1d_c,
+                (Adst, 8) => rav1d_inv_adst8_1d_c,
+                (Adst, 16) => rav1d_inv_adst16_1d_c,
+                (FlipAdst, 4) => rav1d_inv_flipadst4_1d_c,
+                (FlipAdst, 8) => rav1d_inv_flipadst8_1d_c,
+                (FlipAdst, 16) => rav1d_inv_flipadst16_1d_c,
+                _ => unreachable!(),
+            }
+        }
+
+        let first_1d_fn = resolve_1d_fn(first, w);
+        let second_1d_fn = resolve_1d_fn(second, h);
+
+        itx_rows::inv_txfm_add_rows::<BD>(
+            dst_rows, dst_x, coeff, eob, w, h,
+            shift, first_1d_fn, second_1d_fn, has_dc_only, bd,
+        );
+    }
 }
 
 pub struct Rav1dInvTxfmDSPContext {

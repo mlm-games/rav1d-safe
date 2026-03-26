@@ -262,6 +262,82 @@ impl angular_ipred::Fn {
             }
         }
     }
+
+    /// Row-slice variant: writes to `&mut [&mut [BD::Pixel]]` instead of PicOffset.
+    ///
+    /// `dst_rows[0..height]`: destination rows, writes at columns `dst_x..dst_x+width`.
+    /// This path eliminates DisjointMut entirely — tile parallelism is safe by construction.
+    #[cfg(not(feature = "asm"))]
+    #[allow(dead_code)]
+    pub fn call_rows<BD: BitDepth>(
+        &self,
+        mode: usize,
+        dst_rows: &mut [&mut [BD::Pixel]],
+        dst_x: usize,
+        topleft: &[BD::Pixel; SCRATCH_EDGE_LEN],
+        topleft_off: usize,
+        width: c_int,
+        height: c_int,
+        angle: c_int,
+        _max_width: c_int,
+        _max_height: c_int,
+        bd: BD,
+    ) {
+        use crate::src::ipred_rows;
+
+        let w = width as usize;
+        let h = height as usize;
+
+        // Dispatch to row-slice ipred functions (scalar only for now)
+        match mode {
+            0 => ipred_rows::dc_pred_rows::<BD>(
+                dst_rows, dst_x, topleft, topleft_off, width, height, bd,
+            ),
+            1 => ipred_rows::v_pred_rows::<BD>(
+                dst_rows, dst_x, topleft, topleft_off, w, h,
+            ),
+            2 => ipred_rows::h_pred_rows::<BD>(
+                dst_rows, dst_x, topleft, topleft_off, w, h,
+            ),
+            3 => ipred_rows::dc_left_pred_rows::<BD>(
+                dst_rows, dst_x, topleft, topleft_off, width, height, bd,
+            ),
+            4 => ipred_rows::dc_top_pred_rows::<BD>(
+                dst_rows, dst_x, topleft, topleft_off, width, height, bd,
+            ),
+            5 => ipred_rows::dc_128_pred_rows::<BD>(
+                dst_rows, dst_x, width, height, bd,
+            ),
+            6 | 7 | 8 => {
+                // Z1/Z2/Z3: angular prediction — not yet ported to row slices.
+                // Fall back to PicOffset path for now.
+                // TODO: port z1/z2/z3 to row-slice API
+                unimplemented!(
+                    "angular prediction mode {mode} not yet ported to row slices"
+                );
+            }
+            9 => ipred_rows::smooth_pred_rows::<BD>(
+                dst_rows, dst_x, topleft, topleft_off, w, h,
+            ),
+            10 => ipred_rows::smooth_v_pred_rows::<BD>(
+                dst_rows, dst_x, topleft, topleft_off, w, h,
+            ),
+            11 => ipred_rows::smooth_h_pred_rows::<BD>(
+                dst_rows, dst_x, topleft, topleft_off, w, h,
+            ),
+            12 => ipred_rows::paeth_pred_rows::<BD>(
+                dst_rows, dst_x, topleft, topleft_off, w, h,
+            ),
+            13 => {
+                // Filter prediction — not yet ported to row slices.
+                // TODO: port filter_pred to row-slice API
+                unimplemented!(
+                    "filter prediction mode 13 not yet ported to row slices"
+                );
+            }
+            _ => unreachable!(),
+        }
+    }
 }
 
 wrap_fn_ptr!(pub unsafe extern "C" fn cfl_ac(
