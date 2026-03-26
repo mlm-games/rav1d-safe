@@ -11325,6 +11325,55 @@ pub fn avg_dispatch<BD: BitDepth>(
     avg_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, bd)
 }
 
+/// Row-slice avg dispatch — takes per-row slices directly, no DisjointMut.
+///
+/// This is the entry point for tile-parallel decode: the caller pre-splits
+/// the frame buffer into per-row slices via split_at_mut, so no DisjointMut
+/// guard is needed. Full SIMD performance with forbid(unsafe_code).
+#[cfg(target_arch = "x86_64")]
+pub fn avg_dispatch_rows<BD: BitDepth>(
+    dst_rows: &mut [&mut [BD::Pixel]],
+    tmp1: &[i16],
+    tmp2: &[i16],
+    w: i32,
+    h: i32,
+    bd: BD,
+) -> bool {
+    let Some(token) = crate::src::cpu::summon_avx2() else {
+        return false;
+    };
+    use crate::include::common::bitdepth::BPC;
+    let pixel_size = std::mem::size_of::<BD::Pixel>();
+    let wu = w as usize;
+    let hu = h as usize;
+
+    // Convert typed pixel row slices to byte row slices for SIMD
+    let mut byte_rows: Vec<&mut [u8]> = dst_rows[..hu]
+        .iter_mut()
+        .map(|row| {
+            let bytes: &mut [u8] = zerocopy::IntoBytes::as_mut_bytes(&mut row[..wu]);
+            bytes
+        })
+        .collect();
+
+    // Pad tmp slices to COMPINTER_LEN for the inner functions
+    let mut t1 = [0i16; COMPINTER_LEN];
+    let mut t2 = [0i16; COMPINTER_LEN];
+    let n = (wu * hu).min(COMPINTER_LEN);
+    t1[..n].copy_from_slice(&tmp1[..n]);
+    t2[..n].copy_from_slice(&tmp2[..n]);
+
+    match BD::BPC {
+        BPC::BPC8 => {
+            avg_8bpc_avx2_safe(token, &mut byte_rows, &t1, &t2, w, h);
+        }
+        BPC::BPC16 => {
+            avg_16bpc_avx2_safe(token, &mut byte_rows, &t1, &t2, w, h, bd.into_c() as i32);
+        }
+    }
+    true
+}
+
 /// Inner avg dispatch — operates on pre-acquired byte slice.
 /// Can be called directly with scheduler-owned guards.
 #[cfg(target_arch = "x86_64")]
