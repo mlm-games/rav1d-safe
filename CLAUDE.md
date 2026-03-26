@@ -2,6 +2,35 @@
 
 Safe SIMD fork of rav1d — 160k lines of hand-written assembly replaced by safe Rust intrinsics.
 
+## Current Sprint: Rayon Threading (through 2026-03-27)
+
+**Goal**: Replace DisjointMut-based threading with rayon scoped parallelism. Three-level ownership:
+1. **Tile parallelism**: Safe column splitting via `split_at_mut` per row
+2. **SB-row pipeline**: `Recon(N+1) || Filter(N)` on disjoint row ranges, channel deps
+3. **Frame parallelism**: Option A (sequential freeze into `Arc<FrozenFrame>`) first
+
+**Spec**: `RAYON-THREADING-SPEC.md` (2027 lines) — complete data access patterns + ownership model.
+
+**Implementation plan** (Phase 1: scalar row-slice validation):
+- [ ] `PlaneRows` type + `split_rows_by_tiles` column splitter
+- [ ] Row-slice scalar MC: `put_rows`, `prep_rows`, `put_8tap_rows`, `put_bilin_rows`
+- [ ] Row-slice scalar compound: `avg_rows`, `w_avg_rows`, `mask_rows`, `w_mask_rows`, `blend_rows`
+- [ ] Row-slice ITX: `inv_txfm_add_rows`
+- [ ] Row-slice ipred: all 14 modes reading from topleft scratch
+- [ ] Row-slice loopfilter, CDEF, LR, film grain
+- [ ] Wire into decode pipeline alongside existing PicOffset path
+- [ ] Validate: 766/768 conformance at scalar CPU level
+- [ ] Rayon scope integration with channel-based SB-row pipeline
+
+**Key design**: "re-split, don't persist" — row slices are temporary views per phase, re-created from the flat buffer. Tile recon gets column strips; filtering gets full-width rows.
+
+**Work without compromise until Friday 2026-03-27.** This means:
+- Commit frequently, push early
+- Don't stop to ask permission for incremental steps
+- If blocked, try an alternative approach before asking
+- Focus on Phase 1 scalar validation — get conformance passing with row slices
+- Skip autoversion SIMD and hand-tuned SIMD until scalar validates
+
 ## Porting Status
 
 **All major DSP modules ported.** 59k lines of safe Rust SIMD in `src/safe_simd/`.
