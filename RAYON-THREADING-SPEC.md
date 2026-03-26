@@ -181,6 +181,808 @@ soundness. Or: keep DisjointMut for level cache only (minimal scope).
 
 ---
 
+# Threading Ownership Model
+
+Three levels of parallelism, each with a clean ownership boundary:
+1. **Frame-level**: multiple frames in flight (entropy runs ahead, recon reads frozen refs)
+2. **SB-row-level**: pipeline within a frame (recon N+1 overlaps with filter N)
+3. **Tile-level**: parallel columns within an SB row (recon only)
+
+## Current Threading Architecture (for context)
+
+### Task Types (existing)
+
+```
+Init → InitCdf → TileEntropy → EntropyProgress →
+  TileReconstruction → DeblockCols → DeblockRows →
+  Cdef → SuperResolution → LoopRestoration →
+  ReconstructionProgress → FgPrep → FgApply
+```
+
+### Threading Modes (existing)
+
+| Mode | `n_tc` | `n_fc` | Passes | Parallelism |
+|------|--------|--------|--------|-------------|
+| Single-threaded | 1 | 1 | 1 (pass 0) | None |
+| Tile only | >1 | 1 | 1 (pass 0) | Tiles within SB row |
+| Frame only | 1 | >1 | 2 (entropy + recon) | Frames overlap |
+| Frame + tile | >1 | >1 | 3 (entropy + recon + filtering) | Both |
+
+### Per-Tile Data (existing)
+
+| Data | Scope | Threading Access |
+|------|-------|------------------|
+| `Rav1dTileState.context` (CDF/MSAC) | Per-tile | Mutex-protected |
+| `ts.tiling.{col,row}_{start,end}` | Per-tile | Read-only, 4-pixel units |
+| `ts.progress[0]` (recon) | Per-tile | AtomicI32 |
+| `ts.progress[1]` (entropy) | Per-tile | AtomicI32 |
+| `f.cur` (picture pixels) | Shared | Tiles write disjoint column ranges |
+| `f.lf.mask` (filter masks) | Shared | Per-SB128 cell, no cross-tile races |
+| `f.lf.level` (deblock levels) | Shared | Per-block, written by decode, read by deblock |
+| `f.a` (above context) | Shared | Per-tile-column, per-SB-row |
+| `f.ipred_edge` | Shared | Per-plane per-tile-column |
+
+### Tile Geometry
+
+Tile boundaries are SB-aligned:
+```
+tile_col_boundaries[i] = frame_hdr.tiling.col_start_sb[i] << sb_shift  (4-pixel units)
+tile_row_boundaries[i] = frame_hdr.tiling.row_start_sb[i] << sb_shift
+
+pixel columns for tile t: [col_start_sb[t] * sb_step * 4, col_start_sb[t+1] * sb_step * 4)
+```
+
+Within an SB row, tiles process disjoint column ranges. The deblock filter at tile
+column boundaries uses weaker filter strength (via `tx_lpf_right_edge`), but the
+filter itself processes all columns in one pass — it is NOT split by tile.
+
+### Single-Threaded Execution Order (baseline)
+
+```
+for sby in 0..num_sb_rows:
+    for tile_col in 0..n_tile_cols:
+        rav1d_decode_tile_sbrow(tile_col, sby)   // entropy + recon
+    backup_ipred_edge(sby)
+    rav1d_filter_sbrow(sby):                     // all columns, all planes
+        deblock_cols(sby)
+        deblock_rows(sby) + copy_lpf(sby)
+        cdef(sby)
+        super_resolution(sby)
+        loop_restoration(sby)
+    film_grain is applied per 32-row strip after all SB rows
+```
+
+### Frame Threading Execution Order (existing)
+
+Frame N+1's entropy decode runs ahead. Reconstruction waits for reference pixels:
+
+```
+Frame N:   [entropy sby=0..S] → [recon sby=0 → filter sby=0 → recon sby=1 → ...]
+Frame N+1: [entropy sby=0..S] → [recon sby=0 (waits for ref rows from N) → ...]
+```
+
+Progress tracking:
+- `f.sr_cur.progress: Arc<[AtomicU32; 2]>` — `[0]` entropy, `[1]` pixel rows completed
+- `lowest_pixel_mem[tile][sby][ref]` — minimum reference pixel row needed for this MC
+- Frame N+1's recon task polls Frame N's `progress[1]`, re-queues if insufficient
+
+## Rayon Ownership Design
+
+### Principle: Re-Split, Don't Persist
+
+The key insight: **don't maintain persistent row slice arrays**. Instead, re-split
+from the flat frame buffer as needed for each phase. The flat buffer is the ground
+truth; row slices are temporary views created and destroyed per phase.
+
+```rust
+// The flat buffer is the single source of ownership
+let frame_y: &mut [BD::Pixel] = /* frame allocation, stride-aligned */;
+
+// Phase A: create tile column strips from flat buffer
+{
+    let rows: Vec<&mut [BD::Pixel]> = frame_y.chunks_mut(stride)
+        .skip(sby_start).take(sb_height).map(|r| &mut r[..width]).collect();
+    let tile_strips = split_by_columns(rows, &tile_boundaries);
+    rayon::scope(|s| { /* tile-parallel recon */ });
+}  // all row slices dropped, flat buffer borrow released
+
+// Phase B: re-create full-width rows from the same flat buffer
+{
+    let rows: Vec<&mut [BD::Pixel]> = frame_y.chunks_mut(stride)
+        .skip(filter_start).take(filter_height).map(|r| &mut r[..width]).collect();
+    filter_sbrow(&mut rows, sby);
+}  // borrow released again
+```
+
+Each phase gets fresh borrows. No persistent row-slice arrays to manage.
+
+### Level 3: Tile-Parallel Reconstruction
+
+Within a single SB row's reconstruction, tiles process disjoint column ranges.
+
+**Column splitting via `split_at_mut`**:
+
+```rust
+fn split_rows_by_tiles<'a, P>(
+    rows: Vec<&'a mut [P]>,
+    // boundaries[0]=0, boundaries[1]=col1, ..., boundaries[n]=width
+    boundaries: &[usize],
+) -> Vec<Vec<&'a mut [P]>> {
+    let n_tiles = boundaries.len() - 1;
+    let mut tiles: Vec<Vec<&'a mut [P]>> = (0..n_tiles).map(|_| Vec::new()).collect();
+
+    for mut row in rows {
+        let mut col = 0;
+        for t in 0..n_tiles {
+            let len = boundaries[t + 1] - boundaries[t];
+            let (piece, rest) = row.split_at_mut(len);
+            tiles[t].push(piece);
+            row = rest;
+            col += len;
+        }
+    }
+
+    tiles
+}
+```
+
+Each row is consumed, split at tile boundaries, and the pieces distributed into
+per-tile Vecs. This is **fully safe** — `split_at_mut` guarantees non-overlap.
+
+**Tile-parallel reconstruction flow**:
+
+```rust
+fn reconstruct_sbrow<BD: BitDepth>(
+    frame_y: &mut [BD::Pixel],
+    frame_u: &mut [BD::Pixel],
+    frame_v: &mut [BD::Pixel],
+    y_stride: usize,
+    uv_stride: usize,
+    sby: usize,
+    tile_col_boundaries: &[usize],  // pixel columns
+    ref_frames: &[FrozenFrame<BD>],
+    // ... entropy state, scratch buffers
+) {
+    let sb_height = 64; // or 128
+    let row_start = sby * sb_height;
+    let row_end = min(row_start + sb_height, height);
+
+    // Create row slices for this SB row (Y plane)
+    let y_rows: Vec<&mut [BD::Pixel]> = frame_y
+        .chunks_mut(y_stride)
+        .skip(row_start).take(row_end - row_start)
+        .map(|r| &mut r[..y_width])
+        .collect();
+    // (same for U, V with subsampled dimensions)
+
+    // Split by tile columns
+    let y_tiles = split_rows_by_tiles(y_rows, tile_col_boundaries);
+    let u_tiles = split_rows_by_tiles(u_rows, &uv_tile_boundaries);
+    let v_tiles = split_rows_by_tiles(v_rows, &uv_tile_boundaries);
+
+    // Parallel reconstruction
+    rayon::scope(|s| {
+        for tile_idx in 0..n_tiles {
+            let y_strip = y_tiles[tile_idx]; // Vec<&mut [BD::Pixel]>
+            let u_strip = u_tiles[tile_idx];
+            let v_strip = v_tiles[tile_idx];
+
+            s.spawn(move |_| {
+                for block in tile_blocks(tile_idx, sby) {
+                    match block.mode {
+                        Intra => {
+                            // ipred writes to y_strip[by][bx..bx+bw]
+                            // reads from topleft scratch (per-thread)
+                            // itx adds coefficients to same region
+                        }
+                        Inter => {
+                            // MC reads from ref_frames (immutable)
+                            // writes to y_strip[by][bx..bx+bw]
+                        }
+                    }
+                }
+            });
+        }
+    });
+    // All tile row slices dropped here — flat buffer borrow released
+}
+```
+
+**Allocation cost**: One `Vec<&mut [P]>` per tile × 3 planes × SB height.
+For 4 tiles, SB128, 3 planes: 4 × 3 × 128 = 1536 slice references = ~12KB.
+Negligible compared to pixel processing.
+
+### Level 2: SB-Row Pipeline
+
+Recon(N+1) can run in parallel with Filter(N) because they touch disjoint row ranges:
+
+```
+Filter(N):  rows [N_start - 7, N_end)       ← deblock reach into prev SB
+Recon(N+1): rows [N+1_start, N+1_end + overflow) = [N_end, N_end + sb_height + overflow)
+                                              ↑
+                                      N_end is the boundary — no overlap
+```
+
+The only complication: MC overflow rows. A block at the bottom of SB row N+1 can
+write up to 24 rows past N+1's boundary into N+2's territory. But overflow goes
+DOWN (into future SB rows), not UP (into already-filtered rows). So:
+
+- Filter(N) reads/writes rows *above* the N/N+1 boundary
+- Recon(N+1) writes rows *at and below* the N/N+1 boundary
+- No overlap
+
+**SB-row pipeline with `split_at_mut`**:
+
+```rust
+fn decode_frame<BD: BitDepth>(
+    frame_y: &mut [BD::Pixel],
+    y_stride: usize,
+    // ... other planes, tile info, ref frames
+) {
+    let sb_height = 64;
+
+    // Process SB rows in pipeline: recon(N+1) || filter(N)
+    rayon::scope(|s| {
+        let mut remaining_buf: &mut [BD::Pixel] = frame_y;
+        let mut prev_filter_done: Option<Receiver<()>> = None;
+        let mut prev_recon_done: Option<Receiver<()>> = None;
+
+        for sby in 0..num_sb_rows {
+            let nrows = min(sb_height, remaining_height);
+            let row_bytes = nrows * y_stride;
+
+            // Split: this SB row vs everything below
+            let (sby_buf, rest) = remaining_buf.split_at_mut(row_bytes);
+            remaining_buf = rest;
+
+            // Channels for synchronization
+            let (recon_tx, recon_rx) = channel();
+            let (filter_tx, filter_rx) = channel();
+
+            let wait_prev_recon = prev_recon_done.take();
+            let wait_prev_filter = prev_filter_done.take();
+
+            // Spawn recon task for this SB row
+            s.spawn(move |_| {
+                // Wait for previous SB row's recon (ipred edge dependency)
+                if let Some(rx) = wait_prev_recon { rx.recv().unwrap(); }
+
+                // Tile-parallel reconstruction within sby_buf
+                let rows = split_into_rows(sby_buf, y_stride, y_width);
+                let tiles = split_rows_by_tiles(rows, &tile_boundaries);
+                rayon::scope(|s| {
+                    for (t, strip) in tiles.into_iter().enumerate() {
+                        s.spawn(move |_| reconstruct_tile(strip, t, sby, refs));
+                    }
+                });
+
+                backup_ipred_edge(sby_buf, sby);
+                recon_tx.send(()).unwrap();
+            });
+
+            // Spawn filter task (waits for THIS recon + PREV filter)
+            let recon_rx_for_filter = recon_rx.clone();
+            s.spawn(move |_| {
+                recon_rx_for_filter.recv().unwrap();  // this SB's recon done
+                if let Some(rx) = wait_prev_filter { rx.recv().unwrap(); }
+
+                // Filter needs deblock margin from previous SB row
+                // Those rows are already filtered (prev_filter_done guarantees it)
+                // Re-split sby_buf for full-width filter access
+                let rows = split_into_rows(sby_buf, y_stride, y_width);
+                deblock(rows, sby);
+                copy_lpf(rows, sby);
+                cdef(rows, sby);
+                lr(rows, sby);
+
+                filter_tx.send(()).unwrap();
+            });
+
+            prev_recon_done = Some(recon_rx);
+            prev_filter_done = Some(filter_rx);
+        }
+    }); // All tasks complete when scope exits
+}
+```
+
+**Wait — ownership problem**: `sby_buf` is moved into the recon closure, so the filter
+closure can't also use it. Both need mutable access to the same SB row's pixels.
+
+**Solution**: The recon and filter tasks are *sequential* for the same SB row (filter
+waits for recon). So we chain them:
+
+```rust
+s.spawn(move |_| {
+    // Wait for prev SB row's recon (ipred edge)
+    if let Some(rx) = wait_prev_recon { rx.recv().unwrap(); }
+
+    // === RECON PHASE ===
+    {
+        let rows = split_into_rows(sby_buf, y_stride, y_width);
+        let tiles = split_rows_by_tiles(rows, &tile_boundaries);
+        rayon::scope(|s| {
+            for (t, strip) in tiles.into_iter().enumerate() {
+                s.spawn(move |_| reconstruct_tile(strip, t, sby, refs));
+            }
+        });
+    }
+    backup_ipred_edge(sby_buf, sby);
+
+    // Signal recon done (so next SB row's recon can start)
+    recon_tx.send(()).unwrap();
+
+    // Wait for prev SB row's filter (deblock overlap dependency)
+    if let Some(rx) = wait_prev_filter { rx.recv().unwrap(); }
+
+    // === FILTER PHASE ===
+    {
+        let rows = split_into_rows(sby_buf, y_stride, y_width);
+        deblock(&mut rows, sby);
+        copy_lpf(&rows, sby);
+        cdef(&mut rows, sby);
+        lr(&mut rows, sby);
+    }
+
+    filter_tx.send(()).unwrap();
+});
+```
+
+Now each SB row is one rayon task that owns its `sby_buf` exclusively. Within
+the task, recon runs first (tile-parallel via nested `rayon::scope`), then filter
+runs sequentially. The pipeline comes from *different SB rows* running on different
+rayon threads:
+
+```
+Thread A: [recon(0)] → signal → [filter(0)] → signal
+Thread B:             [recon(1)] → signal → [filter(1)] → signal
+Thread C:                         [recon(2)] → signal → [filter(2)]
+                       ↑                       ↑
+                 waits recon(0)          waits recon(1)
+                                   waits filter(0)          waits filter(1)
+```
+
+**This is the correct ownership model.** Each SB row's buffer is owned by exactly
+one rayon task. Tile parallelism happens via nested `rayon::scope` within the recon
+phase. The pipeline emerges from the channel-based dependency graph.
+
+### Deblock Cross-SB Access
+
+The filter phase needs deblock's ±7 row reach into the previous SB row. Two options:
+
+**Option A: Expanded SB buffer** — include 7 extra rows from above in `sby_buf`:
+
+```rust
+let margin = if sby > 0 { 7 } else { 0 };
+let buf_start = sby * sb_height - margin;
+let (sby_buf, rest) = remaining.split_at_mut((sb_height + margin) * stride);
+```
+
+This means the SB row's owned region is `[N_start - 7, N_end)`. The previous SB row's
+task must finish its filter phase before this SB row can take ownership of those 7 rows.
+The `wait_prev_filter` channel already enforces this.
+
+**Option B: Copy boundary rows to scratch** — before releasing SB row N-1's ownership,
+copy the 7 boundary rows to a scratch buffer. SB row N's deblock reads from the scratch.
+
+Option A is simpler (no copies). Option B avoids the expanded region but adds a memcpy.
+**Recommend Option A** — the `split_at_mut` naturally handles it, and the pipeline
+dependency already sequences the accesses correctly.
+
+### MC Overflow Rows
+
+Reconstruction blocks can span SB boundaries (MC writes past the SB row's end).
+With the re-split model, the SB row's buffer can include overflow rows:
+
+```rust
+let overflow = 24; // max MC block overshoot
+let row_end = min(sby_start + sb_height + overflow, height);
+let (sby_buf, rest) = remaining.split_at_mut((row_end - sby_start) * stride);
+```
+
+SB row N+1's recon starts at `sby_start + sb_height`, which is within the overflow
+region. Since N's recon completes before N+1's recon starts (channel dependency),
+the overflow rows are released before N+1 claims them.
+
+**Actually**: with `split_at_mut` on the flat buffer, we can't give SB row N overflow
+rows that also belong to SB row N+1. The split is at a fixed point.
+
+**Resolution**: MC overflow blocks that extend past the SB boundary are rare and small.
+The overflow rows are *written* during recon, which completes before the next SB row
+starts. So we can give the overflow rows to SB row N, and SB row N+1 gets rows
+starting *after* the overflow:
+
+```
+SB row N owns:   rows [N_start - margin, N_start + sb_height + overflow)
+SB row N+1 owns: rows [N_start + sb_height + overflow - margin, ...]
+```
+
+Wait — this creates a gap or overlap. The cleaner approach:
+
+**Use a two-phase split**: First split at exact SB boundaries for SB row ownership.
+Then for MC overflow, the block writes to a temporary buffer that gets copied back
+after all tiles complete. This matches how emu_edge already works for boundary MC.
+
+**Simpler approach**: Don't try to pipeline recon phases. Only pipeline recon(N+1)
+with filter(N). MC overflow is only within the recon phase, so each SB row's recon
+has exclusive access to its rows plus overflow, and there's no conflict because recon
+tasks are sequential (each waits for the previous recon to complete).
+
+This is exactly what the channel-based pipeline does: recon(N+1) waits for recon(N)
+to signal completion. So recon(N+1) never runs simultaneously with recon(N). The
+overflow rows are "returned" implicitly when recon(N) completes.
+
+The ONLY parallelism is: recon(N+1) || filter(N). And these touch disjoint regions
+(recon writes below the boundary, filter reads/writes above the boundary).
+
+### Level 1: Frame-Level Parallelism
+
+#### Entropy Decode (no pixel access)
+
+Entropy decode is pure bitstream parsing — no pixel reads or writes. It produces:
+- Block modes, motion vectors, quantizer indices, transform types
+- Coefficient values (into a separate coefficient buffer)
+- CDF probability updates (per tile)
+
+**Rayon model**: Entropy decode runs in any thread, completely independent of pixel
+ownership. No frame buffer borrow needed.
+
+```rust
+// Entropy can run ahead for multiple frames simultaneously
+rayon::scope(|s| {
+    for frame_idx in 0..n_frames {
+        s.spawn(move |_| {
+            entropy_decode_all_sbrows(frame_idx);
+        });
+    }
+});
+```
+
+Tile-level entropy parallelism: tiles have independent MSAC state, so entropy decode
+for different tiles within the same SB row can run in parallel. Within a tile, SB rows
+are sequential (CDF state carries forward).
+
+#### Reference Frame Access
+
+After a frame completes ALL filters (deblock + CDEF + LR + super-resolution + film grain),
+its pixel buffer is frozen for reference use by future frames.
+
+**Progressive freeze model**:
+
+```rust
+/// A frame buffer that progressively transitions from mutable to immutable.
+/// Rows below `frozen_through` are immutable and available for reference reads.
+/// Rows at and above `frozen_through` may still be written by the owning decoder.
+pub struct ProgressiveFrame<P: Send> {
+    buf: Vec<P>,              // contiguous frame allocation
+    stride: usize,            // pixels per row (including padding)
+    width: usize,             // active pixels per row
+    height: usize,            // total rows
+    frozen_through: AtomicUsize,  // rows [0, frozen_through) are immutable
+}
+
+impl<P: Send + Sync> ProgressiveFrame<P> {
+    /// Called by the owning decoder after all filters complete for SB row `sby`.
+    /// Monotonically advances the freeze boundary.
+    pub fn freeze_through(&self, pixel_row: usize) {
+        let prev = self.frozen_through.load(Ordering::Relaxed);
+        debug_assert!(pixel_row >= prev, "freeze boundary must advance monotonically");
+        self.frozen_through.store(pixel_row, Ordering::Release);
+    }
+
+    /// Called by other frames to read a frozen row.
+    /// SAFETY: the caller must ensure `y < frozen_through` (checked here with Acquire).
+    pub fn frozen_row(&self, y: usize) -> &[P] {
+        let frozen = self.frozen_through.load(Ordering::Acquire);
+        assert!(y < frozen, "row {y} not yet frozen (frozen_through={frozen})");
+        let start = y * self.stride;
+        &self.buf[start..start + self.width]
+    }
+
+    /// Called by the owning decoder to get mutable access to unfrozen rows.
+    /// Must be the sole writer (enforced by holding &mut self or by the rayon scope).
+    pub fn active_rows_mut(&mut self, start: usize, end: usize) -> Vec<&mut [P]> {
+        let frozen = *self.frozen_through.get_mut(); // no atomic needed with &mut
+        assert!(start >= frozen, "cannot mutate frozen rows");
+        self.buf.chunks_mut(self.stride)
+            .skip(start).take(end - start)
+            .map(|r| &mut r[..self.width])
+            .collect()
+    }
+}
+```
+
+**Soundness argument**:
+- `freeze_through` advances monotonically (enforced by debug_assert)
+- `frozen_row` requires `y < frozen_through` with Acquire ordering — the Release
+  in `freeze_through` guarantees all writes to row `y` are visible
+- `active_rows_mut` requires `&mut self` and asserts `start >= frozen_through` —
+  no reader can access these rows (they're above the freeze boundary)
+- The atomic Release/Acquire pair ensures memory visibility across threads
+
+**BUT**: `frozen_row(&self)` and the rayon task holding `&mut self` (via
+`active_rows_mut`) exist simultaneously. In safe Rust, you can't have `&self` and
+`&mut self` at the same time. This requires either:
+
+1. **Split the frame into two types**: `FrameWriter` (holds `&mut`) and `FrameReader`
+   (holds `Arc`). The reader only sees frozen rows.
+2. **Use `UnsafeCell` internally**: The `ProgressiveFrame` uses `UnsafeCell<Vec<P>>`
+   and the monotonic freeze invariant proves non-aliasing.
+3. **Avoid overlap entirely**: Frame N completes all filters before Frame N+1's recon starts.
+
+#### Option A: Sequential Frame Completion (simplest, fully safe)
+
+```rust
+// Frame N: decode all SB rows (tile-parallel within each)
+let frame_n_buf = decode_frame_rayon(n, &frozen_refs)?;
+
+// Freeze entire frame
+let frozen_n: Arc<FrozenFrame<BD>> = Arc::new(FrozenFrame::from(frame_n_buf));
+
+// Frame N+1: can now read all of N
+let refs = [&frozen_n, ...];
+let frame_n1_buf = decode_frame_rayon(n+1, &refs)?;
+```
+
+**Tradeoff**: no frame-level recon overlap. But with tile parallelism, the rayon
+thread pool stays busy within each frame. For P-cores on modern CPUs (4-8 cores),
+tile parallelism alone may saturate the pipeline.
+
+**When this is good enough**: Batch decoding, images (AVIF), low core counts (≤8).
+
+#### Option B: Progressive Freeze (maximum throughput)
+
+For high core counts or streaming decode where frame-level overlap matters:
+
+```rust
+struct ProgressiveFrame<P> {
+    buf: UnsafeCell<Vec<P>>,    // interior mutability
+    stride: usize,
+    width: usize,
+    height: usize,
+    frozen_through: AtomicUsize,
+}
+
+// SAFETY: The frozen_through atomic enforces temporal ordering:
+// - Writers only touch rows >= frozen_through (via active_rows assertion)
+// - Readers only touch rows < frozen_through (via frozen_row assertion)
+// - freeze_through uses Release, frozen_row uses Acquire (memory visibility)
+// - frozen_through advances monotonically (no row is both read and written)
+unsafe impl<P: Send + Sync> Sync for ProgressiveFrame<P> {}
+```
+
+**Unsafe budget**: ~20 lines in `ProgressiveFrame` (2 methods with raw pointer access).
+The safety proof is:
+1. Monotonic freeze boundary creates a partition: `[0, frozen) ∪ [frozen, height)`
+2. Readers access only `[0, frozen)`, writers access only `[frozen, height)`
+3. Release/Acquire ordering ensures writes before freeze are visible to readers after freeze
+4. No row is ever in both partitions simultaneously
+
+This is fundamentally simpler than DisjointMut (which tracks arbitrary overlapping ranges).
+The invariant is trivially auditable: one `AtomicUsize`, one direction, one boundary.
+
+#### Option C: Per-SB-Row Arc Handoff (safe, moderate overhead)
+
+Each SB row's pixels are stored in a separate allocation:
+
+```rust
+struct FrameRows<P> {
+    sb_rows: Vec<SbRowState<P>>,  // one per SB row
+}
+
+enum SbRowState<P> {
+    Active(Vec<P>),           // mutable, being decoded/filtered
+    Frozen(Arc<Vec<P>>),      // immutable, available for reference
+}
+```
+
+After all filters complete for SB row N:
+```rust
+let buf = std::mem::replace(&mut sb_rows[sby], SbRowState::Active(Vec::new()));
+if let SbRowState::Active(buf) = buf {
+    sb_rows[sby] = SbRowState::Frozen(Arc::new(buf));
+}
+```
+
+**Tradeoff**: Fully safe, but:
+- Non-contiguous memory (each SB row is a separate allocation)
+- SIMD cross-row access impossible without copying
+- LR and deblock need multiple rows from the same contiguous buffer
+
+**Not recommended** for SIMD decode paths. Only viable if rows are re-assembled
+into contiguous scratch buffers for filter stages.
+
+#### Recommended Approach
+
+| Use Case | Approach | Frame Overlap? | Unsafe? |
+|----------|----------|----------------|---------|
+| AVIF (still images) | Option A (sequential) | No | No |
+| Video, ≤8 cores | Option A (sequential) | No | No |
+| Video, >8 cores | Option B (progressive freeze) | Yes | ~20 lines |
+| Video, max safety | Option A + more tiles | No | No |
+
+**Start with Option A.** It's fully safe, gives full tile and SB-row pipeline
+parallelism, and handles the common case (AVIF decoding, moderate core counts).
+Add Option B later if profiling shows frame-level overlap is needed for throughput.
+
+### Film Grain Parallelism
+
+Film grain processes 32-row strips with no cross-strip dependencies.
+Each strip reads from the filtered frame and writes to the output frame.
+
+```rust
+// Film grain: trivially parallel per strip
+let strips: Vec<(usize, usize)> = (0..num_strips)
+    .map(|i| (i * 32, min((i + 1) * 32, height)))
+    .collect();
+
+rayon::scope(|s| {
+    for (strip_start, strip_end) in strips {
+        let src_rows = &filtered_frame[strip_start..strip_end]; // immutable
+        let dst_rows = &mut output_frame[strip_start..strip_end]; // mutable
+        s.spawn(move |_| {
+            apply_film_grain(dst_rows, src_rows, &grain_lut, &scaling, strip_start);
+        });
+    }
+});
+```
+
+If `in` and `out` are the same buffer (in-place grain), the strips are still independent
+because each strip writes only its own rows.
+
+## Complete Pipeline Ownership Map
+
+### Single Frame, Tile-Parallel Decode
+
+```
+                    Frame buffer (flat Vec<BD::Pixel>, one per plane)
+                    ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│  SB Row 0                                                          │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │ RECON: split_at_mut by tile columns                          │  │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐          │  │
+│  │  │ Tile 0  │ │ Tile 1  │ │ Tile 2  │ │ Tile 3  │  rayon   │  │
+│  │  │ cols    │ │ cols    │ │ cols    │ │ cols    │  scope   │  │
+│  │  │ 0..256  │ │ 256..512│ │ 512..768│ │ 768..W  │          │  │
+│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘          │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │ FILTER: full-width rows, sequential                          │  │
+│  │  deblock → copy_lpf → CDEF → LR                             │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+├─────────────────────────────────────────────────────────────────────┤
+│  SB Row 1  (starts after SB Row 0's recon signals done)           │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │ RECON: tile-parallel (same as above)                         │  │
+│  │  ↕ runs in parallel with SB Row 0's FILTER                  │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│  ...                                                               │
+└─────────────────────────────────────────────────────────────────────┘
+
+Ref frames: Arc<FrozenFrame<BD>> (immutable, contiguous, shared via Arc)
+Scratch buffers: per-thread stack (mid, topleft, coeff, tmp1/tmp2, emu_edge)
+ipred_edge: per-SB-row Vec (written by backup_ipred_edge, read by next SB row)
+cdef_line_buf: double-buffered per-SB-row (toggle on sby parity)
+lr_line_buf: per-SB-row offsets into shared buffer
+level cache: per-SB-row slice (read-only during filter, written during decode)
+```
+
+### Multi-Frame Pipeline (Option B)
+
+```
+Frame N:
+  SB Row 0: [tile-recon] → [filter] → freeze rows 0..63  ─── progress[1] = 64
+  SB Row 1: [tile-recon] → [filter] → freeze rows 64..127 ── progress[1] = 128
+  SB Row 2: ...
+
+Frame N+1 (entropy done, waiting for ref rows):
+  SB Row 0: [tile-recon] ← reads Frame N rows 0..63+overflow (frozen, via Arc)
+                          ← blocks until Frame N progress[1] ≥ required_row
+  SB Row 1: [tile-recon] ← reads Frame N rows 64..127+overflow
+  ...
+
+ProgressiveFrame handles the freeze boundary:
+  Frame N:   active_rows_mut(128, 192) — writing SB row 2
+  Frame N+1: frozen_row(50)            — reading MC source from SB row 0
+  Both safe: 50 < 128 (frozen boundary), 128 ≥ 128 (active boundary)
+```
+
+## Shared Buffer Ownership Strategy
+
+### Per-Thread Scratch (no sharing, trivially safe)
+
+All MC intermediate buffers, topleft edge arrays, coefficient buffers, and temporary
+pixel buffers are per-thread stack allocations. Each rayon task allocates its own.
+No ownership issues.
+
+### ipred_edge Buffer
+
+Written by `backup_ipred_edge(sby)`, read by `prepare_intra_edges(sby+1)`.
+
+**Ownership**: Per-SB-row, sequential access. SB row N writes; SB row N+1 reads.
+The recon pipeline dependency (N+1 waits for N's recon to signal) ensures the read
+happens after the write.
+
+**Rayon model**: Single `Vec<u8>` with per-plane offsets. SB row N's recon task writes
+to `[sby_offset, sby_offset + row_width)`. SB row N+1's recon task reads the same range.
+The channel dependency provides the happens-before guarantee.
+
+For tile parallelism: `backup_ipred_edge` runs after ALL tiles complete for the SB row
+(it's part of the SB row's sequential post-recon work). It reads the bottom row from
+all tiles' columns. The row is fully reconstructed at this point.
+
+### cdef_line_buf (double-buffered)
+
+Two sets of 2-row backups, toggled by `!tf` (SB row parity).
+
+- SB row N writes to `cdef_line[tf_N]` (via `backup2lines`)
+- SB row N+1's CDEF reads from `cdef_line[tf_N] = cdef_line[!tf_{N+1}]`
+
+**Ownership**: The parity toggle ensures N and N+1 write to different slots.
+N+1's CDEF reads N's slot only after N's deblock+copy_lpf completes (pipeline dep).
+
+**Rayon model**: Two separate `Vec<u8>` buffers (even/odd). Each SB row's filter task
+owns its write buffer exclusively and reads the other buffer (written by the previous
+SB row, guaranteed complete by channel dependency).
+
+### lr_line_buf
+
+Offset-indexed per SB row per plane. `copy_lpf(sby)` writes; `lr(sby)` and `cdef(sby+1)` read.
+
+**Ownership**: `copy_lpf` runs within the filter phase, before CDEF and LR for the same
+SB row. Cross-SB access (CDEF reads previous row's lr_line_buf) is guarded by the filter
+pipeline dependency.
+
+**Rayon model**: Single contiguous buffer with per-SB-row offsets. Same pipeline dependency
+as cdef_line_buf — the offset indexing prevents aliasing.
+
+### lf.level (deblock level cache)
+
+Written during entropy decode (per-block); read during deblock filter.
+
+**Ownership**: In the single-frame model, entropy decode completes for the entire frame
+before any filtering starts. In the pipelined model, entropy for SB row N completes
+before recon for SB row N starts, and deblock for SB row N runs after recon.
+
+**Rayon model**: Pre-allocate per-SB-row slices. Each SB row's entropy decode writes its
+slice; the deblock filter reads it. The pipeline ordering guarantees write-before-read.
+
+For tile parallelism within entropy decode: tiles write to disjoint column ranges of the
+level buffer (same column splitting as pixel data). No cross-tile aliasing.
+
+### lf.mask (filter masks)
+
+Written during entropy decode; read during deblock and CDEF.
+
+**Ownership**: Same as level cache — per-SB-row, column-disjoint across tiles.
+Indexed by `sb128x` (SB column in 128-pixel units). Each tile's entropy decode writes
+masks for its SB columns only.
+
+**Rayon model**: `Vec<Av1Filter>` indexed by `(sby >> sb128_shift) * sb128w + sbx`.
+Tiles write disjoint `sbx` ranges. No cross-tile aliasing.
+
+## Summary: What Requires unsafe
+
+| Component | Safe? | Mechanism | Notes |
+|-----------|-------|-----------|-------|
+| SB-row splitting | Safe | `split_at_mut` on flat buffer | Vertical partitioning |
+| Tile column splitting | Safe | `split_at_mut` per row, distribute to Vecs | Horizontal partitioning |
+| SB-row pipeline | Safe | rayon scope + channels | Recon(N+1) ∥ Filter(N) |
+| Tile-parallel recon | Safe | nested rayon scope | Within SB row |
+| Film grain strips | Safe | `split_at_mut` per strip | No cross-strip deps |
+| Reference frames (Option A) | Safe | `Arc<FrozenFrame>` after complete | No frame overlap |
+| Reference frames (Option B) | **~20 lines unsafe** | `ProgressiveFrame` with `UnsafeCell` | Monotonic freeze boundary |
+| ipred_edge | Safe | Channel-ordered sequential access | Write(N) → Read(N+1) |
+| cdef_line_buf | Safe | Double-buffered, parity toggle | Even/odd SB rows |
+| lr_line_buf | Safe | Offset-indexed, pipeline-ordered | Sequential per SB row |
+| level cache | Safe | Per-SB-row slices, tile-column disjoint | Write(decode) → Read(filter) |
+
+**Total unsafe for Option A (sequential frames): zero.**
+**Total unsafe for Option B (progressive freeze): ~20 lines** with a 3-line invariant
+(monotonic boundary + Release/Acquire + partition guarantee).
+
+---
+
 # Data Ownership Architecture
 
 This section documents every data access pattern in the decode pipeline — the exact
