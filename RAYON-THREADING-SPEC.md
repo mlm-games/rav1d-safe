@@ -18,17 +18,36 @@ both false-positive and real overlaps. `unchecked` disables tracking entirely.
 // BEFORE: offset into flat DisjointMut buffer
 struct PicOffset<'a> { data: &'a DisjointMut<PicBuf>, offset: usize }
 
-// AFTER: pre-split row slices, no DisjointMut for picture planes
-// Each row is exactly width pixels — no stride padding, no gaps
-type RowSlices<'a> = &'a mut [&'a mut [u8]];
+// AFTER: pre-split row slices typed by pixel depth
+// BD::Pixel is u8 for 8bpc, u16 for 10/12bpc
+// Each row is exactly `width` pixels — no stride padding, no gaps
+// Alignment: inherited from the aligned frame allocation (64-byte aligned base,
+// stride is a multiple of 64). Row slice start = base + row * stride, which
+// preserves alignment. The [BD::Pixel] element type additionally guarantees
+// natural alignment (1-byte for u8, 2-byte for u16).
+type RowSlices<'a, BD: BitDepth> = &'a mut [&'a mut [BD::Pixel]];
 ```
 
 Frame buffer pre-split before decode:
 ```rust
-let rows: Vec<&mut [u8]> = frame_buf.chunks_mut(stride)
-    .take(height)
-    .map(|row| &mut row[..width * pixel_size])
-    .collect();
+// Frame allocated with 64-byte alignment (AlignedVec64), stride is 64-aligned.
+// BD::Pixel determines element type and natural alignment.
+fn split_frame<BD: BitDepth>(
+    frame_buf: &mut [BD::Pixel],
+    stride: usize,   // in pixels (= byte_stride / size_of::<BD::Pixel>())
+    width: usize,    // in pixels
+    height: usize,
+) -> Vec<&mut [BD::Pixel]> {
+    frame_buf.chunks_mut(stride)
+        .take(height)
+        .map(|row| &mut row[..width])
+        .collect()
+}
+// Each resulting row slice:
+// - Points into the aligned frame buffer (alignment preserved)
+// - Is exactly `width` pixels (no stride gap at the end)
+// - Type [BD::Pixel] ensures natural pixel alignment
+// - Independently borrowable via split_at_mut
 ```
 
 ## AV1 Task Pipeline per SB Row
@@ -111,18 +130,48 @@ fn decode_frame(frame_buf: &mut [u8], ...) {
 ## DSP Function Interface
 
 ```rust
-// Current inner SIMD: flat &mut [u8] + offset + stride
+// Current inner SIMD: flat &mut [u8] + byte offset + byte stride
 fn avg_inner(dst: &mut [u8], offset: usize, stride: usize, ...);
 
-// New: row slices directly
-fn avg_inner(dst_rows: &mut [&mut [u8]], x: usize, ...);
+// New: pixel-typed row slices + column offset
+fn avg_inner<BD: BitDepth>(
+    dst_rows: &mut [&mut [BD::Pixel]],  // h rows, each ≥ x+w pixels
+    x: usize,                           // column offset in pixels
+    ...,
+);
 ```
 
-SIMD within a row is unchanged — each row slice is contiguous.
+SIMD within a row is unchanged — each row slice is contiguous in memory.
+The `BD::Pixel` type (u8 or u16) gives natural alignment and eliminates
+manual `pixel_size` multiplication. SIMD functions cast `&mut [BD::Pixel]`
+to `&mut [u8]` for byte-level intrinsic operations (safe via zerocopy
+`IntoBytes`/`FromBytes`).
+
+For reference frame reads (immutable):
+```rust
+fn mc_put_inner<BD: BitDepth>(
+    dst_rows: &mut [&mut [BD::Pixel]],  // mutable destination rows
+    dst_x: usize,
+    src_rows: &[&[BD::Pixel]],          // immutable reference frame rows
+    src_x: usize,
+    ...,
+);
+```
 
 ## Reference Frames
 
-After decode, freeze: `Arc::new(frame_buf)`. MC reads via `&[u8]`.
+After decode completes all filters, the frame buffer is frozen for reference use:
+```rust
+// During decode: Vec<BD::Pixel> owned mutably, split into row slices
+// After decode: freeze into Arc for immutable sharing across frames
+let ref_frame: Arc<Vec<BD::Pixel>> = Arc::new(frame_buf);
+
+// Next frame's MC reads: &[BD::Pixel] row slices (immutable, no DisjointMut)
+let ref_rows: Vec<&[BD::Pixel]> = ref_frame.chunks(stride)
+    .take(height)
+    .map(|row| &row[..width])
+    .collect();
+```
 Frame threading: N+1 reads N's fully-filtered rows via atomic per-row flags.
 
 ## Level Cache
