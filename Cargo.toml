@@ -51,7 +51,8 @@ safe_unaligned_simd = { version = "0.2.5", features = ["avx512"] }
 archmage = { version = "0.9.12", features = ["macros", "avx512", "testable_dispatch"] }
 divan = "0.1"
 md5 = "0.8.0"
-zenavif-parse = { version = "0.4", features = ["eager"] }
+zenbench = "0.1"
+zenavif-parse = { version = "0.5.0", features = ["eager"] }
 
 # tango-bench depends on libloading which doesn't support wasm32
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
@@ -110,6 +111,10 @@ harness = false
 
 [[bench]]
 name = "threading_bench"
+harness = false
+
+[[bench]]
+name = "tile_threading"
 harness = false
 
 [profile.bench]
