@@ -262,17 +262,37 @@ Supported targets: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `i68
 
 ## License
 
-New code in this fork (safe SIMD implementations, managed API, tooling) is dual-licensed:
+Dual-licensed: [AGPL-3.0](LICENSE-AGPL3) or [commercial](LICENSE-COMMERCIAL).
 
-- **[AGPL-3.0-or-later](LICENSE-AGPL)** for open-source use
-- **Commercial license** available from [Imazen](https://imazen.io) for proprietary use
+I've maintained and developed open-source image server software — and the 40+
+library ecosystem it depends on — full-time since 2011. Fifteen years of
+continual maintenance, backwards compatibility, support, and the (very rare)
+security patch. That kind of stability requires sustainable funding, and
+dual-licensing is how we make it work without venture capital or rug-pulls.
+Support sustainable and secure software; swap patch tuesday for patch leap-year.
 
-The upstream rav1d/dav1d code retains its original **[BSD-2-Clause](COPYING)** license.
+[Our open-source products](https://www.imazen.io/open-source)
+
+**Your options:**
+
+- **Startup license** — $1 if your company has under $1M revenue and fewer
+  than 5 employees. [Get a key →](https://www.imazen.io/pricing)
+- **Commercial subscription** — Governed by the Imazen Site-wide Subscription
+  License v1.1 or later. Apache 2.0-like terms, no source-sharing requirement.
+  Sliding scale by company size.
+  [Pricing & 60-day free trial →](https://www.imazen.io/pricing)
+- **AGPL v3** — Free and open. Share your source if you distribute.
+
+See [LICENSE-COMMERCIAL](LICENSE-COMMERCIAL) for details.
+
+Upstream code from [memorysafety/rav1d](https://github.com/memorysafety/rav1d) is licensed under BSD-2-Clause.
+Our additions and improvements are dual-licensed (AGPL-3.0 or commercial) as above.
 
 ### Upstream Contribution
 
-This fork exists because maintaining a separate safe SIMD implementation is the fastest path to getting safe Rust AV1 decoding into production. If the rav1d maintainers are interested in upstreaming any of this work under the original BSD-2-Clause license, we'd be happy to contribute. Open an issue or reach out.
-
+We are willing to release our improvements under the original BSD-2-Clause
+license if upstream takes over maintenance of those improvements. We'd rather
+contribute back than maintain a parallel codebase. Open an issue or reach out.
 ## Acknowledgments
 
 Built on the work of the [dav1d](https://code.videolan.org/videolan/dav1d) team (VideoLAN) and the [rav1d](https://github.com/memorysafety/rav1d) team (ISRG/Prossimo). The original C and assembly implementations are exceptional — this fork demonstrates that safe Rust SIMD can get within 2x of hand-written assembly while eliminating entire classes of memory safety bugs.
