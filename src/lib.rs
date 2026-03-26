@@ -116,22 +116,20 @@ fn get_num_threads(s: &Rav1dSettings) -> NumThreads {
         cmp::min((n_tc as f64).sqrt().ceil() as usize, 8)
     };
     // Without `unchecked`, DisjointMut runtime overlap checking is active.
-    // Frame threading (n_fc > 1) triggers overlaps on the loopfilter level
-    // cache (concurrent deblock read vs reconstruction write across frames).
-    // Tile threading (n_fc = 1, n_tc > 1) is safe — narrow guards prevent
-    // picture plane overlaps, and deblock/reconstruction don't overlap within
-    // a single frame's task pipeline.
+    // Multithreaded decode triggers overlaps on picture plane stride gaps
+    // (narrow guards cover (h-1)*stride+w bytes which include padding between
+    // rows) and on the loopfilter level cache. Clamp to single-threaded.
     #[cfg(not(feature = "unchecked"))]
-    let n_fc = if n_fc > 1 {
+    let n_tc = if n_tc > 1 {
         #[cfg(debug_assertions)]
         eprintln!(
-            "rav1d: frame threading (n_fc={}) requires `unchecked` feature; \
-             falling back to tile-only threading (n_fc=1, n_tc={}).",
-            n_fc, n_tc
+            "rav1d: threads={} requested but `unchecked` feature not enabled; \
+             falling back to single-threaded. Enable `unchecked` for multithreading.",
+            n_tc
         );
         1
     } else {
-        n_fc
+        n_tc
     };
     NumThreads { n_fc, n_tc }
 }
