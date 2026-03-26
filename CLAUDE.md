@@ -23,7 +23,9 @@ Safe SIMD fork of rav1d — 160k lines of hand-written assembly replaced by safe
 - [x] ProgressiveFrame with monotonic freeze boundary (9 tests)
 - [x] Rayon decode path with per-tile Rav1dTaskContext — 14/14 conformance (sequential tiles)
 - [x] Actual parallel tile execution — 14/14 conformance with unchecked (rayon::scope::spawn)
+- [x] **2.09× speedup**: 1080p 4-tile AVIF: 55.6ms → 26.6ms (unchecked+rayon)
 - [x] FramePlanesMut/TilePlaneRows — DisjointMut-free pixel types (3 tests)
+- [x] TilePixelBufs — per-tile separate pixel buffers for safe parallel recon
 - [ ] Replace PicOffset with TilePlaneRows in recon_b_intra/recon_b_inter
 - [ ] Row-slice loopfilter, CDEF, LR, film grain
 - [ ] Validate: forbid(unsafe_code) tile-parallel conformance (no unchecked needed)
