@@ -4896,6 +4896,7 @@ fn rav1d_decode_frame_rayon(c: &Rav1dContext, f: &mut Rav1dFrameData) -> Rav1dRe
             // === TILE-PARALLEL RECONSTRUCTION ===
             // Each tile column gets its own task context and runs rav1d_decode_tile_sbrow.
             // Tiles process disjoint column ranges of the frame — no data races.
+            let recon_start = std::time::Instant::now();
             {
                 // Prepare per-tile contexts
                 for col in 0..cols {
@@ -4904,40 +4905,30 @@ fn rav1d_decode_frame_rayon(c: &Rav1dContext, f: &mut Rav1dFrameData) -> Rav1dRe
                     tile_contexts[col].frame_thread.pass = 0;
                 }
 
-                // Drain tile contexts into owned Boxes for rayon::scope::spawn.
-                // Each rayon task gets exclusive ownership of its Box<Rav1dTaskContext>.
-                let mut owned_tiles: Vec<Box<Rav1dTaskContext>> = tile_contexts.drain(..).collect();
-
-                // Collect errors from parallel tile processing.
-                // Reborrow f as shared reference for the scope (tile_sbrow takes &Rav1dFrameData).
+                // Parallel tile processing via rayon::scope.
+                // split_at_mut gives each spawn exclusive &mut to its tile context.
+                // No Vec allocations per SB row — reuses tile_contexts in place.
                 let f_shared: &Rav1dFrameData = &*f;
-                let errors: Vec<Result<(), ()>> = {
-                    let mut results = vec![Ok(()); cols];
+                let had_error = std::sync::atomic::AtomicBool::new(false);
+                {
+                    let tile_slice = tile_contexts.as_mut_slice();
                     rayon::scope(|s| {
-                        // Use split_at_mut pattern to give each spawn exclusive access
-                        let mut remaining = owned_tiles.as_mut_slice();
-                        let mut result_remaining = results.as_mut_slice();
+                        let mut remaining = tile_slice;
+                        let err = &had_error;
                         for _col in 0..cols {
                             let (head, tail) = remaining.split_at_mut(1);
-                            let (res_head, res_tail) = result_remaining.split_at_mut(1);
                             remaining = tail;
-                            result_remaining = res_tail;
                             let t = &mut head[0];
-                            let res = &mut res_head[0];
                             s.spawn(move |_| {
-                                *res = rav1d_decode_tile_sbrow(c, t, f_shared);
+                                if rav1d_decode_tile_sbrow(c, t, f_shared).is_err() {
+                                    err.store(true, Ordering::Relaxed);
+                                }
                             });
                         }
                     });
-                    results
-                };
-
-                // Restore tile contexts for next SB row
-                tile_contexts = owned_tiles;
-
-                // Check for errors
-                for result in errors {
-                    result.map_err(|()| EINVAL)?;
+                }
+                if had_error.load(Ordering::Relaxed) {
+                    return Err(EINVAL);
                 }
             }
 
@@ -4955,12 +4946,24 @@ fn rav1d_decode_frame_rayon(c: &Rav1dContext, f: &mut Rav1dFrameData) -> Rav1dRe
                 );
             }
 
+            let recon_elapsed = recon_start.elapsed();
+
             // === FILTERING: sequential, full width ===
             // Use the main thread's task context for filtering
+            let filter_start = std::time::Instant::now();
             {
                 let mut t = t_single.lock();
                 t.b.y = by;
                 (f.bd_fn().filter_sbrow)(c, f, &mut t, sby);
+            }
+            let filter_elapsed = filter_start.elapsed();
+
+            if std::env::var("RAV1D_TIMING").is_ok() {
+                eprintln!(
+                    "sby={sby:2}: recon={:6.2}ms filter={:6.2}ms",
+                    recon_elapsed.as_secs_f64() * 1000.0,
+                    filter_elapsed.as_secs_f64() * 1000.0,
+                );
             }
         }
     }
