@@ -36,7 +36,7 @@
 //! - `debug_assert!` still validates in debug builds
 
 // forbid(unsafe_code) in default build; asm-gated FFI helpers need unsafe.
-#![cfg_attr(not(feature = "asm"), forbid(unsafe_code))]
+#![cfg_attr(not(feature = "unchecked"), forbid(unsafe_code))]
 
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Ref};
 
