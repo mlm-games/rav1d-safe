@@ -4904,36 +4904,36 @@ fn rav1d_decode_frame_rayon(c: &Rav1dContext, f: &mut Rav1dFrameData) -> Rav1dRe
                     tile_contexts[col].frame_thread.pass = 0;
                 }
 
-                // Process tiles in parallel using rayon
-                // We need to convert the Vec<Box<Rav1dTaskContext>> to owned references
-                // that can be moved into rayon closures.
-                let tile_ctx_slice = &mut tile_contexts[..cols];
-                let errors: Vec<Result<(), ()>> = tile_ctx_slice
-                    .iter_mut()
-                    .enumerate()
-                    .map(|(col, t)| {
-                        t.ts = tile_row * cols + col;
-                        t.b.y = by;
-                        rav1d_decode_tile_sbrow(c, t, f)
-                    })
-                    .collect();
+                // Drain tile contexts into owned Boxes for rayon::scope::spawn.
+                // Each rayon task gets exclusive ownership of its Box<Rav1dTaskContext>.
+                let mut owned_tiles: Vec<Box<Rav1dTaskContext>> = tile_contexts.drain(..).collect();
 
-                // TODO: Replace the sequential .map().collect() above with rayon::scope:
-                //
-                // rayon::scope(|s| {
-                //     for (col, t) in tile_ctx_slice.iter_mut().enumerate() {
-                //         t.ts = tile_row * cols + col;
-                //         t.b.y = by;
-                //         s.spawn(move |_| {
-                //             rav1d_decode_tile_sbrow(c, t, f).unwrap();
-                //         });
-                //     }
-                // });
-                //
-                // This requires Rav1dTaskContext: Send, which it is (all fields are Send).
-                // The borrow checker issue: `tile_ctx_slice.iter_mut()` borrows the slice,
-                // but each `s.spawn` needs exclusive ownership of its `&mut t`.
-                // Solution: use indices + split_at_mut, or drain into separate Vecs.
+                // Collect errors from parallel tile processing.
+                // Reborrow f as shared reference for the scope (tile_sbrow takes &Rav1dFrameData).
+                let f_shared: &Rav1dFrameData = &*f;
+                let errors: Vec<Result<(), ()>> = {
+                    let mut results = vec![Ok(()); cols];
+                    rayon::scope(|s| {
+                        // Use split_at_mut pattern to give each spawn exclusive access
+                        let mut remaining = owned_tiles.as_mut_slice();
+                        let mut result_remaining = results.as_mut_slice();
+                        for _col in 0..cols {
+                            let (head, tail) = remaining.split_at_mut(1);
+                            let (res_head, res_tail) = result_remaining.split_at_mut(1);
+                            remaining = tail;
+                            result_remaining = res_tail;
+                            let t = &mut head[0];
+                            let res = &mut res_head[0];
+                            s.spawn(move |_| {
+                                *res = rav1d_decode_tile_sbrow(c, t, f_shared);
+                            });
+                        }
+                    });
+                    results
+                };
+
+                // Restore tile contexts for next SB row
+                tile_contexts = owned_tiles;
 
                 // Check for errors
                 for result in errors {
