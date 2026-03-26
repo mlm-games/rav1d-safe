@@ -9171,7 +9171,7 @@ mod bench_autoversion_vs_neon {
     macro_rules! bench_transform {
         ($test_name:ident, $w:expr, $h:expr,
          autoversioned: $av_fn:path,
-         neon: $neon_mod:path :: $neon_fn:ident,
+         neon: $neon_fn:path,
          $coeff_count:expr) => {
             #[test]
             #[ignore]
@@ -9210,7 +9210,6 @@ mod bench_autoversion_vs_neon {
                 let neon_ns = bench_fn("hand-written NEON", iters, || {
                     dst_neon.fill(128);
                     coeff.copy_from_slice(&coeff_template);
-                    use $neon_mod::*;
                     $neon_fn(
                         token,
                         &mut dst_neon,
@@ -9235,18 +9234,15 @@ mod bench_autoversion_vs_neon {
                     $coeff_count as i32 - 1,
                     255,
                 );
-                {
-                    use $neon_mod::*;
-                    $neon_fn(
-                        token,
-                        &mut dst_neon,
-                        base,
-                        stride,
-                        &mut cb,
-                        $coeff_count as i32 - 1,
-                        255,
-                    );
-                }
+                $neon_fn(
+                    token,
+                    &mut dst_neon,
+                    base,
+                    stride,
+                    &mut cb,
+                    $coeff_count as i32 - 1,
+                    255,
+                );
                 assert_eq!(dst_av, dst_neon, "Output mismatch!");
 
                 let ratio = av_ns as f64 / neon_ns as f64;
