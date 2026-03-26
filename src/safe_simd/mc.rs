@@ -11358,10 +11358,11 @@ pub fn avg_dispatch<BD: BitDepth>(
     };
     use zerocopy::IntoBytes;
     let pixel_size = std::mem::size_of::<BD::Pixel>();
+    let dst_stride = dst.stride();
+
     let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
     let dst_bytes = dst_guard.as_mut_bytes();
     let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
     avg_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, bd)
 }
 
