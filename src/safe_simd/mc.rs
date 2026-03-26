@@ -106,6 +106,51 @@ fn put_mid_i32_130(mid: Mid32x130) {
 /// With b=1024: (a * 1024 + 16384) >> 15 ≈ (a + 1) >> 1 (with rounding)
 const PW_1024: i16 = 1024;
 
+/// Build mutable row slices from a flat byte buffer.
+///
+/// Given a flat buffer starting at the first row, splits it into `h` non-overlapping
+/// row slices, each `stride` bytes apart. Only used in dispatch functions to bridge
+/// from flat DisjointMut guards to per-row slices for safe inner SIMD functions.
+///
+/// # Panics
+/// Panics if the buffer is too small to contain `h` rows at the given stride.
+#[cfg(target_arch = "x86_64")]
+fn flat_to_row_slices_u8<'a>(buf: &'a mut [u8], stride: usize, h: usize) -> Vec<&'a mut [u8]> {
+    let mut rows: Vec<&'a mut [u8]> = Vec::with_capacity(h);
+    let mut remaining = buf;
+    for i in 0..h {
+        if i + 1 < h {
+            let (row, rest) = remaining.split_at_mut(stride);
+            rows.push(row);
+            remaining = rest;
+        } else {
+            // Last row: take whatever is left
+            rows.push(remaining);
+            break;
+        }
+    }
+    rows
+}
+
+/// Build mutable row slices from a flat u16 buffer.
+#[cfg(target_arch = "x86_64")]
+fn flat_to_row_slices_u16<'a>(buf: &'a mut [u16], stride: usize, h: usize) -> Vec<&'a mut [u16]> {
+    let mut rows: Vec<&'a mut [u16]> = Vec::with_capacity(h);
+    let mut remaining = buf;
+    for i in 0..h {
+        if i + 1 < h {
+            let (row, rest) = remaining.split_at_mut(stride);
+            rows.push(row);
+            remaining = rest;
+        } else {
+            // Last row: take whatever is left
+            rows.push(remaining);
+            break;
+        }
+    }
+    rows
+}
+
 /// AVG operation for 8-bit pixels using AVX2
 ///
 /// Averages two 16-bit intermediate buffers and packs to 8-bit output.
@@ -3037,8 +3082,7 @@ unsafe fn v_filter_8tap_8bpc_direct_avx2(
 #[rite]
 fn put_8tap_8bpc_avx2_impl_inner(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: isize,
+    dst_rows: &mut [&mut [u8]],
     src: &[u8],
     src_base: usize,
     src_stride: isize,
@@ -3049,7 +3093,6 @@ fn put_8tap_8bpc_avx2_impl_inner(
     h_filter_type: Rav1dFilterMode,
     v_filter_type: Rav1dFilterMode,
 ) {
-    let mut dst = dst.flex_mut();
     let src = src.flex();
     let w = w as usize;
     let h = h as usize;
@@ -3084,10 +3127,9 @@ fn put_8tap_8bpc_avx2_impl_inner(
 
             // Second pass: vertical filter to output
             for y in 0..h {
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
                 v_filter_8tap_8bpc_avx2_inner(
                     _token,
-                    dst_row,
+                    &mut dst_rows[y],
                     &mid[y..],
                     w,
                     fv,
@@ -3101,8 +3143,7 @@ fn put_8tap_8bpc_avx2_impl_inner(
             // Case 2: H-only filtering (full SIMD)
             for y in 0..h {
                 let src_row_base = (sb + y as isize * src_stride) as usize;
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
-                h_filter_8tap_8bpc_put_avx2_inner(_token, dst_row, &src[src_row_base - 3..], w, fh);
+                h_filter_8tap_8bpc_put_avx2_inner(_token, &mut dst_rows[y], &src[src_row_base - 3..], w, fh);
             }
         }
         (None, Some(fv)) => {
@@ -3110,8 +3151,7 @@ fn put_8tap_8bpc_avx2_impl_inner(
             for y in 0..h {
                 let src_row_base = (sb + (y as isize - 3) * src_stride) as usize;
                 let src_row = &src[src_row_base..];
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
-                v_filter_8tap_8bpc_direct_avx2_inner(_token, dst_row, src_row, src_stride, w, fv);
+                v_filter_8tap_8bpc_direct_avx2_inner(_token, &mut dst_rows[y], src_row, src_stride, w, fv);
             }
         }
         (None, None) => {
@@ -3119,8 +3159,7 @@ fn put_8tap_8bpc_avx2_impl_inner(
             for y in 0..h {
                 let src_row_base = (sb + y as isize * src_stride) as usize;
                 let src_row = &src[src_row_base..];
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
-                dst_row[..w].copy_from_slice(&src_row[..w]);
+                dst_rows[y][..w].copy_from_slice(&src_row[..w]);
             }
         }
     }
@@ -3131,8 +3170,7 @@ fn put_8tap_8bpc_avx2_impl_inner(
 #[arcane]
 fn put_8tap_8bpc_avx512_impl_inner(
     _token: Server64,
-    dst: &mut [u8],
-    dst_stride: isize,
+    dst_rows: &mut [&mut [u8]],
     src: &[u8],
     src_base: usize,
     src_stride: isize,
@@ -3143,7 +3181,6 @@ fn put_8tap_8bpc_avx512_impl_inner(
     h_filter_type: Rav1dFilterMode,
     v_filter_type: Rav1dFilterMode,
 ) {
-    let mut dst = dst.flex_mut();
     let src = src.flex();
     let w = w as usize;
     let h = h as usize;
@@ -3174,10 +3211,9 @@ fn put_8tap_8bpc_avx512_impl_inner(
             }
 
             for y in 0..h {
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
                 v_filter_8tap_8bpc_avx512_inner(
                     _token,
-                    dst_row,
+                    &mut dst_rows[y],
                     &mid[y..],
                     w,
                     fv,
@@ -3191,10 +3227,9 @@ fn put_8tap_8bpc_avx512_impl_inner(
             // H-only
             for y in 0..h {
                 let src_row_base = (sb + y as isize * src_stride) as usize;
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
                 h_filter_8tap_8bpc_put_avx512_inner(
                     _token,
-                    dst_row,
+                    &mut dst_rows[y],
                     &src[src_row_base - 3..],
                     w,
                     fh,
@@ -3206,8 +3241,7 @@ fn put_8tap_8bpc_avx512_impl_inner(
             for y in 0..h {
                 let src_row_base = (sb + (y as isize - 3) * src_stride) as usize;
                 let src_row = &src[src_row_base..];
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
-                v_filter_8tap_8bpc_direct_avx512_inner(_token, dst_row, src_row, src_stride, w, fv);
+                v_filter_8tap_8bpc_direct_avx512_inner(_token, &mut dst_rows[y], src_row, src_stride, w, fv);
             }
         }
         (None, None) => {
@@ -3215,8 +3249,7 @@ fn put_8tap_8bpc_avx512_impl_inner(
             for y in 0..h {
                 let src_row_base = (sb + y as isize * src_stride) as usize;
                 let src_row = &src[src_row_base..];
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
-                dst_row[..w].copy_from_slice(&src_row[..w]);
+                dst_rows[y][..w].copy_from_slice(&src_row[..w]);
             }
         }
     }
@@ -3238,22 +3271,27 @@ unsafe fn put_8tap_8bpc_avx2_impl(
     v_filter_type: Rav1dFilterMode,
 ) {
     let token = unsafe { Desktop64::forge_token_dangerously() };
-    unsafe {
-        put_8tap_8bpc_avx2_impl_inner(
-            token,
-            dst_ptr,
-            dst_stride,
-            src_ptr,
-            0,
-            src_stride,
-            w,
-            h,
-            mx,
-            my,
-            h_filter_type,
-            v_filter_type,
-        )
-    }
+    let h_usize = h as usize;
+    let dst_buf = unsafe {
+        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h_usize * dst_stride as usize)
+    };
+    let mut dst_rows = flat_to_row_slices_u8(dst_buf, dst_stride as usize, h_usize);
+    let src_buf = unsafe {
+        std::slice::from_raw_parts(src_ptr as *const u8, (h_usize + 7) * src_stride as usize)
+    };
+    put_8tap_8bpc_avx2_impl_inner(
+        token,
+        &mut dst_rows,
+        src_buf,
+        0,
+        src_stride,
+        w,
+        h,
+        mx,
+        my,
+        h_filter_type,
+        v_filter_type,
+    );
 }
 
 /// Generic put_8tap function wrapper with Filter2d const generic
@@ -6344,8 +6382,7 @@ fn v_filter_8tap_16bpc_prep_direct_avx512_inner(
 #[arcane]
 fn put_8tap_16bpc_avx512_impl_inner(
     _token: Server64,
-    dst: &mut [u16],
-    dst_stride: isize,
+    dst_rows: &mut [&mut [u16]],
     src: &[u16],
     src_base: usize,
     src_stride: isize,
@@ -6357,13 +6394,11 @@ fn put_8tap_16bpc_avx512_impl_inner(
     h_filter_type: Rav1dFilterMode,
     v_filter_type: Rav1dFilterMode,
 ) {
-    let mut dst = dst.flex_mut();
     let src = src.flex();
     let w = w as usize;
     let h = h as usize;
     let mx = mx as usize;
     let my = my as usize;
-    let dst_stride_elems = dst_stride / 2;
     let src_stride_elems = src_stride / 2;
     let sb = src_base as isize;
     let max = bitdepth_max as i32;
@@ -6395,18 +6430,16 @@ fn put_8tap_16bpc_avx512_impl_inner(
                 );
             }
             for y in 0..h {
-                let dst_row = &mut dst[(y as isize * dst_stride_elems) as usize..];
-                v_filter_8tap_16bpc_avx512_inner(_token, dst_row, &*mid, w, y, fv, v_sh, max);
+                v_filter_8tap_16bpc_avx512_inner(_token, &mut dst_rows[y], &*mid, w, y, fv, v_sh, max);
             }
             put_mid_i32_135(mid);
         }
         (Some(fh), None) => {
             for y in 0..h {
                 let src_off = (sb + y as isize * src_stride_elems) as usize;
-                let dst_row = &mut dst[(y as isize * dst_stride_elems) as usize..];
                 h_filter_8tap_16bpc_put_avx512_inner(
                     _token,
-                    dst_row,
+                    &mut dst_rows[y],
                     &src[src_off - 3..],
                     w,
                     fh,
@@ -6417,10 +6450,9 @@ fn put_8tap_16bpc_avx512_impl_inner(
         (None, Some(fv)) => {
             for y in 0..h {
                 let src_off = (sb + (y as isize - 3) * src_stride_elems) as usize;
-                let dst_row = &mut dst[(y as isize * dst_stride_elems) as usize..];
                 v_filter_8tap_16bpc_direct_avx512_inner(
                     _token,
-                    dst_row,
+                    &mut dst_rows[y],
                     &src[src_off..],
                     src_stride_elems,
                     w,
@@ -6432,8 +6464,7 @@ fn put_8tap_16bpc_avx512_impl_inner(
         (None, None) => {
             for y in 0..h {
                 let src_row = &src[(sb + y as isize * src_stride_elems) as usize..];
-                let dst_row = &mut dst[(y as isize * dst_stride_elems) as usize..];
-                dst_row[..w].copy_from_slice(&src_row[..w]);
+                dst_rows[y][..w].copy_from_slice(&src_row[..w]);
             }
         }
     }
@@ -6561,8 +6592,7 @@ fn prep_8tap_16bpc_avx512_impl_inner(
 #[rite]
 fn put_8tap_16bpc_avx2_impl_inner(
     _token: Desktop64,
-    dst: &mut [u16],
-    dst_stride: isize,
+    dst_rows: &mut [&mut [u16]],
     src: &[u16],
     src_base: usize,
     src_stride: isize,
@@ -6574,13 +6604,11 @@ fn put_8tap_16bpc_avx2_impl_inner(
     h_filter_type: Rav1dFilterMode,
     v_filter_type: Rav1dFilterMode,
 ) {
-    let mut dst = dst.flex_mut();
     let src = src.flex();
     let w = w as usize;
     let h = h as usize;
     let mx = mx as usize;
     let my = my as usize;
-    let dst_stride_elems = dst_stride / 2;
     let src_stride_elems = src_stride / 2;
     let sb = src_base as isize;
     let max = bitdepth_max as i32;
@@ -6620,8 +6648,7 @@ fn put_8tap_16bpc_avx2_impl_inner(
                     );
                 }
                 for y in 0..h {
-                    let dst_row = &mut dst[(y as isize * dst_stride_elems) as usize..];
-                    v_filter_8tap_16bpc_avx2_inner(_token, dst_row, &*mid, w, y, fv, v_sh, max);
+                    v_filter_8tap_16bpc_avx2_inner(_token, &mut dst_rows[y], &*mid, w, y, fv, v_sh, max);
                 }
                 put_mid_i32_135(mid);
             } else {
@@ -6650,7 +6677,7 @@ fn put_8tap_16bpc_avx2_impl_inner(
                             sum += mid[y + k][x] * fv[k] as i32;
                         }
                         let val = ((sum + v_rnd) >> v_sh).clamp(0, max);
-                        dst[(y as isize * dst_stride_elems) as usize + x] = val as u16;
+                        dst_rows[y][x] = val as u16;
                     }
                 }
                 put_mid_i32_135(mid);
@@ -6661,10 +6688,9 @@ fn put_8tap_16bpc_avx2_impl_inner(
                 // Case 2: H-only filtering (SIMD)
                 for y in 0..h {
                     let src_off = (sb + y as isize * src_stride_elems) as usize;
-                    let dst_row = &mut dst[(y as isize * dst_stride_elems) as usize..];
                     h_filter_8tap_16bpc_put_avx2_inner(
                         _token,
-                        dst_row,
+                        &mut dst_rows[y],
                         &src[src_off - 3..],
                         w,
                         fh,
@@ -6682,7 +6708,7 @@ fn put_8tap_16bpc_avx2_impl_inner(
                             sum += src[src_off + x + k] as i32 * fh[k] as i32;
                         }
                         let val = ((sum + intermediate_rnd) >> 6).clamp(0, max);
-                        dst[(y as isize * dst_stride_elems) as usize + x] = val as u16;
+                        dst_rows[y][x] = val as u16;
                     }
                 }
             }
@@ -6692,10 +6718,9 @@ fn put_8tap_16bpc_avx2_impl_inner(
                 // Case 3: V-only filtering (SIMD)
                 for y in 0..h {
                     let src_off = (sb + (y as isize - 3) * src_stride_elems) as usize;
-                    let dst_row = &mut dst[(y as isize * dst_stride_elems) as usize..];
                     v_filter_8tap_16bpc_direct_avx2_inner(
                         _token,
-                        dst_row,
+                        &mut dst_rows[y],
                         &src[src_off..],
                         src_stride_elems,
                         w,
@@ -6714,7 +6739,7 @@ fn put_8tap_16bpc_avx2_impl_inner(
                             sum += src[src_off + x] as i32 * fv[k] as i32;
                         }
                         let val = ((sum + 32) >> 6).clamp(0, max);
-                        dst[(y as isize * dst_stride_elems) as usize + x] = val as u16;
+                        dst_rows[y][x] = val as u16;
                     }
                 }
             }
@@ -6723,8 +6748,7 @@ fn put_8tap_16bpc_avx2_impl_inner(
             // Case 4: Simple copy
             for y in 0..h {
                 let src_row = &src[(sb + y as isize * src_stride_elems) as usize..];
-                let dst_row = &mut dst[(y as isize * dst_stride_elems) as usize..];
-                dst_row[..w].copy_from_slice(&src_row[..w]);
+                dst_rows[y][..w].copy_from_slice(&src_row[..w]);
             }
         }
     }
@@ -6746,23 +6770,29 @@ unsafe fn put_8tap_16bpc_avx2_impl(
     v_filter_type: Rav1dFilterMode,
 ) {
     let token = unsafe { Desktop64::forge_token_dangerously() };
-    unsafe {
-        put_8tap_16bpc_avx2_impl_inner(
-            token,
-            dst_ptr,
-            dst_stride,
-            src_ptr,
-            0,
-            src_stride,
-            w,
-            h,
-            mx,
-            my,
-            bitdepth_max,
-            h_filter_type,
-            v_filter_type,
-        )
-    }
+    let h_usize = h as usize;
+    let stride_elems = (dst_stride / 2) as usize;
+    let dst_buf = unsafe {
+        std::slice::from_raw_parts_mut(dst_ptr as *mut u16, h_usize * stride_elems)
+    };
+    let mut dst_rows = flat_to_row_slices_u16(dst_buf, stride_elems, h_usize);
+    let src_buf = unsafe {
+        std::slice::from_raw_parts(src_ptr as *const u16, (h_usize + 7) * (src_stride / 2) as usize)
+    };
+    put_8tap_16bpc_avx2_impl_inner(
+        token,
+        &mut dst_rows,
+        src_buf,
+        0,
+        src_stride,
+        w,
+        h,
+        mx,
+        my,
+        bitdepth_max,
+        h_filter_type,
+        v_filter_type,
+    );
 }
 
 /// Generic 8-tap prep function for 16bpc
@@ -8829,8 +8859,7 @@ fn v_bilin_8bpc_prep_direct_avx512_inner(
 #[arcane]
 fn put_bilin_8bpc_avx512_impl_inner(
     _token: Server64,
-    dst: &mut [u8],
-    dst_stride: isize,
+    dst_rows: &mut [&mut [u8]],
     src: &[u8],
     src_stride: isize,
     w: i32,
@@ -8838,7 +8867,6 @@ fn put_bilin_8bpc_avx512_impl_inner(
     mx: i32,
     my: i32,
 ) {
-    let mut dst = dst.flex_mut();
     let src = src.flex();
     let w = w as usize;
     let h = h as usize;
@@ -8862,11 +8890,10 @@ fn put_bilin_8bpc_avx512_impl_inner(
                 );
             }
             for y in 0..h {
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
                 let mid_refs: [&[i16]; 2] = [&mid[y], &mid[y + 1]];
                 v_filter_bilin_8bpc_avx512_inner(
                     _token,
-                    dst_row,
+                    &mut dst_rows[y],
                     &mid_refs,
                     w,
                     my,
@@ -8879,23 +8906,20 @@ fn put_bilin_8bpc_avx512_impl_inner(
         (true, false) => {
             for y in 0..h {
                 let src_row_base = (y as isize * src_stride) as usize;
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
-                h_bilin_8bpc_put_avx512_inner(_token, dst_row, &src[src_row_base..], w, mx);
+                h_bilin_8bpc_put_avx512_inner(_token, &mut dst_rows[y], &src[src_row_base..], w, mx);
             }
         }
         (false, true) => {
             for y in 0..h {
                 let src_row0 = &src[(y as isize * src_stride) as usize..];
                 let src_row1 = &src[((y + 1) as isize * src_stride) as usize..];
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
-                v_bilin_8bpc_direct_avx512_inner(_token, dst_row, src_row0, src_row1, w, my);
+                v_bilin_8bpc_direct_avx512_inner(_token, &mut dst_rows[y], src_row0, src_row1, w, my);
             }
         }
         (false, false) => {
             for y in 0..h {
                 let src_row_base = (y as isize * src_stride) as usize;
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
-                dst_row[..w].copy_from_slice(&src[src_row_base..src_row_base + w]);
+                dst_rows[y][..w].copy_from_slice(&src[src_row_base..src_row_base + w]);
             }
         }
     }
@@ -8998,8 +9022,7 @@ fn prep_bilin_8bpc_avx512_impl_inner(
 #[rite]
 fn put_bilin_8bpc_avx2_impl_inner(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: isize,
+    dst_rows: &mut [&mut [u8]],
     src: &[u8],
     src_stride: isize,
     w: i32,
@@ -9007,7 +9030,6 @@ fn put_bilin_8bpc_avx2_impl_inner(
     mx: i32,
     my: i32,
 ) {
-    let mut dst = dst.flex_mut();
     let src = src.flex();
     let w = w as usize;
     let h = h as usize;
@@ -9039,11 +9061,10 @@ fn put_bilin_8bpc_avx2_impl_inner(
 
             // Second pass: vertical filter to output
             for y in 0..h {
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
                 let mid_refs: [&[i16]; 2] = [&mid[y], &mid[y + 1]];
                 v_filter_bilin_8bpc_avx2_inner(
                     _token,
-                    dst_row,
+                    &mut dst_rows[y],
                     &mid_refs,
                     w,
                     my,
@@ -9058,8 +9079,7 @@ fn put_bilin_8bpc_avx2_impl_inner(
             for y in 0..h {
                 let src_row_base = (y as isize * src_stride) as usize;
                 let src_row = &src[src_row_base..];
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
-                h_bilin_8bpc_put_avx2_inner(_token, dst_row, src_row, w, mx);
+                h_bilin_8bpc_put_avx2_inner(_token, &mut dst_rows[y], src_row, w, mx);
             }
         }
         (false, true) => {
@@ -9067,8 +9087,7 @@ fn put_bilin_8bpc_avx2_impl_inner(
             for y in 0..h {
                 let src_row0 = &src[(y as isize * src_stride) as usize..];
                 let src_row1 = &src[((y + 1) as isize * src_stride) as usize..];
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
-                v_bilin_8bpc_direct_avx2_inner(_token, dst_row, src_row0, src_row1, w, my);
+                v_bilin_8bpc_direct_avx2_inner(_token, &mut dst_rows[y], src_row0, src_row1, w, my);
             }
         }
         (false, false) => {
@@ -9076,8 +9095,7 @@ fn put_bilin_8bpc_avx2_impl_inner(
             for y in 0..h {
                 let src_row_base = (y as isize * src_stride) as usize;
                 let src_row = &src[src_row_base..];
-                let dst_row = &mut dst[(y as isize * dst_stride) as usize..];
-                dst_row[..w].copy_from_slice(&src_row[..w]);
+                dst_rows[y][..w].copy_from_slice(&src_row[..w]);
             }
         }
     }
@@ -9096,11 +9114,17 @@ unsafe fn put_bilin_8bpc_avx2_impl(
     my: i32,
 ) {
     let token = unsafe { Desktop64::forge_token_dangerously() };
-    unsafe {
-        put_bilin_8bpc_avx2_impl_inner(
-            token, dst_ptr, dst_stride, src_ptr, src_stride, w, h, mx, my,
-        )
-    }
+    let h_usize = h as usize;
+    let dst_buf = unsafe {
+        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h_usize * dst_stride as usize)
+    };
+    let mut dst_rows = flat_to_row_slices_u8(dst_buf, dst_stride as usize, h_usize);
+    let src_buf = unsafe {
+        std::slice::from_raw_parts(src_ptr as *const u8, (h_usize + 1) * src_stride as usize)
+    };
+    put_bilin_8bpc_avx2_impl_inner(
+        token, &mut dst_rows, src_buf, src_stride, w, h, mx, my,
+    );
 }
 
 /// Bilinear put for 8bpc - extern "C" wrapper
@@ -9332,8 +9356,7 @@ use crate::src::internal::SEG_MASK_LEN;
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 fn w_mask_8bpc_avx2_safe_impl<const SS_HOR: bool, const SS_VER: bool>(
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
@@ -9361,7 +9384,7 @@ fn w_mask_8bpc_avx2_safe_impl<const SS_HOR: bool, const SS_VER: bool>(
         let row_offset = row_h * w;
         let tmp1_row = &tmp1[row_offset..][..w];
         let tmp2_row = &tmp2[row_offset..][..w];
-        let dst_row = &mut dst[row_h * dst_stride..][..w];
+        let dst_row = &mut dst_rows[row_h][..w];
 
         let mut x = 0;
         while x < w {
@@ -9419,8 +9442,7 @@ fn w_mask_8bpc_avx2_safe_impl<const SS_HOR: bool, const SS_VER: bool>(
 #[arcane]
 fn w_mask_444_8bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
@@ -9428,8 +9450,7 @@ fn w_mask_444_8bpc_avx2_safe(
     mask: &mut [u8; SEG_MASK_LEN],
     sign: i32,
 ) {
-    let mut dst = dst.flex_mut();
-    w_mask_8bpc_avx2_safe_impl::<false, false>(&mut *dst, dst_stride, tmp1, tmp2, w, h, mask, sign);
+    w_mask_8bpc_avx2_safe_impl::<false, false>(dst_rows, tmp1, tmp2, w, h, mask, sign);
 }
 
 /// w_mask 422 8bpc (horizontal subsampling only)
@@ -9437,8 +9458,7 @@ fn w_mask_444_8bpc_avx2_safe(
 #[arcane]
 fn w_mask_422_8bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
@@ -9446,8 +9466,7 @@ fn w_mask_422_8bpc_avx2_safe(
     mask: &mut [u8; SEG_MASK_LEN],
     sign: i32,
 ) {
-    let mut dst = dst.flex_mut();
-    w_mask_8bpc_avx2_safe_impl::<true, false>(&mut *dst, dst_stride, tmp1, tmp2, w, h, mask, sign);
+    w_mask_8bpc_avx2_safe_impl::<true, false>(dst_rows, tmp1, tmp2, w, h, mask, sign);
 }
 
 /// w_mask 420 8bpc (horizontal and vertical subsampling)
@@ -9455,8 +9474,7 @@ fn w_mask_422_8bpc_avx2_safe(
 #[arcane]
 fn w_mask_420_8bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
@@ -9464,8 +9482,7 @@ fn w_mask_420_8bpc_avx2_safe(
     mask: &mut [u8; SEG_MASK_LEN],
     sign: i32,
 ) {
-    let mut dst = dst.flex_mut();
-    w_mask_8bpc_avx2_safe_impl::<true, true>(&mut *dst, dst_stride, tmp1, tmp2, w, h, mask, sign);
+    w_mask_8bpc_avx2_safe_impl::<true, true>(dst_rows, tmp1, tmp2, w, h, mask, sign);
 }
 
 /// w_mask for 4:4:4 (no subsampling)
@@ -9486,10 +9503,10 @@ pub unsafe extern "C" fn w_mask_444_8bpc_avx2(
     let dst = unsafe {
         std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
     };
+    let mut dst_rows = flat_to_row_slices_u8(dst, dst_stride as usize, h as usize);
     w_mask_444_8bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut dst_rows,
         tmp1,
         tmp2,
         w,
@@ -9517,10 +9534,10 @@ pub unsafe extern "C" fn w_mask_422_8bpc_avx2(
     let dst = unsafe {
         std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
     };
+    let mut dst_rows = flat_to_row_slices_u8(dst, dst_stride as usize, h as usize);
     w_mask_422_8bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut dst_rows,
         tmp1,
         tmp2,
         w,
@@ -9548,10 +9565,10 @@ pub unsafe extern "C" fn w_mask_420_8bpc_avx2(
     let dst = unsafe {
         std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
     };
+    let mut dst_rows = flat_to_row_slices_u8(dst, dst_stride as usize, h as usize);
     w_mask_420_8bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut dst_rows,
         tmp1,
         tmp2,
         w,
@@ -9565,8 +9582,7 @@ pub unsafe extern "C" fn w_mask_420_8bpc_avx2(
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 fn w_mask_16bpc_avx2_safe_impl<const SS_HOR: bool, const SS_VER: bool>(
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
@@ -9595,8 +9611,8 @@ fn w_mask_16bpc_avx2_safe_impl<const SS_HOR: bool, const SS_VER: bool>(
         let row_offset = row_h * w;
         let tmp1_row = &tmp1[row_offset..][..w];
         let tmp2_row = &tmp2[row_offset..][..w];
-        // dst is bytes, but we write u16 pixels — each pixel is 2 bytes
-        let dst_row_bytes = &mut dst[row_h * dst_stride..][..w * 2];
+        // dst_rows contains byte slices, but we write u16 pixels — each pixel is 2 bytes
+        let dst_row_bytes = &mut dst_rows[row_h][..w * 2];
         let dst_row: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(dst_row_bytes).unwrap();
 
         let mut x = 0;
@@ -9646,8 +9662,7 @@ fn w_mask_16bpc_avx2_safe_impl<const SS_HOR: bool, const SS_VER: bool>(
 #[arcane]
 fn w_mask_444_16bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
@@ -9656,10 +9671,8 @@ fn w_mask_444_16bpc_avx2_safe(
     sign: i32,
     bitdepth_max: i32,
 ) {
-    let mut dst = dst.flex_mut();
     w_mask_16bpc_avx2_safe_impl::<false, false>(
-        &mut *dst,
-        dst_stride,
+        dst_rows,
         tmp1,
         tmp2,
         w,
@@ -9675,8 +9688,7 @@ fn w_mask_444_16bpc_avx2_safe(
 #[arcane]
 fn w_mask_422_16bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
@@ -9685,10 +9697,8 @@ fn w_mask_422_16bpc_avx2_safe(
     sign: i32,
     bitdepth_max: i32,
 ) {
-    let mut dst = dst.flex_mut();
     w_mask_16bpc_avx2_safe_impl::<true, false>(
-        &mut *dst,
-        dst_stride,
+        dst_rows,
         tmp1,
         tmp2,
         w,
@@ -9704,8 +9714,7 @@ fn w_mask_422_16bpc_avx2_safe(
 #[arcane]
 fn w_mask_420_16bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
@@ -9714,10 +9723,8 @@ fn w_mask_420_16bpc_avx2_safe(
     sign: i32,
     bitdepth_max: i32,
 ) {
-    let mut dst = dst.flex_mut();
     w_mask_16bpc_avx2_safe_impl::<true, true>(
-        &mut *dst,
-        dst_stride,
+        dst_rows,
         tmp1,
         tmp2,
         w,
@@ -9745,10 +9752,10 @@ pub unsafe extern "C" fn w_mask_444_16bpc_avx2(
     let dst = unsafe {
         std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
     };
+    let mut dst_rows = flat_to_row_slices_u8(dst, dst_stride as usize, h as usize);
     w_mask_444_16bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut dst_rows,
         tmp1,
         tmp2,
         w,
@@ -9776,10 +9783,10 @@ pub unsafe extern "C" fn w_mask_422_16bpc_avx2(
     let dst = unsafe {
         std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
     };
+    let mut dst_rows = flat_to_row_slices_u8(dst, dst_stride as usize, h as usize);
     w_mask_422_16bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut dst_rows,
         tmp1,
         tmp2,
         w,
@@ -9807,10 +9814,10 @@ pub unsafe extern "C" fn w_mask_420_16bpc_avx2(
     let dst = unsafe {
         std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
     };
+    let mut dst_rows = flat_to_row_slices_u8(dst, dst_stride as usize, h as usize);
     w_mask_420_16bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut dst_rows,
         tmp1,
         tmp2,
         w,
@@ -10965,8 +10972,7 @@ fn v_bilin_16bpc_prep_direct_avx512_inner(
 #[arcane]
 fn put_bilin_16bpc_avx512_impl_inner(
     _token: Server64,
-    dst: &mut [u16],
-    dst_stride: isize,
+    dst_rows: &mut [&mut [u16]],
     src: &[u16],
     src_stride: isize,
     w: i32,
@@ -10975,7 +10981,6 @@ fn put_bilin_16bpc_avx512_impl_inner(
     my: i32,
     bitdepth_max: i32,
 ) {
-    let mut dst = dst.flex_mut();
     let src = src.flex();
     let w = w as usize;
     let h = h as usize;
@@ -10991,10 +10996,9 @@ fn put_bilin_16bpc_avx512_impl_inner(
                 h_bilin_16bpc_avx512_inner(_token, &mut mid[y], &src[src_off..], w, mx);
             }
             for y in 0..h {
-                let dst_off = (y as isize * dst_stride) as usize;
                 v_bilin_16bpc_avx512_inner(
                     _token,
-                    &mut dst[dst_off..],
+                    &mut dst_rows[y],
                     &*mid,
                     w,
                     y,
@@ -11008,10 +11012,9 @@ fn put_bilin_16bpc_avx512_impl_inner(
         (true, false) => {
             for y in 0..h {
                 let src_off = (y as isize * src_stride) as usize;
-                let dst_off = (y as isize * dst_stride) as usize;
                 h_bilin_16bpc_put_avx512_inner(
                     _token,
-                    &mut dst[dst_off..],
+                    &mut dst_rows[y],
                     &src[src_off..],
                     w,
                     mx,
@@ -11022,10 +11025,9 @@ fn put_bilin_16bpc_avx512_impl_inner(
         (false, true) => {
             for y in 0..h {
                 let src_off = (y as isize * src_stride) as usize;
-                let dst_off = (y as isize * dst_stride) as usize;
                 v_bilin_16bpc_direct_avx512_inner(
                     _token,
-                    &mut dst[dst_off..],
+                    &mut dst_rows[y],
                     &src[src_off..],
                     src_stride,
                     w,
@@ -11037,8 +11039,7 @@ fn put_bilin_16bpc_avx512_impl_inner(
         (false, false) => {
             for y in 0..h {
                 let src_off = (y as isize * src_stride) as usize;
-                let dst_off = (y as isize * dst_stride) as usize;
-                dst[dst_off..dst_off + w].copy_from_slice(&src[src_off..src_off + w]);
+                dst_rows[y][..w].copy_from_slice(&src[src_off..src_off + w]);
             }
         }
     }
@@ -11137,8 +11138,7 @@ fn prep_bilin_16bpc_avx512_impl_inner(
 #[arcane]
 fn put_bilin_16bpc_avx2_impl_inner_safe(
     _token: Desktop64,
-    dst: &mut [u16],
-    dst_stride: isize,
+    dst_rows: &mut [&mut [u16]],
     src: &[u16],
     src_stride: isize,
     w: i32,
@@ -11147,7 +11147,6 @@ fn put_bilin_16bpc_avx2_impl_inner_safe(
     my: i32,
     bitdepth_max: i32,
 ) {
-    let mut dst = dst.flex_mut();
     let src = src.flex();
     let w = w as usize;
     let h = h as usize;
@@ -11163,10 +11162,9 @@ fn put_bilin_16bpc_avx2_impl_inner_safe(
                 h_bilin_16bpc_avx2_inner(_token, &mut mid[y], &src[src_off..], w, mx);
             }
             for y in 0..h {
-                let dst_off = (y as isize * dst_stride) as usize;
                 v_bilin_16bpc_avx2_inner(
                     _token,
-                    &mut dst[dst_off..],
+                    &mut dst_rows[y],
                     &*mid,
                     w,
                     y,
@@ -11180,10 +11178,9 @@ fn put_bilin_16bpc_avx2_impl_inner_safe(
         (true, false) => {
             for y in 0..h {
                 let src_off = (y as isize * src_stride) as usize;
-                let dst_off = (y as isize * dst_stride) as usize;
                 h_bilin_16bpc_put_avx2_inner(
                     _token,
-                    &mut dst[dst_off..],
+                    &mut dst_rows[y],
                     &src[src_off..],
                     w,
                     mx,
@@ -11194,10 +11191,9 @@ fn put_bilin_16bpc_avx2_impl_inner_safe(
         (false, true) => {
             for y in 0..h {
                 let src_off = (y as isize * src_stride) as usize;
-                let dst_off = (y as isize * dst_stride) as usize;
                 v_bilin_16bpc_direct_avx2_inner(
                     _token,
-                    &mut dst[dst_off..],
+                    &mut dst_rows[y],
                     &src[src_off..],
                     src_stride,
                     w,
@@ -11209,8 +11205,7 @@ fn put_bilin_16bpc_avx2_impl_inner_safe(
         (false, false) => {
             for y in 0..h {
                 let src_off = (y as isize * src_stride) as usize;
-                let dst_off = (y as isize * dst_stride) as usize;
-                dst[dst_off..dst_off + w].copy_from_slice(&src[src_off..src_off + w]);
+                dst_rows[y][..w].copy_from_slice(&src[src_off..src_off + w]);
             }
         }
     }
@@ -11803,11 +11798,16 @@ pub(crate) fn w_mask_dispatch_inner<BD: BitDepth>(
         return false;
     };
     let bd_c = bd.into_c();
+    let h_usize = h as usize;
+    let mut dst_rows = flat_to_row_slices_u8(
+        &mut dst_bytes[dst_offset..],
+        dst_stride as usize,
+        h_usize,
+    );
     match (BD::BPC, layout) {
         (BPC::BPC8, Rav1dPixelLayoutSubSampled::I420) => w_mask_420_8bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride as usize,
+            &mut dst_rows,
             tmp1,
             tmp2,
             w,
@@ -11817,8 +11817,7 @@ pub(crate) fn w_mask_dispatch_inner<BD: BitDepth>(
         ),
         (BPC::BPC8, Rav1dPixelLayoutSubSampled::I422) => w_mask_422_8bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride as usize,
+            &mut dst_rows,
             tmp1,
             tmp2,
             w,
@@ -11828,8 +11827,7 @@ pub(crate) fn w_mask_dispatch_inner<BD: BitDepth>(
         ),
         (BPC::BPC8, Rav1dPixelLayoutSubSampled::I444) => w_mask_444_8bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride as usize,
+            &mut dst_rows,
             tmp1,
             tmp2,
             w,
@@ -11839,8 +11837,7 @@ pub(crate) fn w_mask_dispatch_inner<BD: BitDepth>(
         ),
         (BPC::BPC16, Rav1dPixelLayoutSubSampled::I420) => w_mask_420_16bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride as usize,
+            &mut dst_rows,
             tmp1,
             tmp2,
             w,
@@ -11851,8 +11848,7 @@ pub(crate) fn w_mask_dispatch_inner<BD: BitDepth>(
         ),
         (BPC::BPC16, Rav1dPixelLayoutSubSampled::I422) => w_mask_422_16bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride as usize,
+            &mut dst_rows,
             tmp1,
             tmp2,
             w,
@@ -11863,8 +11859,7 @@ pub(crate) fn w_mask_dispatch_inner<BD: BitDepth>(
         ),
         (BPC::BPC16, Rav1dPixelLayoutSubSampled::I444) => w_mask_444_16bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride as usize,
+            &mut dst_rows,
             tmp1,
             tmp2,
             w,
@@ -11882,8 +11877,7 @@ pub(crate) fn w_mask_dispatch_inner<BD: BitDepth>(
 #[arcane]
 fn put_8tap_8bpc_dispatch_inner(
     token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: isize,
+    dst_rows: &mut [&mut [u8]],
     src: &[u8],
     src_base: usize,
     src_stride: isize,
@@ -11896,12 +11890,12 @@ fn put_8tap_8bpc_dispatch_inner(
 ) {
     if let Some(t512) = crate::src::cpu::summon_avx512() {
         put_8tap_8bpc_avx512_impl_inner(
-            t512, dst, dst_stride, src, src_base, src_stride, w, h, mx, my, h_filter, v_filter,
+            t512, dst_rows, src, src_base, src_stride, w, h, mx, my, h_filter, v_filter,
         );
         return;
     }
     put_8tap_8bpc_avx2_impl_inner(
-        token, dst, dst_stride, src, src_base, src_stride, w, h, mx, my, h_filter, v_filter,
+        token, dst_rows, src, src_base, src_stride, w, h, mx, my, h_filter, v_filter,
     );
 }
 
@@ -11910,8 +11904,7 @@ fn put_8tap_8bpc_dispatch_inner(
 #[arcane]
 fn put_bilin_8bpc_dispatch_inner(
     token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: isize,
+    dst_rows: &mut [&mut [u8]],
     src: &[u8],
     src_stride: isize,
     w: i32,
@@ -11921,11 +11914,11 @@ fn put_bilin_8bpc_dispatch_inner(
 ) {
     if w >= 64 {
         if let Some(t512) = crate::src::cpu::summon_avx512() {
-            put_bilin_8bpc_avx512_impl_inner(t512, dst, dst_stride, src, src_stride, w, h, mx, my);
+            put_bilin_8bpc_avx512_impl_inner(t512, dst_rows, src, src_stride, w, h, mx, my);
             return;
         }
     }
-    put_bilin_8bpc_avx2_impl_inner(token, dst, dst_stride, src, src_stride, w, h, mx, my);
+    put_bilin_8bpc_avx2_impl_inner(token, dst_rows, src, src_stride, w, h, mx, my);
 }
 
 /// Safe arcane entry point for put_8tap 16bpc dispatch.
@@ -11933,8 +11926,7 @@ fn put_bilin_8bpc_dispatch_inner(
 #[arcane]
 fn put_8tap_16bpc_dispatch_inner(
     token: Desktop64,
-    dst: &mut [u16],
-    dst_stride: isize,
+    dst_rows: &mut [&mut [u16]],
     src: &[u16],
     src_base: usize,
     src_stride: isize,
@@ -11948,13 +11940,13 @@ fn put_8tap_16bpc_dispatch_inner(
 ) {
     if let Some(t512) = crate::src::cpu::summon_avx512() {
         put_8tap_16bpc_avx512_impl_inner(
-            t512, dst, dst_stride, src, src_base, src_stride, w, h, mx, my, bd_c, h_filter,
+            t512, dst_rows, src, src_base, src_stride, w, h, mx, my, bd_c, h_filter,
             v_filter,
         );
         return;
     }
     put_8tap_16bpc_avx2_impl_inner(
-        token, dst, dst_stride, src, src_base, src_stride, w, h, mx, my, bd_c, h_filter, v_filter,
+        token, dst_rows, src, src_base, src_stride, w, h, mx, my, bd_c, h_filter, v_filter,
     );
 }
 
@@ -12114,8 +12106,14 @@ pub(crate) fn mc_put_dispatch_inner<BD: BitDepth>(
 
     let src_stride = src.stride();
     let pixel_size = std::mem::size_of::<BD::Pixel>();
+    let h_usize = h as usize;
     match BD::BPC {
         BPC::BPC8 => {
+            let mut dst_rows = flat_to_row_slices_u8(
+                &mut dst_bytes[dst_offset..],
+                dst_stride as usize,
+                h_usize,
+            );
             let (src_guard, src_base) = src.full_guard::<BD>();
             match filter {
                 Filter2d::Bilinear => {
@@ -12123,8 +12121,7 @@ pub(crate) fn mc_put_dispatch_inner<BD: BitDepth>(
                     let src_bytes = &src_guard.as_bytes()[src_base * pixel_size..];
                     put_bilin_8bpc_dispatch_inner(
                         token,
-                        &mut dst_bytes[dst_offset..],
-                        dst_stride,
+                        &mut dst_rows,
                         src_bytes,
                         src_stride,
                         w,
@@ -12139,8 +12136,7 @@ pub(crate) fn mc_put_dispatch_inner<BD: BitDepth>(
                     let (h_filter, v_filter) = filter.hv();
                     put_8tap_8bpc_dispatch_inner(
                         token,
-                        &mut dst_bytes[dst_offset..],
-                        dst_stride,
+                        &mut dst_rows,
                         src_bytes,
                         src_base * pixel_size,
                         src_stride,
@@ -12159,6 +12155,8 @@ pub(crate) fn mc_put_dispatch_inner<BD: BitDepth>(
                 zerocopy::Ref::<_, [u16]>::new_slice(&mut dst_bytes[dst_offset..])
                     .expect("u16 alignment")
                     .into_mut_slice();
+            let stride_elems = (dst_stride / 2) as usize;
+            let mut dst_rows_u16 = flat_to_row_slices_u16(dst_u16, stride_elems, h_usize);
             let (src_guard, src_base) = src.full_guard::<BD>();
             let bd_c = bd.into_c();
             match filter {
@@ -12171,8 +12169,7 @@ pub(crate) fn mc_put_dispatch_inner<BD: BitDepth>(
                     if let Some(t512) = crate::src::cpu::summon_avx512() {
                         put_bilin_16bpc_avx512_impl_inner(
                             t512,
-                            dst_u16,
-                            dst_stride / 2,
+                            &mut dst_rows_u16,
                             src_u16_bilin,
                             src_stride / 2,
                             w,
@@ -12184,8 +12181,7 @@ pub(crate) fn mc_put_dispatch_inner<BD: BitDepth>(
                     } else {
                         put_bilin_16bpc_avx2_impl_inner_safe(
                             token,
-                            dst_u16,
-                            dst_stride / 2,
+                            &mut dst_rows_u16,
                             src_u16_bilin,
                             src_stride / 2,
                             w,
@@ -12204,7 +12200,7 @@ pub(crate) fn mc_put_dispatch_inner<BD: BitDepth>(
                         .into_slice();
                     let (h_filter, v_filter) = filter.hv();
                     put_8tap_16bpc_dispatch_inner(
-                        token, dst_u16, dst_stride, src_u16, src_base, src_stride, w, h, mx, my,
+                        token, &mut dst_rows_u16, src_u16, src_base, src_stride, w, h, mx, my,
                         bd_c, h_filter, v_filter,
                     );
                 }
