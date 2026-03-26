@@ -108,20 +108,26 @@ pub fn run_pipeline<P, RF, FF>(
         // === RECONSTRUCTION: tile-parallel ===
         {
             let rows = split_into_rows(sby_buf, config.stride, config.width, nrows);
+            let mut tiles = split_rows_by_tiles(rows, &config.tile_col_boundaries);
 
-            if config.num_tiles() > 1 {
-                let mut tiles = split_rows_by_tiles(rows, &config.tile_col_boundaries);
-                rayon::scope(|_s| {
-                    // For now, process tiles sequentially within the scope.
-                    // True parallel: s.spawn(move |_| recon(strip, ...));
-                    // (requires tiles to be consumed, not borrowed)
-                    for (tile_idx, strip) in tiles.iter_mut().enumerate() {
-                        recon_fn(strip, tile_idx, sby);
+            if tiles.len() > 1 {
+                // True tile parallelism: drain tiles Vec to get owned per-tile
+                // row Vecs, move each into a rayon closure.
+                let tile_vec: Vec<(usize, Vec<&mut [P]>)> = tiles
+                    .drain(..)
+                    .enumerate()
+                    .collect();
+
+                rayon::scope(|s| {
+                    for (tile_idx, mut strip) in tile_vec {
+                        let recon = &recon_fn;
+                        s.spawn(move |_| {
+                            recon(&mut strip, tile_idx, sby);
+                        });
                     }
                 });
             } else {
-                let mut all_rows = split_rows_by_tiles(rows, &config.tile_col_boundaries);
-                recon_fn(&mut all_rows[0], 0, sby);
+                recon_fn(&mut tiles[0], 0, sby);
             }
         }
 
