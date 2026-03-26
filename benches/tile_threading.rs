@@ -6,7 +6,7 @@
 //! Requires `unchecked` feature for multithreading:
 //!   cargo bench --bench tile_threading --no-default-features --features "bitdepth_8,bitdepth_16,unchecked"
 
-use rav1d_safe::src::managed::{Decoder, Settings};
+use rav1d_safe::src::managed::{CpuLevel, Decoder, Settings};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use zenbench::prelude::*;
@@ -58,10 +58,19 @@ fn vectors() -> &'static [TestVector] {
 }
 
 fn decode_obu(obu: &[u8], threads: u32) -> usize {
+    decode_obu_cpu(obu, threads, CpuLevel::Native)
+}
+
+fn decode_obu_scalar(obu: &[u8], threads: u32) -> usize {
+    decode_obu_cpu(obu, threads, CpuLevel::Scalar)
+}
+
+fn decode_obu_cpu(obu: &[u8], threads: u32, cpu: CpuLevel) -> usize {
     let mut settings = Settings::default();
     settings.threads = threads;
     settings.max_frame_delay = 1; // tile threading only
     settings.frame_size_limit = 8192 * 8192;
+    settings.cpu_level = cpu;
 
     let mut dec = Decoder::with_settings(settings).expect("decoder creation failed");
     let mut n = 0;
@@ -106,6 +115,20 @@ fn bench_tile_threading(suite: &mut Suite) {
                 let obu = &tv.obu;
                 b.iter(|| {
                     assert_eq!(decode_obu(obu, 4), 1);
+                })
+            });
+
+            group.bench("scalar_1t", |b| {
+                let obu = &tv.obu;
+                b.iter(|| {
+                    assert_eq!(decode_obu_scalar(obu, 1), 1);
+                })
+            });
+
+            group.bench("scalar_4t", |b| {
+                let obu = &tv.obu;
+                b.iter(|| {
+                    assert_eq!(decode_obu_scalar(obu, 4), 1);
                 })
             });
         });
