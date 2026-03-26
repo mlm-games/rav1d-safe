@@ -14,7 +14,7 @@
 #![forbid(unsafe_code)]
 
 use crate::src::plane_rows::{split_into_rows, split_rows_by_tiles};
-use std::sync::mpsc;
+use crate::src::progressive_frame::ProgressiveFrame;
 
 /// Signals used for SB-row pipeline synchronization.
 /// Each SB row's task sends `Done` when its phase completes.
@@ -136,6 +136,66 @@ pub fn run_pipeline<P, RF, FF>(
             let mut rows = split_into_rows(sby_buf, config.stride, config.width, nrows);
             filter_fn(&mut rows, sby);
         }
+    }
+}
+
+/// Run the SB-row pipeline on a ProgressiveFrame, freezing rows after each
+/// SB row's filter phase completes.
+///
+/// This is the same as `run_pipeline` but with progressive freezing:
+/// after filter(sby) completes, rows [0, sby_end) are frozen and available
+/// for reference reads by other frames.
+///
+/// `ref_fn`: optional callback to read frozen rows from reference frames.
+///           Called after each SB row's recon with the current sby.
+pub fn run_pipeline_progressive<P, RF, FF>(
+    frame: &mut ProgressiveFrame<P>,
+    config: &PipelineConfig,
+    recon_fn: RF,
+    filter_fn: FF,
+) where
+    P: Copy + Default + Send,
+    RF: Fn(&mut [&mut [P]], usize, usize) + Send + Sync,
+    FF: Fn(&mut [&mut [P]], usize) + Send + Sync,
+{
+    for sby in 0..config.num_sb_rows {
+        let (row_start, row_end) = config.sb_row_range(sby);
+        let nrows = row_end - row_start;
+
+        // Get mutable rows for this SB row
+        let mut rows = frame.active_rows_mut(row_start, row_end);
+
+        // === RECONSTRUCTION: tile-parallel ===
+        {
+            // Convert Vec<&mut [P]> to a form split_rows_by_tiles can consume
+            let row_refs: Vec<&mut [P]> = rows.drain(..).collect();
+            let mut tiles = split_rows_by_tiles(row_refs, &config.tile_col_boundaries);
+
+            if tiles.len() > 1 {
+                let tile_vec: Vec<(usize, Vec<&mut [P]>)> =
+                    tiles.drain(..).enumerate().collect();
+
+                rayon::scope(|s| {
+                    for (tile_idx, mut strip) in tile_vec {
+                        let recon = &recon_fn;
+                        s.spawn(move |_| {
+                            recon(&mut strip, tile_idx, sby);
+                        });
+                    }
+                });
+            } else {
+                recon_fn(&mut tiles[0], 0, sby);
+            }
+        }
+
+        // Re-acquire rows for filtering (recon consumed them via drain)
+        let mut rows = frame.active_rows_mut(row_start, row_end);
+
+        // === FILTERING: full-width, sequential ===
+        filter_fn(&mut rows, sby);
+
+        // Freeze this SB row's rows — now available for reference reads
+        frame.freeze_through(row_end);
     }
 }
 
@@ -305,5 +365,71 @@ mod tests {
             vec![8, 8, 4],
             "last SB row should be partial"
         );
+    }
+
+    #[test]
+    fn progressive_pipeline_freezes_rows() {
+        use crate::src::progressive_frame::ProgressiveFrame;
+
+        let mut frame = ProgressiveFrame::<u8>::new(8, 8, 16);
+        let config = PipelineConfig::new(8, 16, 8, 8, vec![0, 8]);
+
+        run_pipeline_progressive(
+            &mut frame,
+            &config,
+            |rows, _tile_idx, sby| {
+                for row in rows.iter_mut() {
+                    row.fill((sby + 1) as u8);
+                }
+            },
+            |rows, sby| {
+                // Filter: double the values
+                for row in rows.iter_mut() {
+                    for px in row.iter_mut() {
+                        *px *= 2;
+                    }
+                }
+            },
+        );
+
+        // Frame should be fully frozen
+        assert!(frame.is_fully_frozen());
+
+        // SB row 0: recon=1, filter doubles to 2
+        assert_eq!(frame.frozen_row(0)[0], 2);
+        assert_eq!(frame.frozen_row(7)[0], 2);
+
+        // SB row 1: recon=2, filter doubles to 4
+        assert_eq!(frame.frozen_row(8)[0], 4);
+        assert_eq!(frame.frozen_row(15)[0], 4);
+    }
+
+    #[test]
+    fn progressive_pipeline_tile_parallel_then_freeze() {
+        use crate::src::progressive_frame::ProgressiveFrame;
+
+        let mut frame = ProgressiveFrame::<u8>::new(16, 16, 8);
+        let config = PipelineConfig::new(16, 8, 16, 8, vec![0, 8, 16]);
+
+        run_pipeline_progressive(
+            &mut frame,
+            &config,
+            |rows, tile_idx, _sby| {
+                let val = (tile_idx + 1) as u8 * 10;
+                for row in rows.iter_mut() {
+                    row.fill(val);
+                }
+            },
+            |_rows, _sby| {},
+        );
+
+        assert!(frame.is_fully_frozen());
+
+        // Tile 0 (cols 0..8) = 10, Tile 1 (cols 8..16) = 20
+        let row = frame.frozen_row(0);
+        assert_eq!(row[0], 10);
+        assert_eq!(row[7], 10);
+        assert_eq!(row[8], 20);
+        assert_eq!(row[15], 20);
     }
 }
