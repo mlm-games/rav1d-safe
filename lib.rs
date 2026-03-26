@@ -152,6 +152,8 @@ pub mod src {
 
     #[cfg(test)]
     mod decode_test;
+    #[cfg(test)]
+    mod row_slice_parity_test;
 
     // === Managed Safe API ===
     /// 100% safe Rust API for AV1 decoding
