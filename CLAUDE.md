@@ -27,6 +27,8 @@ Safe SIMD fork of rav1d — 160k lines of hand-written assembly replaced by safe
   - 1080p 2-tile: 1.53×, 1080p 4-tile: 2.09×
   - 4K 4-tile: 2.32× (179.9ms → 77.5ms)
   - 4K 8-tile: 3.46× (195.8ms → 56.6ms)
+  - ASM+rayon 4K 8-tile: 23.1ms (1.13× vs ASM-1T 26.0ms)
+  - **Gap to ASM-1T**: 2.52× (safe SIMD kernel perf, not threading)
 - [x] FramePlanesMut/TilePlaneRows — DisjointMut-free pixel types (3 tests)
 - [x] TilePixelBufs — per-tile separate pixel buffers for safe parallel recon
 - [ ] Replace PicOffset with TilePlaneRows in recon_b_intra/recon_b_inter
