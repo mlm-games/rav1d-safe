@@ -1793,7 +1793,10 @@ impl avg::Fn {
         }
     }
 
-    /// Row-slice variant of avg.
+    /// Row-slice variant of avg — tries SIMD first, falls back to scalar.
+    ///
+    /// Takes per-row slices directly — no PicOffset, no DisjointMut.
+    /// This is the entry point for tile-parallel decode with full SIMD.
     #[cfg(not(feature = "asm"))]
     #[allow(dead_code)]
     pub fn call_rows<BD: BitDepth>(
@@ -1806,6 +1809,24 @@ impl avg::Fn {
         h: i32,
         bd: BD,
     ) {
+        // Try SIMD dispatch (takes per-row slices, no DisjointMut)
+        #[cfg(target_arch = "x86_64")]
+        {
+            // Sub-slice each row to start at dst_x
+            let wu = w as usize;
+            let hu = h as usize;
+            let mut sub_rows: Vec<&mut [BD::Pixel]> = dst_rows[..hu]
+                .iter_mut()
+                .map(|row| &mut row[dst_x..dst_x + wu])
+                .collect();
+            if crate::src::safe_simd::mc::avg_dispatch_rows::<BD>(
+                &mut sub_rows, tmp1, tmp2, w, h, bd,
+            ) {
+                return;
+            }
+        }
+
+        // Scalar fallback
         crate::src::mc_rows::avg_rows::<BD>(
             dst_rows, dst_x, tmp1, tmp2, w as usize, h as usize, bd,
         );
@@ -1849,6 +1870,39 @@ impl w_avg::Fn {
             }
         }
     }
+
+    /// Row-slice variant — tries SIMD first, falls back to scalar.
+    #[cfg(not(feature = "asm"))]
+    #[allow(dead_code)]
+    pub fn call_rows<BD: BitDepth>(
+        &self,
+        dst_rows: &mut [&mut [BD::Pixel]],
+        dst_x: usize,
+        tmp1: &[i16],
+        tmp2: &[i16],
+        w: i32,
+        h: i32,
+        weight: i32,
+        bd: BD,
+    ) {
+        #[cfg(target_arch = "x86_64")]
+        {
+            let wu = w as usize;
+            let hu = h as usize;
+            let mut sub_rows: Vec<&mut [BD::Pixel]> = dst_rows[..hu]
+                .iter_mut()
+                .map(|row| &mut row[dst_x..dst_x + wu])
+                .collect();
+            if crate::src::safe_simd::mc::w_avg_dispatch_rows::<BD>(
+                &mut sub_rows, tmp1, tmp2, w, h, weight, bd,
+            ) {
+                return;
+            }
+        }
+        crate::src::mc_rows::w_avg_rows::<BD>(
+            dst_rows, dst_x, tmp1, tmp2, w as usize, h as usize, weight, bd,
+        );
+    }
 }
 
 wrap_fn_ptr!(pub unsafe extern "C" fn mask(
@@ -1888,6 +1942,39 @@ impl mask::Fn {
                 mask_direct::<BD>(dst, tmp1, tmp2, w, h, mask, bd)
             }
         }
+    }
+
+    /// Row-slice variant — tries SIMD first, falls back to scalar.
+    #[cfg(not(feature = "asm"))]
+    #[allow(dead_code)]
+    pub fn call_rows<BD: BitDepth>(
+        &self,
+        dst_rows: &mut [&mut [BD::Pixel]],
+        dst_x: usize,
+        tmp1: &[i16],
+        tmp2: &[i16],
+        w: i32,
+        h: i32,
+        mask: &[u8],
+        bd: BD,
+    ) {
+        #[cfg(target_arch = "x86_64")]
+        {
+            let wu = w as usize;
+            let hu = h as usize;
+            let mut sub_rows: Vec<&mut [BD::Pixel]> = dst_rows[..hu]
+                .iter_mut()
+                .map(|row| &mut row[dst_x..dst_x + wu])
+                .collect();
+            if crate::src::safe_simd::mc::mask_dispatch_rows::<BD>(
+                &mut sub_rows, tmp1, tmp2, w, h, mask, bd,
+            ) {
+                return;
+            }
+        }
+        crate::src::mc_rows::mask_rows::<BD>(
+            dst_rows, dst_x, tmp1, tmp2, w as usize, h as usize, mask, bd,
+        );
     }
 }
 
