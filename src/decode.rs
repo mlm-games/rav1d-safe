@@ -4866,7 +4866,18 @@ fn rav1d_decode_frame_rayon(c: &Rav1dContext, f: &mut Rav1dFrameData) -> Rav1dRe
         })
         .collect();
 
-    let row_start_sb = frame_hdr.tiling.row_start_sb.clone();
+    // Tile-parallel reconstruction with sequential filtering.
+    // SB-row pipelining (filter N || recon N+1) requires 2-pass decode
+    // (separate entropy from reconstruction) — deferred to a future iteration.
+
+    let f_shared: &Rav1dFrameData = &*f;
+    let bd_fn = f.bd_fn();
+    let row_start_sb = f.frame_hdr().tiling.row_start_sb.clone();
+
+    // Create a dedicated filter task context (separate from tile contexts)
+    let filter_ttd = Arc::new(Rav1dTaskContextTaskThread::new(Arc::clone(&task_thread_data)));
+    let mut filter_ctx = Box::new(Rav1dTaskContext::new(filter_ttd));
+
     for (tile_row, sbh_start_end) in row_start_sb[..rows + 1].windows(2).take(rows).enumerate() {
         let [sbh_start, sbh_end] = <[u16; 2]>::try_from(sbh_start_end).unwrap();
         let sbh_end = cmp::min(sbh_end.into(), f.sbh);
@@ -4877,85 +4888,60 @@ fn rav1d_decode_frame_rayon(c: &Rav1dContext, f: &mut Rav1dFrameData) -> Rav1dRe
             let by = sby << 4 + seq_hdr.sb128;
             let by_end = by + f.sb_step >> 1;
 
-            // Load temporal MVs (shared across tiles, needs main thread's context)
+            // Load temporal MVs
             if frame_hdr.use_ref_frame_mvs != 0 {
                 let mut t = t_single.lock();
                 t.b.y = by;
                 c.dsp.refmvs.load_tmvs.call(
-                    &f.rf,
-                    &f.mvs,
-                    &f.ref_mvs,
-                    tile_row as c_int,
-                    0,
-                    f.bw >> 1,
-                    t.b.y >> 1,
-                    by_end,
+                    &f_shared.rf, &f_shared.mvs, &f_shared.ref_mvs,
+                    tile_row as c_int, 0, f_shared.bw >> 1, t.b.y >> 1, by_end,
                 );
             }
 
             // === TILE-PARALLEL RECONSTRUCTION ===
-            // Each tile column gets its own task context and runs rav1d_decode_tile_sbrow.
-            // Tiles process disjoint column ranges of the frame — no data races.
             let recon_start = std::time::Instant::now();
             {
-                // Prepare per-tile contexts
                 for col in 0..cols {
                     tile_contexts[col].ts = tile_row * cols + col;
                     tile_contexts[col].b.y = by;
                     tile_contexts[col].frame_thread.pass = 0;
                 }
 
-                // Parallel tile processing via rayon::scope.
-                // split_at_mut gives each spawn exclusive &mut to its tile context.
-                // No Vec allocations per SB row — reuses tile_contexts in place.
-                let f_shared: &Rav1dFrameData = &*f;
                 let had_error = std::sync::atomic::AtomicBool::new(false);
-                {
-                    let tile_slice = tile_contexts.as_mut_slice();
-                    rayon::scope(|s| {
-                        let mut remaining = tile_slice;
-                        let err = &had_error;
-                        for _col in 0..cols {
-                            let (head, tail) = remaining.split_at_mut(1);
-                            remaining = tail;
-                            let t = &mut head[0];
-                            s.spawn(move |_| {
-                                if rav1d_decode_tile_sbrow(c, t, f_shared).is_err() {
-                                    err.store(true, Ordering::Relaxed);
-                                }
-                            });
-                        }
-                    });
-                }
+                let tile_slice = tile_contexts.as_mut_slice();
+                rayon::scope(|s| {
+                    let mut remaining = tile_slice;
+                    let err = &had_error;
+                    for _col in 0..cols {
+                        let (head, tail) = remaining.split_at_mut(1);
+                        remaining = tail;
+                        let t = &mut head[0];
+                        s.spawn(move |_| {
+                            if rav1d_decode_tile_sbrow(c, t, f_shared).is_err() {
+                                err.store(true, Ordering::Relaxed);
+                            }
+                        });
+                    }
+                });
                 if had_error.load(Ordering::Relaxed) {
                     return Err(EINVAL);
                 }
             }
 
-            // Save temporal MVs (use tile 0's context for rt data)
-            if f.frame_hdr().frame_type.is_inter_or_switch() {
+            // Save temporal MVs
+            if f_shared.frame_hdr().frame_type.is_inter_or_switch() {
                 let t = &tile_contexts[0];
                 c.dsp.refmvs.save_tmvs.call(
-                    &t.rt,
-                    &f.rf,
-                    &f.mvs,
-                    0,
-                    f.bw >> 1,
-                    by >> 1,
-                    by_end,
+                    &t.rt, &f_shared.rf, &f_shared.mvs,
+                    0, f_shared.bw >> 1, by >> 1, by_end,
                 );
             }
-
             let recon_elapsed = recon_start.elapsed();
 
             // === FILTERING: sequential, full width ===
-            // Use the main thread's task context for filtering
             let filter_start = std::time::Instant::now();
-            {
-                let mut t = t_single.lock();
-                t.b.y = by;
-                (f.bd_fn().filter_sbrow)(c, f, &mut t, sby);
-            }
+            filter_ctx.b.y = by;
+            (bd_fn.filter_sbrow)(c, f_shared, &mut filter_ctx, sby);
             let filter_elapsed = filter_start.elapsed();
 
             if std::env::var("RAV1D_TIMING").is_ok() {
