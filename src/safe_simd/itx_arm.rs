@@ -9149,6 +9149,7 @@ pub fn itxfm_add_dispatch<BD: BitDepth>(
 /// Run on aarch64: `cargo test --release -- --ignored bench_autoversion_vs_neon --nocapture`
 #[cfg(all(test, target_arch = "aarch64"))]
 mod bench_autoversion_vs_neon {
+    use archmage::SimdToken as _;
     use std::time::Instant;
 
     fn bench_fn(name: &str, iters: u32, mut f: impl FnMut()) -> u64 {
