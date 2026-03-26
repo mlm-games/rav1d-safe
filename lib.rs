@@ -142,7 +142,7 @@ pub mod src {
     pub(crate) mod ipred_rows;
     pub(crate) mod itx_rows;
     pub(crate) mod mc_rows;
-    pub(crate) mod plane_rows;
+    pub mod plane_rows;
     pub(crate) mod progressive_frame;
     pub(crate) mod rayon_pipeline;
     pub(crate) mod strided;

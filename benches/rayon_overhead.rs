@@ -109,6 +109,44 @@ fn sequential_4k_1tile(bencher: Bencher) {
         });
 }
 
+// === Batched: 4 SB rows per rayon scope (amortize spawn cost) ===
+
+#[divan::bench]
+fn pipeline_rayon_batched4_4k(bencher: Bencher) {
+    let num_sb = (H_4K + SB - 1) / SB;
+    let tile_w = W_4K / N_TILES;
+    let boundaries: Vec<usize> = (0..=N_TILES).map(|i| i * tile_w).collect();
+    let sb_batch = 4;
+
+    bencher
+        .with_inputs(|| vec![0u8; W_4K * H_4K])
+        .bench_local_values(|mut buf| {
+            let buf_len = buf.len();
+            let num_batches = (num_sb + sb_batch - 1) / sb_batch;
+
+            for batch in 0..num_batches {
+                let row_start = batch * sb_batch * SB;
+                let row_end = ((batch + 1) * sb_batch * SB).min(H_4K);
+                let nrows = row_end - row_start;
+                let start = row_start * W_4K;
+                let end = (start + nrows * W_4K).min(buf_len);
+                let batch_buf = &mut buf[start..end];
+
+                let rows = split_into_rows(batch_buf, W_4K, W_4K, nrows);
+                let mut tiles = split_rows_by_tiles(rows, &boundaries);
+                let tile_vec: Vec<(usize, Vec<&mut [u8]>)> =
+                    tiles.drain(..).enumerate().collect();
+                rayon::scope(|s| {
+                    for (tile_idx, mut strip) in tile_vec {
+                        s.spawn(move |_| {
+                            tile_work(&mut strip, tile_idx, 0);
+                        });
+                    }
+                });
+            }
+        });
+}
+
 // === Full pipeline: 34 SB rows × 4 tiles ===
 
 #[divan::bench]
