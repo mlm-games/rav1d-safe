@@ -119,6 +119,9 @@ fn get_num_threads(s: &Rav1dSettings) -> NumThreads {
     // Multithreaded decode triggers overlaps on picture plane stride gaps
     // (narrow guards cover (h-1)*stride+w bytes which include padding between
     // rows) and on the loopfilter level cache. Clamp to single-threaded.
+    //
+    // Scalar-only threading would work (per-row guards avoid stride gaps)
+    // but requires per-decoder CPU level control (currently global).
     #[cfg(not(feature = "unchecked"))]
     let n_tc = if n_tc > 1 {
         #[cfg(debug_assertions)]
