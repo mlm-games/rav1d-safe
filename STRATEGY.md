@@ -1,7 +1,5 @@
 # rav1d-safe: Safe SIMD Fork Strategy
 
-> **Update:** Comprehensive benchmarks show safe-SIMD is 1.68--1.98x slower than ASM depending on workload. The initial benchmark cited below was not representative. See README.md for current numbers.
-
 ## Goal
 
 Replace rav1d's 160k lines of hand-written x86/ARM assembly with safe Rust SIMD intrinsics using archmage, while maintaining performance parity.

@@ -1,7 +1,5 @@
 # Handoff: Port Remaining msac Functions to Safe SIMD
 
-> **Completed.** The MSAC SIMD work described here has been implemented. See the `unchecked` feature. Safe SSE2 implementations of `adapt4`, `adapt8`, and `hi_tok` are in `src/msac.rs`, gated behind `feature = "unchecked"` on x86_64.
-
 ## The Problem
 
 msac (Multi-Symbol Adaptive Coding) is the entropy decoder. It's 32% of decode time. The ASM build gets hand-tuned SSE2/NEON for **all** msac functions. The safe-SIMD build only ported `symbol_adapt16` — the rest fall back to scalar Rust. This is the primary performance gap (1.58x vs ASM on 8bpc).

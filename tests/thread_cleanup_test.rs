@@ -74,11 +74,9 @@ fn test_multi_threaded_cleanup() {
     assert_eq!(count_worker_threads(), 0, "Stale workers before test");
 
     {
-        let mut decoder = Decoder::with_settings(Settings {
-            threads: 4, // Spawn 4 worker threads
-            ..Default::default()
-        })
-        .unwrap();
+        let mut settings = Settings::default();
+        settings.threads = 4; // Spawn 4 worker threads
+        let mut decoder = Decoder::with_settings(settings).unwrap();
 
         let _ = decoder.decode(&[]);
 
@@ -105,11 +103,9 @@ fn test_auto_detect_threads_cleanup() {
     assert_eq!(count_worker_threads(), 0, "Stale workers before test");
 
     {
-        let mut decoder = Decoder::with_settings(Settings {
-            threads: 0, // Auto-detect (will spawn workers)
-            ..Default::default()
-        })
-        .unwrap();
+        let mut settings = Settings::default();
+        settings.threads = 0; // Auto-detect (will spawn workers)
+        let mut decoder = Decoder::with_settings(settings).unwrap();
 
         let _ = decoder.decode(&[]);
 
@@ -140,11 +136,9 @@ fn test_multiple_decoder_cycles() {
 
     // Create and drop multiple decoders to ensure no accumulation of leaked threads
     for i in 0..5 {
-        let mut decoder = Decoder::with_settings(Settings {
-            threads: 2,
-            ..Default::default()
-        })
-        .unwrap();
+        let mut settings = Settings::default();
+        settings.threads = 2;
+        let mut decoder = Decoder::with_settings(settings).unwrap();
 
         let _ = decoder.decode(&[]);
         drop(decoder);
@@ -165,11 +159,9 @@ fn test_drop_without_decode() {
     let _lock = lock();
 
     // Ensure dropping a decoder that never decoded anything still cleans up properly
-    let decoder = Decoder::with_settings(Settings {
-        threads: 4,
-        ..Default::default()
-    })
-    .unwrap();
+    let mut settings = Settings::default();
+    settings.threads = 4;
+    let decoder = Decoder::with_settings(settings).unwrap();
 
     // Drop immediately without decoding
     drop(decoder);
@@ -182,17 +174,13 @@ fn test_multiple_decoders_simultaneous() {
     let _lock = lock();
 
     // Test that multiple decoders can coexist without interfering
-    let decoder1 = Decoder::with_settings(Settings {
-        threads: 2,
-        ..Default::default()
-    })
-    .unwrap();
+    let mut settings1 = Settings::default();
+    settings1.threads = 2;
+    let decoder1 = Decoder::with_settings(settings1).unwrap();
 
-    let decoder2 = Decoder::with_settings(Settings {
-        threads: 2,
-        ..Default::default()
-    })
-    .unwrap();
+    let mut settings2 = Settings::default();
+    settings2.threads = 2;
+    let decoder2 = Decoder::with_settings(settings2).unwrap();
 
     drop(decoder1);
     drop(decoder2);

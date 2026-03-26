@@ -65,11 +65,9 @@ fn main() {
     let data = fs::read(&args[1]).expect("Failed to read input");
     let is_ivf = data.len() >= 4 && &data[0..4] == b"DKIF";
 
-    let settings = Settings {
-        threads: 1,
-        apply_grain: false,
-        ..Default::default()
-    };
+    let mut settings = Settings::default();
+    settings.threads = 1;
+    settings.apply_grain = false;
     let mut decoder = Decoder::with_settings(settings).expect("decoder creation failed");
     let mut out = io::stdout().lock();
     let mut frame_count = 0u32;

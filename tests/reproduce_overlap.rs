@@ -24,11 +24,9 @@ fn decode_with_threads(path: &str, threads: u32, max_frame_delay: u32) -> (usize
         total, threads, max_frame_delay
     );
 
-    let settings = Settings {
-        threads,
-        max_frame_delay,
-        ..Default::default()
-    };
+    let mut settings = Settings::default();
+    settings.threads = threads;
+    settings.max_frame_delay = max_frame_delay;
     let mut decoder = Decoder::with_settings(settings).expect("Failed to create decoder");
     let mut decoded = 0;
 
@@ -176,11 +174,9 @@ fn test_single_obu_frame_threading() {
     // Aggressive frame threading: 16 threads, auto frame delay (n_fc = 4)
     for threads in [2, 4, 8, 16] {
         eprintln!("\n--- threads={}, max_frame_delay=0 ---", threads);
-        let settings = Settings {
-            threads,
-            max_frame_delay: 0,
-            ..Default::default()
-        };
+        let mut settings = Settings::default();
+        settings.threads = threads;
+        settings.max_frame_delay = 0;
         let mut decoder = Decoder::with_settings(settings).expect("Failed to create decoder");
 
         match decoder.decode(&obu) {
@@ -223,11 +219,9 @@ fn test_single_obu_tile_threading() {
     // Tile threading: multiple threads, single frame context
     for threads in [0, 2, 4, 8] {
         eprintln!("\n--- threads={}, max_frame_delay=1 ---", threads);
-        let settings = Settings {
-            threads,
-            max_frame_delay: 1,
-            ..Default::default()
-        };
+        let mut settings = Settings::default();
+        settings.threads = threads;
+        settings.max_frame_delay = 1;
         let mut decoder = Decoder::with_settings(settings).expect("Failed to create decoder");
 
         match decoder.decode(&obu) {

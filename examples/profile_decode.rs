@@ -56,11 +56,9 @@ fn read_ivf_frames(path: &str) -> Vec<Vec<u8>> {
 }
 
 fn decode_once(obu_frames: &[Vec<u8>], cpu_level: CpuLevel) -> usize {
-    let settings = Settings {
-        threads: 1,
-        cpu_level,
-        ..Default::default()
-    };
+    let mut settings = Settings::default();
+    settings.threads = 1;
+    settings.cpu_level = cpu_level;
     let mut decoder = Decoder::with_settings(settings).expect("decoder creation failed");
     let mut count = 0;
 

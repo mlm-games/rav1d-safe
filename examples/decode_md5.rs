@@ -209,11 +209,9 @@ fn main() {
     let data = fs::read(input_path).expect("Failed to read input");
     let verbose = !quiet;
 
-    let settings = Settings {
-        threads: 1,
-        apply_grain: filmgrain,
-        ..Default::default()
-    };
+    let mut settings = Settings::default();
+    settings.threads = 1;
+    settings.apply_grain = filmgrain;
     let mut decoder = Decoder::with_settings(settings).expect("decoder creation failed");
     let mut hasher = md5::Context::new();
     let mut frame_count = 0u32;

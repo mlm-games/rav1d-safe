@@ -152,10 +152,8 @@ fn compute_decode_md5_with_grain(
     let frames = ivf_parser::parse_all_frames(&mut reader)
         .map_err(|e| format!("Failed to parse IVF {}: {e}", ivf_path.display()))?;
 
-    let settings = Settings {
-        apply_grain,
-        ..Default::default()
-    };
+    let mut settings = Settings::default();
+    settings.apply_grain = apply_grain;
     let mut decoder =
         Decoder::with_settings(settings).map_err(|e| format!("Failed to create decoder: {e}"))?;
     let mut ctx = md5::Context::new();

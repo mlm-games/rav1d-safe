@@ -26,12 +26,10 @@ fn test_tile_threading_scalar() {
 
     for threads in [0, 2, 4, 8] {
         eprintln!("\n--- threads={}, max_frame_delay=1, SCALAR ---", threads);
-        let settings = Settings {
-            threads,
-            max_frame_delay: 1,
-            cpu_level: CpuLevel::Scalar,
-            ..Default::default()
-        };
+        let mut settings = Settings::default();
+        settings.threads = threads;
+        settings.max_frame_delay = 1;
+        settings.cpu_level = CpuLevel::Scalar;
         let mut decoder = Decoder::with_settings(settings).expect("create");
 
         match decoder.decode(&obu) {

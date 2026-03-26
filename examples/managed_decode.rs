@@ -21,11 +21,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("File size: {} bytes", data.len());
 
     // Create decoder with default settings
-    let settings = Settings {
-        threads: 0, // Auto-detect
-        apply_grain: true,
-        ..Default::default()
-    };
+    let mut settings = Settings::default();
+    settings.threads = 0; // Auto-detect
+    settings.apply_grain = true;
 
     let mut decoder = Decoder::with_settings(settings)?;
     println!("Decoder created");

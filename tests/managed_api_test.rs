@@ -10,11 +10,9 @@ fn test_decoder_creation() {
 #[test]
 fn test_decoder_with_custom_settings() {
     // Test decoder with custom settings
-    let settings = Settings {
-        threads: 4,
-        apply_grain: false,
-        ..Default::default()
-    };
+    let mut settings = Settings::default();
+    settings.threads = 4;
+    settings.apply_grain = false;
 
     let decoder = Decoder::with_settings(settings);
     assert!(

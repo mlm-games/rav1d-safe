@@ -19,10 +19,8 @@ use std::io::BufReader;
 use std::time::Instant;
 
 fn decode_ivf_frames(frames: &[ivf_parser::IvfFrame]) -> usize {
-    let settings = Settings {
-        threads: 1,
-        ..Default::default()
-    };
+    let mut settings = Settings::default();
+    settings.threads = 1;
     let mut decoder = Decoder::with_settings(settings).expect("decoder creation failed");
     let mut decoded = 0;
 

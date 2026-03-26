@@ -116,9 +116,9 @@ pub struct Settings {
     /// even when complete frame data is provided, as frames are processed asynchronously.
     /// Call `decode()` or `flush()` multiple times to drain buffered frames.
     ///
-    /// **Note:** Multithreading requires the `unchecked` feature. Without it, the decoder
-    /// silently falls back to single-threaded mode to avoid runtime panics from
-    /// DisjointMut overlap detection.
+    /// **Note:** Tile threading (`max_frame_delay: 1`) works without `unchecked`.
+    /// Frame threading (`max_frame_delay: 0` or `> 1`) requires `unchecked` —
+    /// without it, frame threading is silently disabled (falls back to tile-only).
     pub threads: u32,
 
     /// Apply film grain synthesis during decoding

@@ -78,14 +78,12 @@ fn extract_obu(avif_bytes: &[u8]) -> Option<Vec<u8>> {
 }
 
 fn decode_obu_with(obu: &[u8], cfg: &DecodeConfig) -> usize {
-    let mut dec = Decoder::with_settings(Settings {
-        threads: cfg.threads,
-        max_frame_delay: cfg.max_frame_delay,
-        cpu_level: cfg.cpu_level,
-        frame_size_limit: 8192 * 8192,
-        ..Default::default()
-    })
-    .expect("decoder creation failed");
+    let mut settings = Settings::default();
+    settings.threads = cfg.threads;
+    settings.max_frame_delay = cfg.max_frame_delay;
+    settings.cpu_level = cfg.cpu_level;
+    settings.frame_size_limit = 8192 * 8192;
+    let mut dec = Decoder::with_settings(settings).expect("decoder creation failed");
 
     let mut n = 0;
     match dec.decode(obu) {

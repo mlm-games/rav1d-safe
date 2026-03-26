@@ -17,13 +17,11 @@ fn extract_obu(avif_bytes: &[u8]) -> Vec<u8> {
 }
 
 fn decode_once(obu: &[u8]) -> usize {
-    let mut decoder = Decoder::with_settings(Settings {
-        threads: 1,
-        frame_size_limit: 8192 * 8192,
-        cpu_level: CpuLevel::Native,
-        ..Default::default()
-    })
-    .expect("decoder creation failed");
+    let mut settings = Settings::default();
+    settings.threads = 1;
+    settings.frame_size_limit = 8192 * 8192;
+    settings.cpu_level = CpuLevel::Native;
+    let mut decoder = Decoder::with_settings(settings).expect("decoder creation failed");
 
     let mut count = 0;
     match decoder.decode(obu) {

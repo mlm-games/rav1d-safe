@@ -91,11 +91,9 @@ fn main() {
     let mut cursor = Cursor::new(&data);
     let frames = ivf_parser::parse_all_frames(&mut cursor).expect("IVF parse failed");
 
-    let settings = Settings {
-        threads: 1,
-        apply_grain: false,
-        ..Default::default()
-    };
+    let mut settings = Settings::default();
+    settings.threads = 1;
+    settings.apply_grain = false;
     let mut decoder = Decoder::with_settings(settings).expect("decoder creation failed");
     let mut frame_num = 0;
 

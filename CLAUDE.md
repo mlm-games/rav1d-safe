@@ -145,17 +145,9 @@ just profile-quick  # Same but 100 iterations
 
 ## Feature Flags
 
-Default features: `bitdepth_8`, `bitdepth_16` (safe-SIMD, `forbid(unsafe_code)`)
-
-- `bitdepth_8` - 8-bit pixel support (default)
-- `bitdepth_16` - 10/12-bit pixel support (default)
-- `unchecked` - Skip bounds checks in SIMD hot paths; enables SSE2 msac on x86_64
-- `partial_asm` - ASM for entropy decoding (msac) and loopfilter only. Implies `unchecked`
-- `c-ffi` - C API entry points (`dav1d_*` symbols). Implies `unchecked`
-- `dav1d-compat` - Export C symbols as `dav1d_*` instead of `rav1d_*`
-- `asm` - Full hand-written assembly. Implies `c-ffi`
-- `mt` - Safe multithreading: strided DisjointMut guards for tile/frame threading
-- `simd_test` - Run SIMD and scalar side-by-side, panic on mismatch (testing only)
+- `asm` - Use hand-written assembly (default, original rav1d)
+- `bitdepth_8` - 8-bit pixel support
+- `bitdepth_16` - 10/12-bit pixel support
 
 ## Safe-SIMD Modules
 

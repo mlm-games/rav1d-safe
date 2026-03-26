@@ -70,8 +70,7 @@ The decoder expects raw AV1 Open Bitstream Unit (OBU) data. If you have IVF or W
 ```rust
 use rav1d_safe::{Decoder, Settings, CpuLevel};
 
-// Single-threaded (default: 1 thread; multi-threading is experimental,
-// see THREADING-HANDOFF.md)
+// Single-threaded (default) — synchronous, deterministic
 let decoder = Decoder::new()?;
 
 // Multi-threaded — frame threading, better throughput
@@ -244,8 +243,6 @@ cargo test --release
 | `unchecked` | off | Skip bounds checks in SIMD hot paths; enables SSE2 msac on x86_64 |
 | `partial_asm` | off | ASM for entropy decoding (msac) and loopfilter only; safe SIMD everything else. Implies `unchecked` |
 | `c-ffi` | off | C API entry points (`dav1d_*` symbols). Implies `unchecked` |
-| `mt` | off | Safe multithreading: strided DisjointMut guards and SB boundary checks for tile/frame threading |
-| `dav1d-compat` | off | Export C symbols as `dav1d_*` instead of `rav1d_*` (drop-in replacement) |
 | `asm` | off | Full hand-written assembly. Implies `c-ffi` |
 
 Safety chain: `default` (`forbid(unsafe_code)`) -> `unchecked` -> `c-ffi` -> `asm`. Each level relaxes the safety constraint.
@@ -261,7 +258,7 @@ RUSTFLAGS="-C linker=aarch64-linux-gnu-gcc" \
 cargo check --target aarch64-unknown-linux-gnu
 ```
 
-Supported targets: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `wasm32-unknown-unknown` (simd128), `i686-unknown-linux-gnu`, `armv7-unknown-linux-gnueabihf`, `riscv64gc-unknown-linux-gnu`.
+Supported targets: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `i686-unknown-linux-gnu`, `armv7-unknown-linux-gnueabihf`, `riscv64gc-unknown-linux-gnu`.
 
 ## License
 

@@ -170,11 +170,9 @@ fn decode_at_level(
     let frames = ivf_parser::parse_all_frames(&mut reader)
         .map_err(|e| format!("parse IVF {}: {e}", ivf_path.display()))?;
 
-    let settings = Settings {
-        cpu_level: level,
-        apply_grain,
-        ..Default::default()
-    };
+    let mut settings = Settings::default();
+    settings.cpu_level = level;
+    settings.apply_grain = apply_grain;
     let mut decoder = Decoder::with_settings(settings).map_err(|e| format!("init decoder: {e}"))?;
     let mut ctx = md5::Context::new();
     let mut frame_count = 0usize;
