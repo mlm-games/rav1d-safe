@@ -11475,6 +11475,64 @@ pub fn w_avg_dispatch<BD: BitDepth>(
     )
 }
 
+/// Row-slice w_avg dispatch — takes per-row slices directly, no DisjointMut.
+///
+/// This is the entry point for tile-parallel decode: the caller pre-splits
+/// the frame buffer into per-row slices via split_at_mut, so no DisjointMut
+/// guard is needed. Full SIMD performance with forbid(unsafe_code).
+#[cfg(target_arch = "x86_64")]
+pub fn w_avg_dispatch_rows<BD: BitDepth>(
+    dst_rows: &mut [&mut [BD::Pixel]],
+    tmp1: &[i16],
+    tmp2: &[i16],
+    w: i32,
+    h: i32,
+    weight: i32,
+    bd: BD,
+) -> bool {
+    let Some(token) = crate::src::cpu::summon_avx2() else {
+        return false;
+    };
+    use crate::include::common::bitdepth::BPC;
+    let wu = w as usize;
+    let hu = h as usize;
+
+    // Convert typed pixel row slices to byte row slices for SIMD
+    let mut byte_rows: Vec<&mut [u8]> = dst_rows[..hu]
+        .iter_mut()
+        .map(|row| {
+            let bytes: &mut [u8] = zerocopy::IntoBytes::as_mut_bytes(&mut row[..wu]);
+            bytes
+        })
+        .collect();
+
+    // Pad tmp slices to COMPINTER_LEN for the inner functions
+    let mut t1 = [0i16; COMPINTER_LEN];
+    let mut t2 = [0i16; COMPINTER_LEN];
+    let n = (wu * hu).min(COMPINTER_LEN);
+    t1[..n].copy_from_slice(&tmp1[..n]);
+    t2[..n].copy_from_slice(&tmp2[..n]);
+
+    match BD::BPC {
+        BPC::BPC8 => {
+            w_avg_8bpc_avx2_safe(token, &mut byte_rows, &t1, &t2, w, h, weight);
+        }
+        BPC::BPC16 => {
+            w_avg_16bpc_avx2_safe(
+                token,
+                &mut byte_rows,
+                &t1,
+                &t2,
+                w,
+                h,
+                weight,
+                bd.into_c() as i32,
+            );
+        }
+    }
+    true
+}
+
 /// Inner w_avg dispatch — operates on pre-acquired byte slice.
 #[cfg(target_arch = "x86_64")]
 pub(crate) fn w_avg_dispatch_inner<BD: BitDepth>(
@@ -11580,6 +11638,64 @@ pub fn mask_dispatch<BD: BitDepth>(
     )
 }
 
+/// Row-slice mask dispatch — takes per-row slices directly, no DisjointMut.
+///
+/// This is the entry point for tile-parallel decode: the caller pre-splits
+/// the frame buffer into per-row slices via split_at_mut, so no DisjointMut
+/// guard is needed. Full SIMD performance with forbid(unsafe_code).
+#[cfg(target_arch = "x86_64")]
+pub fn mask_dispatch_rows<BD: BitDepth>(
+    dst_rows: &mut [&mut [BD::Pixel]],
+    tmp1: &[i16],
+    tmp2: &[i16],
+    w: i32,
+    h: i32,
+    mask: &[u8],
+    bd: BD,
+) -> bool {
+    let Some(token) = crate::src::cpu::summon_avx2() else {
+        return false;
+    };
+    use crate::include::common::bitdepth::BPC;
+    let wu = w as usize;
+    let hu = h as usize;
+
+    // Convert typed pixel row slices to byte row slices for SIMD
+    let mut byte_rows: Vec<&mut [u8]> = dst_rows[..hu]
+        .iter_mut()
+        .map(|row| {
+            let bytes: &mut [u8] = zerocopy::IntoBytes::as_mut_bytes(&mut row[..wu]);
+            bytes
+        })
+        .collect();
+
+    // Pad tmp slices to COMPINTER_LEN for the inner functions
+    let mut t1 = [0i16; COMPINTER_LEN];
+    let mut t2 = [0i16; COMPINTER_LEN];
+    let n = (wu * hu).min(COMPINTER_LEN);
+    t1[..n].copy_from_slice(&tmp1[..n]);
+    t2[..n].copy_from_slice(&tmp2[..n]);
+
+    match BD::BPC {
+        BPC::BPC8 => {
+            mask_8bpc_avx2_safe(token, &mut byte_rows, &t1, &t2, w, h, mask);
+        }
+        BPC::BPC16 => {
+            mask_16bpc_avx2_safe(
+                token,
+                &mut byte_rows,
+                &t1,
+                &t2,
+                w,
+                h,
+                mask,
+                bd.into_c() as i32,
+            );
+        }
+    }
+    true
+}
+
 /// Inner mask dispatch — operates on pre-acquired byte slice.
 /// Can be called directly with scheduler-owned guards.
 #[cfg(target_arch = "x86_64")]
@@ -11683,6 +11799,45 @@ pub fn blend_dispatch<BD: BitDepth>(
     blend_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp_bytes, w, h, mask)
 }
 
+/// Row-slice blend dispatch — takes per-row slices directly, no DisjointMut.
+///
+/// This is the entry point for tile-parallel decode: the caller pre-splits
+/// the frame buffer into per-row slices via split_at_mut, so no DisjointMut
+/// guard is needed. Full SIMD performance with forbid(unsafe_code).
+#[cfg(target_arch = "x86_64")]
+pub fn blend_dispatch_rows<BD: BitDepth>(
+    dst_rows: &mut [&mut [BD::Pixel]],
+    tmp: &[BD::Pixel],
+    w: i32,
+    h: i32,
+    mask: &[u8],
+) -> bool {
+    let Some(token) = crate::src::cpu::summon_avx2() else {
+        return false;
+    };
+    use crate::include::common::bitdepth::BPC;
+    let wu = w as usize;
+    let hu = h as usize;
+
+    // Convert typed pixel row slices to byte row slices for SIMD
+    let mut byte_rows: Vec<&mut [u8]> = dst_rows[..hu]
+        .iter_mut()
+        .map(|row| {
+            let bytes: &mut [u8] = zerocopy::IntoBytes::as_mut_bytes(&mut row[..wu]);
+            bytes
+        })
+        .collect();
+
+    // Convert tmp pixels to bytes
+    let tmp_bytes: &[u8] = zerocopy::IntoBytes::as_bytes(tmp);
+
+    match BD::BPC {
+        BPC::BPC8 => blend_8bpc_avx2_safe(token, &mut byte_rows, tmp_bytes, w, h, mask),
+        BPC::BPC16 => blend_16bpc_avx2_safe(token, &mut byte_rows, tmp_bytes, w, h, mask),
+    }
+    true
+}
+
 /// Inner blend dispatch — operates on pre-acquired byte slice.
 /// Can be called directly with scheduler-owned guards.
 #[cfg(target_arch = "x86_64")]
@@ -11744,6 +11899,48 @@ pub fn blend_dir_dispatch<BD: BitDepth>(
     let dst_stride = dst.stride();
     let tmp_bytes = tmp.as_bytes();
     blend_dir_dispatch_inner::<BD>(is_h, dst_bytes, dst_offset, dst_stride, tmp_bytes, w, h)
+}
+
+/// Row-slice blend_dir dispatch — takes per-row slices directly, no DisjointMut.
+///
+/// Handles both blend_v (is_h=false) and blend_h (is_h=true).
+/// This is the entry point for tile-parallel decode: the caller pre-splits
+/// the frame buffer into per-row slices via split_at_mut, so no DisjointMut
+/// guard is needed. Full SIMD performance with forbid(unsafe_code).
+#[cfg(target_arch = "x86_64")]
+pub fn blend_dir_dispatch_rows<BD: BitDepth>(
+    is_h: bool,
+    dst_rows: &mut [&mut [BD::Pixel]],
+    tmp: &[BD::Pixel],
+    w: i32,
+    h: i32,
+) -> bool {
+    let Some(token) = crate::src::cpu::summon_avx2() else {
+        return false;
+    };
+    use crate::include::common::bitdepth::BPC;
+    let wu = w as usize;
+    let hu = h as usize;
+
+    // Convert typed pixel row slices to byte row slices for SIMD
+    let mut byte_rows: Vec<&mut [u8]> = dst_rows[..hu]
+        .iter_mut()
+        .map(|row| {
+            let bytes: &mut [u8] = zerocopy::IntoBytes::as_mut_bytes(&mut row[..wu]);
+            bytes
+        })
+        .collect();
+
+    // Convert tmp pixels to bytes
+    let tmp_bytes: &[u8] = zerocopy::IntoBytes::as_bytes(tmp);
+
+    match (BD::BPC, is_h) {
+        (BPC::BPC8, true) => blend_h_8bpc_avx2_safe(token, &mut byte_rows, tmp_bytes, w, h),
+        (BPC::BPC8, false) => blend_v_8bpc_avx2_safe(token, &mut byte_rows, tmp_bytes, w, h),
+        (BPC::BPC16, true) => blend_h_16bpc_avx2_safe(token, &mut byte_rows, tmp_bytes, w, h),
+        (BPC::BPC16, false) => blend_v_16bpc_avx2_safe(token, &mut byte_rows, tmp_bytes, w, h),
+    }
+    true
 }
 
 /// Inner blend_dir dispatch — operates on pre-acquired byte slice.
@@ -11824,6 +12021,76 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
     w_mask_dispatch_inner::<BD>(
         layout, dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, mask, sign, bd,
     )
+}
+
+/// Row-slice w_mask dispatch — takes per-row slices directly, no DisjointMut.
+///
+/// This is the entry point for tile-parallel decode: the caller pre-splits
+/// the frame buffer into per-row slices via split_at_mut, so no DisjointMut
+/// guard is needed. Full SIMD performance with forbid(unsafe_code).
+#[cfg(target_arch = "x86_64")]
+pub fn w_mask_dispatch_rows<BD: BitDepth>(
+    layout: Rav1dPixelLayoutSubSampled,
+    dst_rows: &mut [&mut [BD::Pixel]],
+    tmp1: &[i16],
+    tmp2: &[i16],
+    w: i32,
+    h: i32,
+    mask: &mut [u8; SEG_MASK_LEN],
+    sign: i32,
+    bd: BD,
+) -> bool {
+    let Some(token) = crate::src::cpu::summon_avx2() else {
+        return false;
+    };
+    use crate::include::common::bitdepth::BPC;
+    let wu = w as usize;
+    let hu = h as usize;
+
+    // Convert typed pixel row slices to byte row slices for SIMD
+    let mut byte_rows: Vec<&mut [u8]> = dst_rows[..hu]
+        .iter_mut()
+        .map(|row| {
+            let bytes: &mut [u8] = zerocopy::IntoBytes::as_mut_bytes(&mut row[..wu]);
+            bytes
+        })
+        .collect();
+
+    // Pad tmp slices to COMPINTER_LEN for the inner functions
+    let mut t1 = [0i16; COMPINTER_LEN];
+    let mut t2 = [0i16; COMPINTER_LEN];
+    let n = (wu * hu).min(COMPINTER_LEN);
+    t1[..n].copy_from_slice(&tmp1[..n]);
+    t2[..n].copy_from_slice(&tmp2[..n]);
+
+    let bd_c = bd.into_c() as i32;
+    match (BD::BPC, layout) {
+        (BPC::BPC8, Rav1dPixelLayoutSubSampled::I420) => {
+            w_mask_420_8bpc_avx2_safe(token, &mut byte_rows, &t1, &t2, w, h, mask, sign);
+        }
+        (BPC::BPC8, Rav1dPixelLayoutSubSampled::I422) => {
+            w_mask_422_8bpc_avx2_safe(token, &mut byte_rows, &t1, &t2, w, h, mask, sign);
+        }
+        (BPC::BPC8, Rav1dPixelLayoutSubSampled::I444) => {
+            w_mask_444_8bpc_avx2_safe(token, &mut byte_rows, &t1, &t2, w, h, mask, sign);
+        }
+        (BPC::BPC16, Rav1dPixelLayoutSubSampled::I420) => {
+            w_mask_420_16bpc_avx2_safe(
+                token, &mut byte_rows, &t1, &t2, w, h, mask, sign, bd_c,
+            );
+        }
+        (BPC::BPC16, Rav1dPixelLayoutSubSampled::I422) => {
+            w_mask_422_16bpc_avx2_safe(
+                token, &mut byte_rows, &t1, &t2, w, h, mask, sign, bd_c,
+            );
+        }
+        (BPC::BPC16, Rav1dPixelLayoutSubSampled::I444) => {
+            w_mask_444_16bpc_avx2_safe(
+                token, &mut byte_rows, &t1, &t2, w, h, mask, sign, bd_c,
+            );
+        }
+    }
+    true
 }
 
 /// Inner w_mask dispatch — operates on pre-acquired byte slice.
