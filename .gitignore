@@ -7,3 +7,4 @@ fuzz/artifacts/
 fuzz/corpus/
 perf.data
 perf.data.old
+.claude/worktrees/

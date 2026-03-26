@@ -452,6 +452,16 @@ pub struct Decoder {
     worker_handles: Vec<std::thread::JoinHandle<()>>,
 }
 
+/// Returns `true` if the `unchecked` feature is enabled.
+///
+/// When unchecked:
+/// - DisjointMut borrow tracking is disabled (enables multithreading)
+/// - SIMD hot-path bounds checks use `get_unchecked` with debug_assert
+/// - msac entropy coding uses inlined SSE2 intrinsics on x86_64
+pub const fn is_unchecked() -> bool {
+    cfg!(feature = "unchecked")
+}
+
 impl Decoder {
     /// Create a new decoder with default settings
     pub fn new() -> Result<Self> {
