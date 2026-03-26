@@ -693,7 +693,6 @@ impl TxLpfRightEdge {
 }
 
 /// loopfilter
-#[derive(Default)]
 #[repr(C)]
 pub struct Rav1dFrameContextLf {
     pub level: DisjointMut<Vec<u8>>,
@@ -715,6 +714,28 @@ pub struct Rav1dFrameContextLf {
     // in-loop filter per-frame state keeping
     pub start_of_tile_row: Vec<u8>,
     pub restore_planes: LrRestorePlanes,
+}
+
+impl Default for Rav1dFrameContextLf {
+    fn default() -> Self {
+        use crate::src::disjoint_mut::dm_new;
+        Self {
+            level: dm_new(Vec::new()),
+            mask: Default::default(),
+            lr_mask: Default::default(),
+            lim_lut: Default::default(),
+            lvl: Default::default(),
+            last_sharpness: Default::default(),
+            tx_lpf_right_edge: Default::default(),
+            cdef_line_buf: dm_new(Default::default()),
+            lr_line_buf: dm_new(Default::default()),
+            cdef_line: Default::default(),
+            cdef_lpf_line: Default::default(),
+            lr_lpf_line: Default::default(),
+            start_of_tile_row: Default::default(),
+            restore_planes: Default::default(),
+        }
+    }
 }
 
 #[derive(Default)]

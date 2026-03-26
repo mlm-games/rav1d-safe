@@ -114,7 +114,17 @@ unsafe impl<T: ?Sized + AsMutPtr + Sync> Sync for DisjointMut<T> {}
 
 impl<T: AsMutPtr + Default> Default for DisjointMut<T> {
     fn default() -> Self {
-        Self::new(T::default())
+        #[cfg(feature = "unchecked")]
+        // SAFETY: With unchecked feature, caller is responsible for
+        // ensuring non-overlapping access. Default instances should
+        // respect the feature flag to avoid tracking overhead.
+        {
+            unsafe { Self::dangerously_unchecked(T::default()) }
+        }
+        #[cfg(not(feature = "unchecked"))]
+        {
+            Self::new(T::default())
+        }
     }
 }
 
