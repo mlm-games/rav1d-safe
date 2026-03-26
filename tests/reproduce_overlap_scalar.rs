@@ -36,7 +36,12 @@ fn test_tile_threading_scalar() {
 
         match decoder.decode(&obu) {
             Ok(Some(f)) => {
-                eprintln!("  Decoded: {}x{} @ {}bpc", f.width(), f.height(), f.bit_depth());
+                eprintln!(
+                    "  Decoded: {}x{} @ {}bpc",
+                    f.width(),
+                    f.height(),
+                    f.bit_depth()
+                );
             }
             Ok(None) => {
                 eprintln!("  Buffered");

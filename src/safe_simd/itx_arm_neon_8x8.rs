@@ -362,9 +362,7 @@ pub(crate) fn idct_4_q(
     r3: int16x8_t,
 ) -> (int16x8_t, int16x8_t, int16x8_t, int16x8_t) {
     // Load IDCT coefficients: [2896, 23168, 1567, 3784, 799, 4017, 3406, 2276]
-    let coeffs = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IDCT_COEFFS[0..8]).unwrap(),
-    );
+    let coeffs = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IDCT_COEFFS[0..8]).unwrap());
 
     // t3a = (r1 * 3784 + r3 * 1567 + 2048) >> 12
     let (v6_lo, v6_hi) = smull_smlal_q(r1, r3, coeffs, 3, 2);
@@ -428,9 +426,7 @@ pub(crate) fn idct_8_q(
     let (e0, e1, e2, e3) = idct_4_q(r0, r2, r4, r6);
 
     // Load IDCT coefficients
-    let coeffs = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IDCT_COEFFS[0..8]).unwrap(),
-    );
+    let coeffs = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IDCT_COEFFS[0..8]).unwrap());
 
     // Process odd inputs:
     // t4a = (r1 * 799 - r7 * 4017 + 2048) >> 12
@@ -534,12 +530,8 @@ pub(crate) fn iadst_8_q(
     int16x8_t,
     int16x8_t,
 ) {
-    let c0 = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IADST8_COEFFS_V0[..]).unwrap(),
-    );
-    let c1 = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IADST8_COEFFS_V1[..]).unwrap(),
-    );
+    let c0 = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IADST8_COEFFS_V0[..]).unwrap());
+    let c1 = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IADST8_COEFFS_V1[..]).unwrap());
 
     // Stage 1: 4 rotation pairs
     // Assembly registers: v16=in0, v17=in1, v18=in2, v19=in3,
@@ -806,8 +798,7 @@ fn apply_tx8(
         TxType8::Dct => idct_8_q(v0, v1, v2, v3, v4, v5, v6, v7),
         TxType8::Adst => iadst_8_q(v0, v1, v2, v3, v4, v5, v6, v7),
         TxType8::FlipAdst => {
-            let (o0, o1, o2, o3, o4, o5, o6, o7) =
-                iadst_8_q(v0, v1, v2, v3, v4, v5, v6, v7);
+            let (o0, o1, o2, o3, o4, o5, o6, o7) = iadst_8_q(v0, v1, v2, v3, v4, v5, v6, v7);
             (o7, o6, o5, o4, o3, o2, o1, o0)
         }
         TxType8::Identity => identity_8_q(v0, v1, v2, v3, v4, v5, v6, v7),
@@ -900,8 +891,7 @@ pub(crate) fn inv_txfm_add_8x8_8bpc_neon(
 
     // Step 7: Add to destination with >>4 shift
     add_to_dst_8x8_8bpc(
-        dst, dst_base, dst_stride,
-        v16, v17, v18, v19, v20, v21, v22, v23,
+        dst, dst_base, dst_stride, v16, v17, v18, v19, v20, v21, v22, v23,
     );
 }
 
@@ -927,12 +917,7 @@ pub(crate) fn inv_txfm_add_8x8_8bpc_neon(
 /// Then broadcast to all 8 rows and add to destination.
 #[cfg(target_arch = "aarch64")]
 #[rite(neon)]
-fn dc_only_8x8_8bpc(
-    dst: &mut [u8],
-    dst_base: usize,
-    dst_stride: isize,
-    coeff: &mut [i16],
-) {
+fn dc_only_8x8_8bpc(dst: &mut [u8], dst_base: usize, dst_stride: isize, coeff: &mut [i16]) {
     let dc = coeff[0];
     coeff[0] = 0;
 
@@ -987,8 +972,15 @@ pub(crate) fn inv_txfm_add_dct_dct_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::Dct, TxType8::Dct,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::Dct,
+        TxType8::Dct,
     );
 }
 
@@ -1005,8 +997,15 @@ pub(crate) fn inv_txfm_add_identity_identity_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::Identity, TxType8::Identity,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::Identity,
+        TxType8::Identity,
     );
 }
 
@@ -1023,8 +1022,15 @@ pub(crate) fn inv_txfm_add_adst_adst_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::Adst, TxType8::Adst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::Adst,
+        TxType8::Adst,
     );
 }
 
@@ -1041,8 +1047,15 @@ pub(crate) fn inv_txfm_add_dct_adst_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::Dct, TxType8::Adst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::Dct,
+        TxType8::Adst,
     );
 }
 
@@ -1059,8 +1072,15 @@ pub(crate) fn inv_txfm_add_dct_flipadst_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::Dct, TxType8::FlipAdst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::Dct,
+        TxType8::FlipAdst,
     );
 }
 
@@ -1077,8 +1097,15 @@ pub(crate) fn inv_txfm_add_dct_identity_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::Dct, TxType8::Identity,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::Dct,
+        TxType8::Identity,
     );
 }
 
@@ -1095,8 +1122,15 @@ pub(crate) fn inv_txfm_add_adst_dct_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::Adst, TxType8::Dct,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::Adst,
+        TxType8::Dct,
     );
 }
 
@@ -1113,8 +1147,15 @@ pub(crate) fn inv_txfm_add_adst_flipadst_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::Adst, TxType8::FlipAdst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::Adst,
+        TxType8::FlipAdst,
     );
 }
 
@@ -1131,8 +1172,15 @@ pub(crate) fn inv_txfm_add_flipadst_dct_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::FlipAdst, TxType8::Dct,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::FlipAdst,
+        TxType8::Dct,
     );
 }
 
@@ -1149,8 +1197,15 @@ pub(crate) fn inv_txfm_add_flipadst_adst_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::FlipAdst, TxType8::Adst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::FlipAdst,
+        TxType8::Adst,
     );
 }
 
@@ -1167,8 +1222,15 @@ pub(crate) fn inv_txfm_add_flipadst_flipadst_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::FlipAdst, TxType8::FlipAdst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::FlipAdst,
+        TxType8::FlipAdst,
     );
 }
 
@@ -1185,8 +1247,15 @@ pub(crate) fn inv_txfm_add_identity_dct_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::Identity, TxType8::Dct,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::Identity,
+        TxType8::Dct,
     );
 }
 
@@ -1203,8 +1272,15 @@ pub(crate) fn inv_txfm_add_adst_identity_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::Adst, TxType8::Identity,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::Adst,
+        TxType8::Identity,
     );
 }
 
@@ -1221,8 +1297,15 @@ pub(crate) fn inv_txfm_add_flipadst_identity_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::FlipAdst, TxType8::Identity,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::FlipAdst,
+        TxType8::Identity,
     );
 }
 
@@ -1239,8 +1322,15 @@ pub(crate) fn inv_txfm_add_identity_adst_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::Identity, TxType8::Adst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::Identity,
+        TxType8::Adst,
     );
 }
 
@@ -1257,8 +1347,15 @@ pub(crate) fn inv_txfm_add_identity_flipadst_8x8_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_8x8_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType8::Identity, TxType8::FlipAdst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType8::Identity,
+        TxType8::FlipAdst,
     );
 }
 
@@ -1600,7 +1697,11 @@ mod tests {
                 assert!(
                     diff <= 1,
                     "DC fast path mismatch at ({}, {}): dc={}, full={}, diff={}",
-                    x, y, dst_dc[off], dst_full[off], diff,
+                    x,
+                    y,
+                    dst_dc[off],
+                    dst_full[off],
+                    diff,
                 );
             }
         }
@@ -1646,7 +1747,12 @@ mod tests {
                 assert!(
                     diff <= MAX_DIFF,
                     "ADST_ADST 8x8 mismatch at ({}, {}): neon={}, scalar={}, diff={} (max {})",
-                    x, y, dst_neon[off], dst_scalar[off], diff, MAX_DIFF,
+                    x,
+                    y,
+                    dst_neon[off],
+                    dst_scalar[off],
+                    diff,
+                    MAX_DIFF,
                 );
             }
         }
@@ -1692,7 +1798,11 @@ mod tests {
                 assert!(
                     diff <= 1,
                     "IDENTITY 8x8 mismatch at ({}, {}): neon={}, scalar={}, diff={}",
-                    x, y, dst_neon[off], dst_scalar[off], diff,
+                    x,
+                    y,
+                    dst_neon[off],
+                    dst_scalar[off],
+                    diff,
                 );
             }
         }
@@ -1766,7 +1876,12 @@ mod tests {
                 assert!(
                     diff <= MAX_DIFF,
                     "DCT_ADST 8x8 mismatch at ({}, {}): neon={}, scalar={}, diff={} (max {})",
-                    x, y, dst_neon[off], dst_scalar[off], diff, MAX_DIFF,
+                    x,
+                    y,
+                    dst_neon[off],
+                    dst_scalar[off],
+                    diff,
+                    MAX_DIFF,
                 );
             }
         }
@@ -1785,8 +1900,7 @@ mod tests {
         let r6 = safe_simd::vld1q_s16(&rows_in[6]);
         let r7 = safe_simd::vld1q_s16(&rows_in[7]);
 
-        let (o0, o1, o2, o3, o4, o5, o6, o7) =
-            transpose_8x8h(r0, r1, r2, r3, r4, r5, r6, r7);
+        let (o0, o1, o2, o3, o4, o5, o6, o7) = transpose_8x8h(r0, r1, r2, r3, r4, r5, r6, r7);
 
         let mut rows_out = [[0i16; 8]; 8];
         safe_simd::vst1q_s16(&mut rows_out[0], o0);

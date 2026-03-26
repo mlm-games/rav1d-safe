@@ -51,24 +51,22 @@ pub(crate) fn idct_4h(
     r3: int16x4_t,
 ) -> (int16x4_t, int16x4_t, int16x4_t, int16x4_t) {
     // Load first 4 IDCT coefficients into an int16x4_t: [2896, 23168, 1567, 3784]
-    let coeffs = safe_simd::vld1_s16(
-        <&[i16; 4]>::try_from(&IDCT_COEFFS[0..4]).unwrap(),
-    );
+    let coeffs = safe_simd::vld1_s16(<&[i16; 4]>::try_from(&IDCT_COEFFS[0..4]).unwrap());
 
     // t3a = (r1 * coeff[3] + r3 * coeff[2] + 2048) >> 12
     // Assembly: smull_smlal v6, v7, r1, r3, v0.h[3], v0.h[2], .4h
-    let v6 = vmull_lane_s16::<3>(r1, coeffs);        // r1 * 3784 -> i32x4
-    let v6 = vmlal_lane_s16::<2>(v6, r3, coeffs);    // += r3 * 1567
+    let v6 = vmull_lane_s16::<3>(r1, coeffs); // r1 * 3784 -> i32x4
+    let v6 = vmlal_lane_s16::<2>(v6, r3, coeffs); // += r3 * 1567
 
     // t2a = (r1 * coeff[2] - r3 * coeff[3] + 2048) >> 12
     // Assembly: smull_smlsl v4, v5, r1, r3, v0.h[2], v0.h[3], .4h
-    let v4 = vmull_lane_s16::<2>(r1, coeffs);        // r1 * 1567 -> i32x4
-    let v4 = vmlsl_lane_s16::<3>(v4, r3, coeffs);    // -= r3 * 3784
+    let v4 = vmull_lane_s16::<2>(r1, coeffs); // r1 * 1567 -> i32x4
+    let v4 = vmlsl_lane_s16::<3>(v4, r3, coeffs); // -= r3 * 3784
 
     // t0 = (r0 * coeff[0] + r2 * coeff[0] + 2048) >> 12
     // Assembly: smull_smlal v2, v3, r0, r2, v0.h[0], v0.h[0], .4h
-    let v2 = vmull_lane_s16::<0>(r0, coeffs);        // r0 * 2896 -> i32x4
-    let v2 = vmlal_lane_s16::<0>(v2, r2, coeffs);    // += r2 * 2896
+    let v2 = vmull_lane_s16::<0>(r0, coeffs); // r0 * 2896 -> i32x4
+    let v2 = vmlal_lane_s16::<0>(v2, r2, coeffs); // += r2 * 2896
 
     // Saturating rounding shift right narrow: i32x4 -> i16x4 with >>12
     // Assembly: sqrshrn_sz v6, v6, v7, #12, .4h
@@ -79,8 +77,8 @@ pub(crate) fn idct_4h(
 
     // t1 = (r0 * coeff[0] - r2 * coeff[0] + 2048) >> 12
     // Assembly: smull_smlsl v4, v5, r0, r2, v0.h[0], v0.h[0], .4h
-    let v4 = vmull_lane_s16::<0>(r0, coeffs);        // r0 * 2896 -> i32x4
-    let v4 = vmlsl_lane_s16::<0>(v4, r2, coeffs);    // -= r2 * 2896
+    let v4 = vmull_lane_s16::<0>(r0, coeffs); // r0 * 2896 -> i32x4
+    let v4 = vmlsl_lane_s16::<0>(v4, r2, coeffs); // -= r2 * 2896
 
     // Assembly: sqrshrn_sz v2, v2, v3, #12, .4h
     let t0 = vqrshrn_n_s32::<12>(v2);
@@ -127,9 +125,7 @@ pub(crate) fn iadst_4h(
     in3: int16x4_t,
 ) -> (int16x4_t, int16x4_t, int16x4_t, int16x4_t) {
     // Load IADST4 coefficients: [1321, 3803, 2482, 3344, 3344, 0, 0, 0]
-    let coeffs = safe_simd::vld1_s16(
-        <&[i16; 4]>::try_from(&IADST4_COEFFS[0..4]).unwrap(),
-    );
+    let coeffs = safe_simd::vld1_s16(<&[i16; 4]>::try_from(&IADST4_COEFFS[0..4]).unwrap());
 
     // v3 = ssubl(in0, in2) — sign-extend subtract to i32
     // Assembly: ssubl v3.4s, v16.4h, v18.4h
@@ -139,9 +135,9 @@ pub(crate) fn iadst_4h(
     // Assembly: smull v4.4s, v16.4h, v0.h[0]
     //           smlal v4.4s, v18.4h, v0.h[1]
     //           smlal v4.4s, v19.4h, v0.h[2]
-    let v4 = vmull_lane_s16::<0>(in0, coeffs);        // in0 * 1321
-    let v4 = vmlal_lane_s16::<1>(v4, in2, coeffs);    // += in2 * 3803
-    let v4 = vmlal_lane_s16::<2>(v4, in3, coeffs);    // += in3 * 2482
+    let v4 = vmull_lane_s16::<0>(in0, coeffs); // in0 * 1321
+    let v4 = vmlal_lane_s16::<1>(v4, in2, coeffs); // += in2 * 3803
+    let v4 = vmlal_lane_s16::<2>(v4, in3, coeffs); // += in3 * 2482
 
     // v7 = in1 * 3344
     // Assembly: smull v7.4s, v17.4h, v0.h[3]
@@ -155,9 +151,9 @@ pub(crate) fn iadst_4h(
     // Assembly: smull v5.4s, v16.4h, v0.h[2]
     //           smlsl v5.4s, v18.4h, v0.h[0]
     //           smlsl v5.4s, v19.4h, v0.h[1]
-    let v5 = vmull_lane_s16::<2>(in0, coeffs);        // in0 * 2482
-    let v5 = vmlsl_lane_s16::<0>(v5, in2, coeffs);    // -= in2 * 1321
-    let v5 = vmlsl_lane_s16::<1>(v5, in3, coeffs);    // -= in3 * 3803
+    let v5 = vmull_lane_s16::<2>(in0, coeffs); // in0 * 2482
+    let v5 = vmlsl_lane_s16::<0>(v5, in2, coeffs); // -= in2 * 1321
+    let v5 = vmlsl_lane_s16::<1>(v5, in3, coeffs); // -= in3 * 3803
 
     // o3 = v4 + v5 - v7
     // Assembly: add o3.4s, v4.4s, v5.4s
@@ -342,12 +338,7 @@ pub(crate) fn inv_txfm_add_4x4_8bpc_neon(
 /// ```
 #[cfg(target_arch = "aarch64")]
 #[rite(neon)]
-fn dc_only_4x4_8bpc(
-    dst: &mut [u8],
-    dst_base: usize,
-    dst_stride: isize,
-    coeff: &mut [i16],
-) {
+fn dc_only_4x4_8bpc(dst: &mut [u8], dst_base: usize, dst_stride: isize, coeff: &mut [i16]) {
     let dc = coeff[0];
     coeff[0] = 0;
 
@@ -379,7 +370,9 @@ fn dc_only_4x4_8bpc(
     let v17_lo = vget_high_s16(v_shifted);
 
     // All 4 rows get the same DC value, so v18=v16, v19=v17
-    add_to_dst_4x4_8bpc(dst, dst_base, dst_stride, v16_lo, v17_lo, v16_lo, v17_lo, false);
+    add_to_dst_4x4_8bpc(
+        dst, dst_base, dst_stride, v16_lo, v17_lo, v16_lo, v17_lo, false,
+    );
 }
 
 // ============================================================================
@@ -399,8 +392,15 @@ pub(crate) fn inv_txfm_add_dct_dct_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::Dct, TxType4::Dct,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::Dct,
+        TxType4::Dct,
     );
 }
 
@@ -417,8 +417,15 @@ pub(crate) fn inv_txfm_add_adst_adst_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::Adst, TxType4::Adst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::Adst,
+        TxType4::Adst,
     );
 }
 
@@ -435,8 +442,15 @@ pub(crate) fn inv_txfm_add_flipadst_flipadst_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::FlipAdst, TxType4::FlipAdst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::FlipAdst,
+        TxType4::FlipAdst,
     );
 }
 
@@ -453,8 +467,15 @@ pub(crate) fn inv_txfm_add_identity_identity_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::Identity, TxType4::Identity,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::Identity,
+        TxType4::Identity,
     );
 }
 
@@ -473,8 +494,15 @@ pub(crate) fn inv_txfm_add_dct_adst_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::Dct, TxType4::Adst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::Dct,
+        TxType4::Adst,
     );
 }
 
@@ -491,8 +519,15 @@ pub(crate) fn inv_txfm_add_adst_dct_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::Adst, TxType4::Dct,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::Adst,
+        TxType4::Dct,
     );
 }
 
@@ -509,8 +544,15 @@ pub(crate) fn inv_txfm_add_dct_flipadst_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::Dct, TxType4::FlipAdst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::Dct,
+        TxType4::FlipAdst,
     );
 }
 
@@ -527,8 +569,15 @@ pub(crate) fn inv_txfm_add_flipadst_dct_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::FlipAdst, TxType4::Dct,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::FlipAdst,
+        TxType4::Dct,
     );
 }
 
@@ -545,8 +594,15 @@ pub(crate) fn inv_txfm_add_adst_flipadst_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::Adst, TxType4::FlipAdst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::Adst,
+        TxType4::FlipAdst,
     );
 }
 
@@ -563,8 +619,15 @@ pub(crate) fn inv_txfm_add_flipadst_adst_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::FlipAdst, TxType4::Adst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::FlipAdst,
+        TxType4::Adst,
     );
 }
 
@@ -581,8 +644,15 @@ pub(crate) fn inv_txfm_add_dct_identity_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::Dct, TxType4::Identity,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::Dct,
+        TxType4::Identity,
     );
 }
 
@@ -599,8 +669,15 @@ pub(crate) fn inv_txfm_add_identity_dct_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::Identity, TxType4::Dct,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::Identity,
+        TxType4::Dct,
     );
 }
 
@@ -617,8 +694,15 @@ pub(crate) fn inv_txfm_add_adst_identity_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::Adst, TxType4::Identity,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::Adst,
+        TxType4::Identity,
     );
 }
 
@@ -635,8 +719,15 @@ pub(crate) fn inv_txfm_add_identity_adst_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::Identity, TxType4::Adst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::Identity,
+        TxType4::Adst,
     );
 }
 
@@ -653,8 +744,15 @@ pub(crate) fn inv_txfm_add_flipadst_identity_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::FlipAdst, TxType4::Identity,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::FlipAdst,
+        TxType4::Identity,
     );
 }
 
@@ -671,8 +769,15 @@ pub(crate) fn inv_txfm_add_identity_flipadst_4x4_8bpc_neon_inner(
     bitdepth_max: i32,
 ) {
     inv_txfm_add_4x4_8bpc_neon(
-        token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-        TxType4::Identity, TxType4::FlipAdst,
+        token,
+        dst,
+        dst_base,
+        dst_stride,
+        coeff,
+        eob,
+        bitdepth_max,
+        TxType4::Identity,
+        TxType4::FlipAdst,
     );
 }
 
@@ -925,7 +1030,13 @@ mod tests {
             let mut dst_neon = [128u8; 64];
 
             inv_txfm_add_dct_dct_4x4_8bpc_neon_inner(
-                token, &mut dst_neon, 0, stride, &mut coeff_neon, 0, 255,
+                token,
+                &mut dst_neon,
+                0,
+                stride,
+                &mut coeff_neon,
+                0,
+                255,
             );
 
             // DC-only should produce uniform output (all pixels same value)
@@ -934,7 +1045,8 @@ mod tests {
                 let off = row * stride as usize;
                 for col in 0..4 {
                     assert_eq!(
-                        dst_neon[off + col], expected_val,
+                        dst_neon[off + col],
+                        expected_val,
                         "DC-only should produce uniform output for dc={dc}, \
                          pixel ({col},{row}): got {}, expected {expected_val}",
                         dst_neon[off + col],

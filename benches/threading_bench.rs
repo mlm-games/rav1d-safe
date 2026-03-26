@@ -188,7 +188,12 @@ mod decode_threading {
             .counter(divan::counter::BytesCount::new(tv.obu.len()))
             .with_inputs(|| cfg)
             .bench_values(|cfg| {
-                assert_eq!(decode_obu_with(&tv.obu, cfg), 1, "decode failed for {}", cfg.label);
+                assert_eq!(
+                    decode_obu_with(&tv.obu, cfg),
+                    1,
+                    "decode failed for {}",
+                    cfg.label
+                );
             });
     }
 }

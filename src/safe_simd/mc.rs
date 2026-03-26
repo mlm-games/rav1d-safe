@@ -11383,7 +11383,6 @@ pub(crate) fn avg_dispatch_inner<BD: BitDepth>(
     let Some(token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
-    use zerocopy::IntoBytes;
     let bd_c = bd.into_c();
     match BD::BPC {
         BPC::BPC8 => {
@@ -11457,7 +11456,9 @@ pub fn w_avg_dispatch<BD: BitDepth>(
     let dst_bytes = dst_guard.as_mut_bytes();
     let dst_offset = dst_base * pixel_size;
     let dst_stride = dst.stride();
-    w_avg_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, weight, bd)
+    w_avg_dispatch_inner::<BD>(
+        dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, weight, bd,
+    )
 }
 
 /// Inner w_avg dispatch — operates on pre-acquired byte slice.
@@ -11478,7 +11479,6 @@ pub(crate) fn w_avg_dispatch_inner<BD: BitDepth>(
     let Some(token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
-    use zerocopy::IntoBytes;
     let bd_c = bd.into_c();
     match BD::BPC {
         BPC::BPC8 => {
@@ -11556,7 +11556,9 @@ pub fn mask_dispatch<BD: BitDepth>(
     let dst_bytes = dst_guard.as_mut_bytes();
     let dst_offset = dst_base * pixel_size;
     let dst_stride = dst.stride();
-    mask_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, mask, bd)
+    mask_dispatch_inner::<BD>(
+        dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, mask, bd,
+    )
 }
 
 /// Inner mask dispatch — operates on pre-acquired byte slice.

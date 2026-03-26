@@ -26,14 +26,11 @@ use archmage::{Arm64, arcane, rite};
 #[cfg(target_arch = "aarch64")]
 use safe_unaligned_simd::aarch64 as safe_simd;
 
-use super::itx_arm_neon_common::{
-    IADST4_COEFFS, IDCT_COEFFS, IDENTITY_SCALE, transpose_4x4h,
-};
 use super::itx_arm_neon_4x4::{iadst_4h, idct_4h, identity_4h};
 use super::itx_arm_neon_8x8::{
-    IADST8_COEFFS_V0, IADST8_COEFFS_V1,
-    iadst_8_q, idct_4_q, idct_8_q, identity_8_q,
+    IADST8_COEFFS_V0, IADST8_COEFFS_V1, iadst_8_q, idct_4_q, idct_8_q, identity_8_q,
 };
+use super::itx_arm_neon_common::{IADST4_COEFFS, IDCT_COEFFS, IDENTITY_SCALE, transpose_4x4h};
 
 // ============================================================================
 // Scale input (itx.S lines 143-154)
@@ -184,9 +181,7 @@ fn iadst_4_q(
     in3: int16x8_t,
 ) -> (int16x8_t, int16x8_t, int16x8_t, int16x8_t) {
     // Load IADST4 coefficients
-    let coeffs = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IADST4_COEFFS[..]).unwrap(),
-    );
+    let coeffs = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IADST4_COEFFS[..]).unwrap());
 
     // v3 = ssubl(in0, in2) — widen to i32
     // Need both lo and hi halves for .8h processing
@@ -423,14 +418,10 @@ pub(crate) fn idct_8_4h(
     int16x4_t,
 ) {
     // Load IDCT coefficients
-    let coeffs = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IDCT_COEFFS[0..8]).unwrap(),
-    );
+    let coeffs = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IDCT_COEFFS[0..8]).unwrap());
 
     // 4-point DCT on even inputs (r0, r2, r4, r6)
-    let idct4_coeffs = safe_simd::vld1_s16(
-        <&[i16; 4]>::try_from(&IDCT_COEFFS[0..4]).unwrap(),
-    );
+    let idct4_coeffs = safe_simd::vld1_s16(<&[i16; 4]>::try_from(&IDCT_COEFFS[0..4]).unwrap());
 
     // idct_4 on r0, r2, r4, r6 (even-indexed)
     let v6 = vmull_lane_s16::<3>(r2, idct4_coeffs);
@@ -518,12 +509,8 @@ fn iadst_8_4h(
     int16x4_t,
     int16x4_t,
 ) {
-    let c0 = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IADST8_COEFFS_V0[..]).unwrap(),
-    );
-    let c1 = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IADST8_COEFFS_V1[..]).unwrap(),
-    );
+    let c0 = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IADST8_COEFFS_V0[..]).unwrap());
+    let c1 = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IADST8_COEFFS_V1[..]).unwrap());
 
     // Stage 1: 4 rotation pairs
     let t0a = vqrshrn_n_s32::<12>(smull_smlal_4h(in7, in0, c0, 0, 1));
@@ -704,8 +691,7 @@ pub(crate) fn apply_tx8_q(
         RectTxType8::Dct => idct_8_q(v0, v1, v2, v3, v4, v5, v6, v7),
         RectTxType8::Adst => iadst_8_q(v0, v1, v2, v3, v4, v5, v6, v7),
         RectTxType8::FlipAdst => {
-            let (o0, o1, o2, o3, o4, o5, o6, o7) =
-                iadst_8_q(v0, v1, v2, v3, v4, v5, v6, v7);
+            let (o0, o1, o2, o3, o4, o5, o6, o7) = iadst_8_q(v0, v1, v2, v3, v4, v5, v6, v7);
             (o7, o6, o5, o4, o3, o2, o1, o0)
         }
         RectTxType8::Identity => identity_8_q(v0, v1, v2, v3, v4, v5, v6, v7),
@@ -739,8 +725,7 @@ pub(crate) fn apply_tx8_4h(
         RectTxType8::Dct => idct_8_4h(v0, v1, v2, v3, v4, v5, v6, v7),
         RectTxType8::Adst => iadst_8_4h(v0, v1, v2, v3, v4, v5, v6, v7),
         RectTxType8::FlipAdst => {
-            let (o0, o1, o2, o3, o4, o5, o6, o7) =
-                iadst_8_4h(v0, v1, v2, v3, v4, v5, v6, v7);
+            let (o0, o1, o2, o3, o4, o5, o6, o7) = iadst_8_4h(v0, v1, v2, v3, v4, v5, v6, v7);
             (o7, o6, o5, o4, o3, o2, o1, o0)
         }
         RectTxType8::Identity => identity_8_4h(v0, v1, v2, v3, v4, v5, v6, v7),
@@ -860,12 +845,7 @@ fn add_to_dst_4x8_8bpc(
 /// shift=0 for 8x4, so no intermediate srshr.
 #[cfg(target_arch = "aarch64")]
 #[rite(neon)]
-fn dc_only_8x4_8bpc(
-    dst: &mut [u8],
-    dst_base: usize,
-    dst_stride: isize,
-    coeff: &mut [i16],
-) {
+fn dc_only_8x4_8bpc(dst: &mut [u8], dst_base: usize, dst_stride: isize, coeff: &mut [i16]) {
     let dc = coeff[0];
     coeff[0] = 0;
 
@@ -901,12 +881,7 @@ fn dc_only_8x4_8bpc(
 /// shift=0 for 4x8, so no intermediate srshr.
 #[cfg(target_arch = "aarch64")]
 #[rite(neon)]
-fn dc_only_4x8_8bpc(
-    dst: &mut [u8],
-    dst_base: usize,
-    dst_stride: isize,
-    coeff: &mut [i16],
-) {
+fn dc_only_4x8_8bpc(dst: &mut [u8], dst_base: usize, dst_stride: isize, coeff: &mut [i16]) {
     let dc = coeff[0];
     coeff[0] = 0;
 
@@ -1106,8 +1081,7 @@ pub(crate) fn inv_txfm_add_4x8_8bpc_neon(
     let r7 = vget_high_s16(v19);
 
     // Step 6: Column transform (8-point on .4h width)
-    let (r0, r1, r2, r3, r4, r5, r6, r7) =
-        apply_tx8_4h(col_tx, r0, r1, r2, r3, r4, r5, r6, r7);
+    let (r0, r1, r2, r3, r4, r5, r6, r7) = apply_tx8_4h(col_tx, r0, r1, r2, r3, r4, r5, r6, r7);
 
     // Step 7: Add to 4x8 destination with >>4 shift
     add_to_dst_4x8_8bpc(dst, dst_base, dst_stride, r0, r1, r2, r3, r4, r5, r6, r7);
@@ -1134,29 +1108,100 @@ macro_rules! def_rect_entry_8x4 {
             bitdepth_max: i32,
         ) {
             inv_txfm_add_8x4_8bpc_neon(
-                token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-                $row, $col,
+                token,
+                dst,
+                dst_base,
+                dst_stride,
+                coeff,
+                eob,
+                bitdepth_max,
+                $row,
+                $col,
             );
         }
     };
 }
 
-def_rect_entry_8x4!(inv_txfm_add_dct_dct_8x4_8bpc_neon_inner, RectTxType8::Dct, RectTxType4::Dct);
-def_rect_entry_8x4!(inv_txfm_add_identity_identity_8x4_8bpc_neon_inner, RectTxType8::Identity, RectTxType4::Identity);
-def_rect_entry_8x4!(inv_txfm_add_dct_adst_8x4_8bpc_neon_inner, RectTxType8::Dct, RectTxType4::Adst);
-def_rect_entry_8x4!(inv_txfm_add_dct_flipadst_8x4_8bpc_neon_inner, RectTxType8::Dct, RectTxType4::FlipAdst);
-def_rect_entry_8x4!(inv_txfm_add_dct_identity_8x4_8bpc_neon_inner, RectTxType8::Dct, RectTxType4::Identity);
-def_rect_entry_8x4!(inv_txfm_add_adst_dct_8x4_8bpc_neon_inner, RectTxType8::Adst, RectTxType4::Dct);
-def_rect_entry_8x4!(inv_txfm_add_adst_adst_8x4_8bpc_neon_inner, RectTxType8::Adst, RectTxType4::Adst);
-def_rect_entry_8x4!(inv_txfm_add_adst_flipadst_8x4_8bpc_neon_inner, RectTxType8::Adst, RectTxType4::FlipAdst);
-def_rect_entry_8x4!(inv_txfm_add_flipadst_dct_8x4_8bpc_neon_inner, RectTxType8::FlipAdst, RectTxType4::Dct);
-def_rect_entry_8x4!(inv_txfm_add_flipadst_adst_8x4_8bpc_neon_inner, RectTxType8::FlipAdst, RectTxType4::Adst);
-def_rect_entry_8x4!(inv_txfm_add_flipadst_flipadst_8x4_8bpc_neon_inner, RectTxType8::FlipAdst, RectTxType4::FlipAdst);
-def_rect_entry_8x4!(inv_txfm_add_identity_dct_8x4_8bpc_neon_inner, RectTxType8::Identity, RectTxType4::Dct);
-def_rect_entry_8x4!(inv_txfm_add_adst_identity_8x4_8bpc_neon_inner, RectTxType8::Adst, RectTxType4::Identity);
-def_rect_entry_8x4!(inv_txfm_add_flipadst_identity_8x4_8bpc_neon_inner, RectTxType8::FlipAdst, RectTxType4::Identity);
-def_rect_entry_8x4!(inv_txfm_add_identity_adst_8x4_8bpc_neon_inner, RectTxType8::Identity, RectTxType4::Adst);
-def_rect_entry_8x4!(inv_txfm_add_identity_flipadst_8x4_8bpc_neon_inner, RectTxType8::Identity, RectTxType4::FlipAdst);
+def_rect_entry_8x4!(
+    inv_txfm_add_dct_dct_8x4_8bpc_neon_inner,
+    RectTxType8::Dct,
+    RectTxType4::Dct
+);
+def_rect_entry_8x4!(
+    inv_txfm_add_identity_identity_8x4_8bpc_neon_inner,
+    RectTxType8::Identity,
+    RectTxType4::Identity
+);
+def_rect_entry_8x4!(
+    inv_txfm_add_dct_adst_8x4_8bpc_neon_inner,
+    RectTxType8::Dct,
+    RectTxType4::Adst
+);
+def_rect_entry_8x4!(
+    inv_txfm_add_dct_flipadst_8x4_8bpc_neon_inner,
+    RectTxType8::Dct,
+    RectTxType4::FlipAdst
+);
+def_rect_entry_8x4!(
+    inv_txfm_add_dct_identity_8x4_8bpc_neon_inner,
+    RectTxType8::Dct,
+    RectTxType4::Identity
+);
+def_rect_entry_8x4!(
+    inv_txfm_add_adst_dct_8x4_8bpc_neon_inner,
+    RectTxType8::Adst,
+    RectTxType4::Dct
+);
+def_rect_entry_8x4!(
+    inv_txfm_add_adst_adst_8x4_8bpc_neon_inner,
+    RectTxType8::Adst,
+    RectTxType4::Adst
+);
+def_rect_entry_8x4!(
+    inv_txfm_add_adst_flipadst_8x4_8bpc_neon_inner,
+    RectTxType8::Adst,
+    RectTxType4::FlipAdst
+);
+def_rect_entry_8x4!(
+    inv_txfm_add_flipadst_dct_8x4_8bpc_neon_inner,
+    RectTxType8::FlipAdst,
+    RectTxType4::Dct
+);
+def_rect_entry_8x4!(
+    inv_txfm_add_flipadst_adst_8x4_8bpc_neon_inner,
+    RectTxType8::FlipAdst,
+    RectTxType4::Adst
+);
+def_rect_entry_8x4!(
+    inv_txfm_add_flipadst_flipadst_8x4_8bpc_neon_inner,
+    RectTxType8::FlipAdst,
+    RectTxType4::FlipAdst
+);
+def_rect_entry_8x4!(
+    inv_txfm_add_identity_dct_8x4_8bpc_neon_inner,
+    RectTxType8::Identity,
+    RectTxType4::Dct
+);
+def_rect_entry_8x4!(
+    inv_txfm_add_adst_identity_8x4_8bpc_neon_inner,
+    RectTxType8::Adst,
+    RectTxType4::Identity
+);
+def_rect_entry_8x4!(
+    inv_txfm_add_flipadst_identity_8x4_8bpc_neon_inner,
+    RectTxType8::FlipAdst,
+    RectTxType4::Identity
+);
+def_rect_entry_8x4!(
+    inv_txfm_add_identity_adst_8x4_8bpc_neon_inner,
+    RectTxType8::Identity,
+    RectTxType4::Adst
+);
+def_rect_entry_8x4!(
+    inv_txfm_add_identity_flipadst_8x4_8bpc_neon_inner,
+    RectTxType8::Identity,
+    RectTxType4::FlipAdst
+);
 
 // ============================================================================
 // Public entry points for 4x8 transforms (16 combinations)
@@ -1176,26 +1221,97 @@ macro_rules! def_rect_entry_4x8 {
             bitdepth_max: i32,
         ) {
             inv_txfm_add_4x8_8bpc_neon(
-                token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-                $row, $col,
+                token,
+                dst,
+                dst_base,
+                dst_stride,
+                coeff,
+                eob,
+                bitdepth_max,
+                $row,
+                $col,
             );
         }
     };
 }
 
-def_rect_entry_4x8!(inv_txfm_add_dct_dct_4x8_8bpc_neon_inner, RectTxType4::Dct, RectTxType8::Dct);
-def_rect_entry_4x8!(inv_txfm_add_identity_identity_4x8_8bpc_neon_inner, RectTxType4::Identity, RectTxType8::Identity);
-def_rect_entry_4x8!(inv_txfm_add_dct_adst_4x8_8bpc_neon_inner, RectTxType4::Dct, RectTxType8::Adst);
-def_rect_entry_4x8!(inv_txfm_add_dct_flipadst_4x8_8bpc_neon_inner, RectTxType4::Dct, RectTxType8::FlipAdst);
-def_rect_entry_4x8!(inv_txfm_add_dct_identity_4x8_8bpc_neon_inner, RectTxType4::Dct, RectTxType8::Identity);
-def_rect_entry_4x8!(inv_txfm_add_adst_dct_4x8_8bpc_neon_inner, RectTxType4::Adst, RectTxType8::Dct);
-def_rect_entry_4x8!(inv_txfm_add_adst_adst_4x8_8bpc_neon_inner, RectTxType4::Adst, RectTxType8::Adst);
-def_rect_entry_4x8!(inv_txfm_add_adst_flipadst_4x8_8bpc_neon_inner, RectTxType4::Adst, RectTxType8::FlipAdst);
-def_rect_entry_4x8!(inv_txfm_add_flipadst_dct_4x8_8bpc_neon_inner, RectTxType4::FlipAdst, RectTxType8::Dct);
-def_rect_entry_4x8!(inv_txfm_add_flipadst_adst_4x8_8bpc_neon_inner, RectTxType4::FlipAdst, RectTxType8::Adst);
-def_rect_entry_4x8!(inv_txfm_add_flipadst_flipadst_4x8_8bpc_neon_inner, RectTxType4::FlipAdst, RectTxType8::FlipAdst);
-def_rect_entry_4x8!(inv_txfm_add_identity_dct_4x8_8bpc_neon_inner, RectTxType4::Identity, RectTxType8::Dct);
-def_rect_entry_4x8!(inv_txfm_add_adst_identity_4x8_8bpc_neon_inner, RectTxType4::Adst, RectTxType8::Identity);
-def_rect_entry_4x8!(inv_txfm_add_flipadst_identity_4x8_8bpc_neon_inner, RectTxType4::FlipAdst, RectTxType8::Identity);
-def_rect_entry_4x8!(inv_txfm_add_identity_adst_4x8_8bpc_neon_inner, RectTxType4::Identity, RectTxType8::Adst);
-def_rect_entry_4x8!(inv_txfm_add_identity_flipadst_4x8_8bpc_neon_inner, RectTxType4::Identity, RectTxType8::FlipAdst);
+def_rect_entry_4x8!(
+    inv_txfm_add_dct_dct_4x8_8bpc_neon_inner,
+    RectTxType4::Dct,
+    RectTxType8::Dct
+);
+def_rect_entry_4x8!(
+    inv_txfm_add_identity_identity_4x8_8bpc_neon_inner,
+    RectTxType4::Identity,
+    RectTxType8::Identity
+);
+def_rect_entry_4x8!(
+    inv_txfm_add_dct_adst_4x8_8bpc_neon_inner,
+    RectTxType4::Dct,
+    RectTxType8::Adst
+);
+def_rect_entry_4x8!(
+    inv_txfm_add_dct_flipadst_4x8_8bpc_neon_inner,
+    RectTxType4::Dct,
+    RectTxType8::FlipAdst
+);
+def_rect_entry_4x8!(
+    inv_txfm_add_dct_identity_4x8_8bpc_neon_inner,
+    RectTxType4::Dct,
+    RectTxType8::Identity
+);
+def_rect_entry_4x8!(
+    inv_txfm_add_adst_dct_4x8_8bpc_neon_inner,
+    RectTxType4::Adst,
+    RectTxType8::Dct
+);
+def_rect_entry_4x8!(
+    inv_txfm_add_adst_adst_4x8_8bpc_neon_inner,
+    RectTxType4::Adst,
+    RectTxType8::Adst
+);
+def_rect_entry_4x8!(
+    inv_txfm_add_adst_flipadst_4x8_8bpc_neon_inner,
+    RectTxType4::Adst,
+    RectTxType8::FlipAdst
+);
+def_rect_entry_4x8!(
+    inv_txfm_add_flipadst_dct_4x8_8bpc_neon_inner,
+    RectTxType4::FlipAdst,
+    RectTxType8::Dct
+);
+def_rect_entry_4x8!(
+    inv_txfm_add_flipadst_adst_4x8_8bpc_neon_inner,
+    RectTxType4::FlipAdst,
+    RectTxType8::Adst
+);
+def_rect_entry_4x8!(
+    inv_txfm_add_flipadst_flipadst_4x8_8bpc_neon_inner,
+    RectTxType4::FlipAdst,
+    RectTxType8::FlipAdst
+);
+def_rect_entry_4x8!(
+    inv_txfm_add_identity_dct_4x8_8bpc_neon_inner,
+    RectTxType4::Identity,
+    RectTxType8::Dct
+);
+def_rect_entry_4x8!(
+    inv_txfm_add_adst_identity_4x8_8bpc_neon_inner,
+    RectTxType4::Adst,
+    RectTxType8::Identity
+);
+def_rect_entry_4x8!(
+    inv_txfm_add_flipadst_identity_4x8_8bpc_neon_inner,
+    RectTxType4::FlipAdst,
+    RectTxType8::Identity
+);
+def_rect_entry_4x8!(
+    inv_txfm_add_identity_adst_4x8_8bpc_neon_inner,
+    RectTxType4::Identity,
+    RectTxType8::Adst
+);
+def_rect_entry_4x8!(
+    inv_txfm_add_identity_flipadst_4x8_8bpc_neon_inner,
+    RectTxType4::Identity,
+    RectTxType8::FlipAdst
+);

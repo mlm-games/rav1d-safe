@@ -100,7 +100,11 @@ impl From<Rav1dError> for Error {
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// Decoder configuration settings
+///
+/// Use `Settings::default()` or struct update syntax (`Settings { threads: 4, ..Default::default() }`)
+/// to construct. New fields may be added in minor releases.
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub struct Settings {
     /// Number of threads for decoding
     ///

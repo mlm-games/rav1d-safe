@@ -103,7 +103,10 @@ fn test_frame_threading_inter() {
 
     // Tile threading with 4 threads (max_frame_delay=1 prevents frame-level parallelism)
     let (decoded, total) = decode_with_threads(path, 4, 1);
-    assert!(decoded > 0, "Should decode at least some frames with tile threading");
+    assert!(
+        decoded > 0,
+        "Should decode at least some frames with tile threading"
+    );
     eprintln!("inter tile: {}/{}", decoded, total);
 }
 
@@ -118,17 +121,17 @@ fn test_true_frame_threading() {
 
     let (decoded, total) = decode_with_threads(path, 4, 0);
     eprintln!("frame threading inter: {}/{}", decoded, total);
-    assert!(decoded > 0, "Should decode at least some frames with frame threading");
+    assert!(
+        decoded > 0,
+        "Should decode at least some frames with frame threading"
+    );
 }
 
 /// Stress test: many threads, many different test vectors.
 #[test]
 #[ignore]
 fn test_frame_threading_stress() {
-    let base = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/test-vectors/dav1d-test-data/"
-    );
+    let base = concat!(env!("CARGO_MANIFEST_DIR"), "/test-vectors/dav1d-test-data/");
 
     let vectors = [
         "8-bit/intra/av1-1-b8-02-allintra.ivf",
@@ -141,7 +144,12 @@ fn test_frame_threading_stress() {
             let path = format!("{}{}", base, vec);
             eprintln!("\n=== threads={}, vector={} ===", threads, vec);
             let (decoded, _total) = decode_with_threads(&path, threads, 0);
-            assert!(decoded > 0, "Failed with threads={}, vector={}", threads, vec);
+            assert!(
+                decoded > 0,
+                "Failed with threads={}, vector={}",
+                threads,
+                vec
+            );
         }
     }
 }
@@ -176,7 +184,12 @@ fn test_single_obu_frame_threading() {
         let mut decoder = Decoder::with_settings(settings).expect("Failed to create decoder");
 
         match decoder.decode(&obu) {
-            Ok(Some(f)) => eprintln!("  Decoded: {}x{} @ {}bpc", f.width(), f.height(), f.bit_depth()),
+            Ok(Some(f)) => eprintln!(
+                "  Decoded: {}x{} @ {}bpc",
+                f.width(),
+                f.height(),
+                f.bit_depth()
+            ),
             Ok(None) => {
                 eprintln!("  Buffered — flushing...");
                 match decoder.flush() {
@@ -219,7 +232,12 @@ fn test_single_obu_tile_threading() {
 
         match decoder.decode(&obu) {
             Ok(Some(f)) => {
-                eprintln!("  Decoded: {}x{} @ {}bpc", f.width(), f.height(), f.bit_depth());
+                eprintln!(
+                    "  Decoded: {}x{} @ {}bpc",
+                    f.width(),
+                    f.height(),
+                    f.bit_depth()
+                );
                 assert!(f.width() > 0);
             }
             Ok(None) => {

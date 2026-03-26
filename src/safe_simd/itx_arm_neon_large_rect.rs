@@ -32,18 +32,18 @@
 use core::arch::aarch64::*;
 
 #[cfg(target_arch = "aarch64")]
-use archmage::{arcane, rite, Arm64};
+use archmage::{Arm64, arcane, rite};
 
 #[cfg(target_arch = "aarch64")]
 use safe_unaligned_simd::aarch64 as safe_simd;
 
+use super::itx_arm_neon_8x8::idct_8_q;
 use super::itx_arm_neon_8x8::transpose_8x8h;
 use super::itx_arm_neon_16x16::idct_16_q;
 use super::itx_arm_neon_32::{
-    V16, horz_dct_32x8, idct32_odd_q, load_v16, rev128_s16, store_v16,
-    vert_dct_add_8x32_8bpc, vert_dct_add_8x32_16bpc,
+    V16, horz_dct_32x8, idct32_odd_q, load_v16, rev128_s16, store_v16, vert_dct_add_8x32_8bpc,
+    vert_dct_add_8x32_16bpc,
 };
-use super::itx_arm_neon_8x8::idct_8_q;
 
 // ============================================================================
 // DC-only fast paths
@@ -92,9 +92,7 @@ fn dc_only_large_rect_8bpc(
             let off = row_off + half * 8;
             let dst_bytes: [u8; 8] = dst[off..off + 8].try_into().unwrap();
             let dst_u8 = safe_simd::vld1_u8(&dst_bytes);
-            let sum = vreinterpretq_s16_u16(
-                vaddw_u8(vreinterpretq_u16_s16(v), dst_u8),
-            );
+            let sum = vreinterpretq_s16_u16(vaddw_u8(vreinterpretq_u16_s16(v), dst_u8));
             let result = vqmovun_s16(sum);
             let mut out = [0u8; 8];
             safe_simd::vst1_u8(&mut out, result);
@@ -190,12 +188,7 @@ fn scale_input_q_16(v: &mut [int16x8_t; 16]) {
 /// Add 8 rows of 8 pixels to destination (8bpc) with shift>>4.
 #[cfg(target_arch = "aarch64")]
 #[rite(neon)]
-fn add_to_dst_8x8_8bpc(
-    dst: &mut [u8],
-    dst_base: usize,
-    stride: isize,
-    v: [int16x8_t; 8],
-) {
+fn add_to_dst_8x8_8bpc(dst: &mut [u8], dst_base: usize, stride: isize, v: [int16x8_t; 8]) {
     for (i, &row) in v.iter().enumerate() {
         let row_off = dst_base.wrapping_add_signed(i as isize * stride);
         let shifted = vrshrq_n_s16::<4>(row);
@@ -212,12 +205,7 @@ fn add_to_dst_8x8_8bpc(
 /// Add 16 rows of 8 pixels to destination (8bpc) with shift>>4.
 #[cfg(target_arch = "aarch64")]
 #[rite(neon)]
-fn add_to_dst_8x16_8bpc(
-    dst: &mut [u8],
-    dst_base: usize,
-    stride: isize,
-    v: [int16x8_t; 16],
-) {
+fn add_to_dst_8x16_8bpc(dst: &mut [u8], dst_base: usize, stride: isize, v: [int16x8_t; 16]) {
     for (i, &row) in v.iter().enumerate() {
         let row_off = dst_base.wrapping_add_signed(i as isize * stride);
         let shifted = vrshrq_n_s16::<4>(row);
@@ -265,8 +253,7 @@ fn horz_dct8_for_8x32(
     scale_input_q_8(&mut v);
 
     // Apply 8-point DCT
-    let (r0, r1, r2, r3, r4, r5, r6, r7) =
-        idct_8_q(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
+    let (r0, r1, r2, r3, r4, r5, r6, r7) = idct_8_q(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
 
     // srshr>>1 (rectangular normalization)
     let r0 = vrshrq_n_s16::<1>(r0);
@@ -279,8 +266,7 @@ fn horz_dct8_for_8x32(
     let r7 = vrshrq_n_s16::<1>(r7);
 
     // Transpose 8x8
-    let (t0, t1, t2, t3, t4, t5, t6, t7) =
-        transpose_8x8h(r0, r1, r2, r3, r4, r5, r6, r7);
+    let (t0, t1, t2, t3, t4, t5, t6, t7) = transpose_8x8h(r0, r1, r2, r3, r4, r5, r6, r7);
 
     // Store to scratch
     let rows = [t0, t1, t2, t3, t4, t5, t6, t7];
@@ -329,8 +315,8 @@ fn horz_dct16_for_16x32(
 
     // Transpose first 8x8 block (cols 0-7)
     let (t0, t1, t2, t3, t4, t5, t6, t7) = transpose_8x8h(
-        shifted[0], shifted[1], shifted[2], shifted[3],
-        shifted[4], shifted[5], shifted[6], shifted[7],
+        shifted[0], shifted[1], shifted[2], shifted[3], shifted[4], shifted[5], shifted[6],
+        shifted[7],
     );
     let first = [t0, t1, t2, t3, t4, t5, t6, t7];
     for (i, &row) in first.iter().enumerate() {
@@ -339,8 +325,14 @@ fn horz_dct16_for_16x32(
 
     // Transpose second 8x8 block (cols 8-15)
     let (t0, t1, t2, t3, t4, t5, t6, t7) = transpose_8x8h(
-        shifted[8], shifted[9], shifted[10], shifted[11],
-        shifted[12], shifted[13], shifted[14], shifted[15],
+        shifted[8],
+        shifted[9],
+        shifted[10],
+        shifted[11],
+        shifted[12],
+        shifted[13],
+        shifted[14],
+        shifted[15],
     );
     let second = [t0, t1, t2, t3, t4, t5, t6, t7];
     for (i, &row) in second.iter().enumerate() {
@@ -550,12 +542,7 @@ pub(crate) fn inv_txfm_add_dct_dct_8x32_8bpc_neon_inner(
 
     // Column transform: single group of 8 columns
     vert_dct_add_8x32_8bpc(
-        dst,
-        dst_base,
-        dst_stride,
-        &scratch,
-        0,
-        8, // scratch_stride = 8
+        dst, dst_base, dst_stride, &scratch, 0, 8, // scratch_stride = 8
     );
 }
 
@@ -615,11 +602,7 @@ pub(crate) fn inv_txfm_add_dct_dct_8x32_16bpc_neon_inner(
     }
 
     // Column transform: 32-point DCT on NEON
-    vert_dct_add_8x32_16bpc(
-        dst, dst_base, dst_stride,
-        &scratch, 0, 8,
-        bitdepth_max,
-    );
+    vert_dct_add_8x32_16bpc(dst, dst_base, dst_stride, &scratch, 0, 8, bitdepth_max);
 }
 
 // ============================================================================
@@ -653,13 +636,13 @@ pub(crate) fn inv_txfm_add_dct_dct_32x8_8bpc_neon_inner(
     // coeff layout is column-major: coeff[row + col * 8]
     horz_dct_32x8(
         coeff,
-        0,     // coeff_base
-        8,     // coeff_stride = height = 8
+        0, // coeff_base
+        8, // coeff_stride = height = 8
         &mut scratch,
-        0,     // scratch_base
-        1,     // shift=1 for rect2. Actually horz_dct_32x8 uses shift param.
-              // Let's check: it uses vrshrq_n_s16::<2> hardcoded.
-              // For 32x8 we need shift=1 not shift=2.
+        0, // scratch_base
+        1, // shift=1 for rect2. Actually horz_dct_32x8 uses shift param.
+           // Let's check: it uses vrshrq_n_s16::<2> hardcoded.
+           // For 32x8 we need shift=1 not shift=2.
     );
 
     // Wait - horz_dct_32x8 hardcodes vrshrq_n_s16::<2> (shift=2 for 32x32).
@@ -741,17 +724,35 @@ fn horz_32x8_rect(
 
     // Transpose even results
     let (et0, et1, et2, et3, et4, et5, et6, et7) = transpose_8x8h(
-        even_out[0], even_out[1], even_out[2], even_out[3],
-        even_out[4], even_out[5], even_out[6], even_out[7],
+        even_out[0],
+        even_out[1],
+        even_out[2],
+        even_out[3],
+        even_out[4],
+        even_out[5],
+        even_out[6],
+        even_out[7],
     );
     let (et8, et9, et10, et11, et12, et13, et14, et15) = transpose_8x8h(
-        even_out[8], even_out[9], even_out[10], even_out[11],
-        even_out[12], even_out[13], even_out[14], even_out[15],
+        even_out[8],
+        even_out[9],
+        even_out[10],
+        even_out[11],
+        even_out[12],
+        even_out[13],
+        even_out[14],
+        even_out[15],
     );
 
     let even_t = [
-        [et0, et8], [et1, et9], [et2, et10], [et3, et11],
-        [et4, et12], [et5, et13], [et6, et14], [et7, et15],
+        [et0, et8],
+        [et1, et9],
+        [et2, et10],
+        [et3, et11],
+        [et4, et12],
+        [et5, et13],
+        [et6, et14],
+        [et7, et15],
     ];
 
     // Phase 2: Load odd-indexed columns
@@ -768,12 +769,18 @@ fn horz_32x8_rect(
 
     // Transpose odd in reverse order
     let (ot15, ot14, ot13, ot12, ot11, ot10, ot9, ot8) = transpose_8x8h(
-        odd_out[15], odd_out[14], odd_out[13], odd_out[12],
-        odd_out[11], odd_out[10], odd_out[9], odd_out[8],
+        odd_out[15],
+        odd_out[14],
+        odd_out[13],
+        odd_out[12],
+        odd_out[11],
+        odd_out[10],
+        odd_out[9],
+        odd_out[8],
     );
     let (ot7, ot6, ot5, ot4, ot3, ot2, ot1, ot0) = transpose_8x8h(
-        odd_out[7], odd_out[6], odd_out[5], odd_out[4],
-        odd_out[3], odd_out[2], odd_out[1], odd_out[0],
+        odd_out[7], odd_out[6], odd_out[5], odd_out[4], odd_out[3], odd_out[2], odd_out[1],
+        odd_out[0],
     );
 
     let odd_t_hi = [ot15, ot14, ot13, ot12, ot11, ot10, ot9, ot8];
@@ -847,8 +854,12 @@ pub(crate) fn inv_txfm_add_dct_dct_32x8_16bpc_neon_inner(
     for group in 0..4 {
         let col_start = group * 8;
         vert_dct8_add_8x8_16bpc(
-            dst, dst_base + col_start, dst_stride,
-            &scratch, col_start, 32,
+            dst,
+            dst_base + col_start,
+            dst_stride,
+            &scratch,
+            col_start,
+            32,
             bitdepth_max,
         );
     }
@@ -967,8 +978,12 @@ pub(crate) fn inv_txfm_add_dct_dct_16x32_16bpc_neon_inner(
     for group in 0..2 {
         let col_start = group * 8;
         vert_dct_add_8x32_16bpc(
-            dst, dst_base + col_start, dst_stride,
-            &scratch, col_start, 16,
+            dst,
+            dst_base + col_start,
+            dst_stride,
+            &scratch,
+            col_start,
+            16,
             bitdepth_max,
         );
     }
@@ -1092,8 +1107,12 @@ pub(crate) fn inv_txfm_add_dct_dct_32x16_16bpc_neon_inner(
     for group in 0..4 {
         let col_start = group * 8;
         vert_dct16_add_8x16_16bpc(
-            dst, dst_base + col_start, dst_stride,
-            &scratch, col_start, 32,
+            dst,
+            dst_base + col_start,
+            dst_stride,
+            &scratch,
+            col_start,
+            32,
             bitdepth_max,
         );
     }
@@ -1150,9 +1169,7 @@ pub(crate) fn inv_txfm_add_identity_identity_8x32_8bpc_neon_inner(
 
             let dst_bytes: [u8; 8] = dst[row_off..row_off + 8].try_into().unwrap();
             let dst_u8 = safe_simd::vld1_u8(&dst_bytes);
-            let sum = vreinterpretq_s16_u16(
-                vaddw_u8(vreinterpretq_u16_s16(shifted), dst_u8),
-            );
+            let sum = vreinterpretq_s16_u16(vaddw_u8(vreinterpretq_u16_s16(shifted), dst_u8));
             let result = vqmovun_s16(sum);
             let mut out = [0u8; 8];
             safe_simd::vst1_u8(&mut out, result);
@@ -1197,9 +1214,7 @@ pub(crate) fn inv_txfm_add_identity_identity_32x8_8bpc_neon_inner(
 
             let dst_bytes: [u8; 8] = dst[row_off..row_off + 8].try_into().unwrap();
             let dst_u8 = safe_simd::vld1_u8(&dst_bytes);
-            let sum = vreinterpretq_s16_u16(
-                vaddw_u8(vreinterpretq_u16_s16(shifted), dst_u8),
-            );
+            let sum = vreinterpretq_s16_u16(vaddw_u8(vreinterpretq_u16_s16(shifted), dst_u8));
             let result = vqmovun_s16(sum);
             let mut out = [0u8; 8];
             safe_simd::vst1_u8(&mut out, result);
@@ -1251,15 +1266,12 @@ pub(crate) fn inv_txfm_add_identity_identity_16x32_8bpc_neon_inner(
             let rows = [r0, r1, r2, r3, r4, r5, r6, r7];
             for r in 0..8 {
                 let shifted = vrshrq_n_s16::<2>(rows[r]);
-                let row_off = dst_base
-                    .wrapping_add_signed((row_start + r) as isize * dst_stride)
-                    + col_start;
+                let row_off =
+                    dst_base.wrapping_add_signed((row_start + r) as isize * dst_stride) + col_start;
 
                 let dst_bytes: [u8; 8] = dst[row_off..row_off + 8].try_into().unwrap();
                 let dst_u8 = safe_simd::vld1_u8(&dst_bytes);
-                let sum = vreinterpretq_s16_u16(
-                    vaddw_u8(vreinterpretq_u16_s16(shifted), dst_u8),
-                );
+                let sum = vreinterpretq_s16_u16(vaddw_u8(vreinterpretq_u16_s16(shifted), dst_u8));
                 let result = vqmovun_s16(sum);
                 let mut out = [0u8; 8];
                 safe_simd::vst1_u8(&mut out, result);
@@ -1312,15 +1324,12 @@ pub(crate) fn inv_txfm_add_identity_identity_32x16_8bpc_neon_inner(
             let rows = [r0, r1, r2, r3, r4, r5, r6, r7];
             for r in 0..8 {
                 let shifted = vrshrq_n_s16::<2>(rows[r]);
-                let row_off = dst_base
-                    .wrapping_add_signed((row_start + r) as isize * dst_stride)
-                    + col_start;
+                let row_off =
+                    dst_base.wrapping_add_signed((row_start + r) as isize * dst_stride) + col_start;
 
                 let dst_bytes: [u8; 8] = dst[row_off..row_off + 8].try_into().unwrap();
                 let dst_u8 = safe_simd::vld1_u8(&dst_bytes);
-                let sum = vreinterpretq_s16_u16(
-                    vaddw_u8(vreinterpretq_u16_s16(shifted), dst_u8),
-                );
+                let sum = vreinterpretq_s16_u16(vaddw_u8(vreinterpretq_u16_s16(shifted), dst_u8));
                 let result = vqmovun_s16(sum);
                 let mut out = [0u8; 8];
                 safe_simd::vst1_u8(&mut out, result);
@@ -1395,9 +1404,9 @@ fn scalar_dct16_1d(input: &[i32; 16]) -> [i32; 16] {
 
     let c = [401i32, 4076, 3166, 2598, 1931, 3612, 3920, 1189];
 
-    let t8a  = (input[1] * c[0] - input[15] * c[1] + 2048) >> 12;
+    let t8a = (input[1] * c[0] - input[15] * c[1] + 2048) >> 12;
     let t15a = (input[1] * c[1] + input[15] * c[0] + 2048) >> 12;
-    let t9a  = (input[9] * c[2] - input[7] * c[3] + 2048) >> 12;
+    let t9a = (input[9] * c[2] - input[7] * c[3] + 2048) >> 12;
     let t14a = (input[9] * c[3] + input[7] * c[2] + 2048) >> 12;
     let t10a = (input[5] * c[4] - input[11] * c[5] + 2048) >> 12;
     let t13a = (input[5] * c[5] + input[11] * c[4] + 2048) >> 12;
@@ -1413,14 +1422,14 @@ fn scalar_dct16_1d(input: &[i32; 16]) -> [i32; 16] {
     let t14 = t15a - t14a;
     let t15 = t15a + t14a;
 
-    let t9a  = (t14 * 1567 - t9 * 3784 + 2048) >> 12;
+    let t9a = (t14 * 1567 - t9 * 3784 + 2048) >> 12;
     let t14a = (t14 * 3784 + t9 * 1567 + 2048) >> 12;
     let t13a = (t13 * 1567 - t10 * 3784 + 2048) >> 12;
     let t10a = -((t13 * 3784 + t10 * 1567 + 2048) >> 12);
 
-    let t8a  = t8 + t11;
+    let t8a = t8 + t11;
     let t11a = t8 - t11;
-    let t9b  = t9a + t10a;
+    let t9b = t9a + t10a;
     let t10b = t9a - t10a;
     let t12a = t15 - t12;
     let t15a = t15 + t12;
@@ -1433,16 +1442,16 @@ fn scalar_dct16_1d(input: &[i32; 16]) -> [i32; 16] {
     let t13_f = (t13b * 2896 + t10b * 2896 + 2048) >> 12;
 
     let mut out = [0i32; 16];
-    out[0]  = even_out[0] + t15a;
-    out[1]  = even_out[1] + t14b;
-    out[2]  = even_out[2] + t13_f;
-    out[3]  = even_out[3] + t12_f;
-    out[4]  = even_out[4] + t11_f;
-    out[5]  = even_out[5] + t10_f;
-    out[6]  = even_out[6] + t9b;
-    out[7]  = even_out[7] + t8a;
-    out[8]  = even_out[7] - t8a;
-    out[9]  = even_out[6] - t9b;
+    out[0] = even_out[0] + t15a;
+    out[1] = even_out[1] + t14b;
+    out[2] = even_out[2] + t13_f;
+    out[3] = even_out[3] + t12_f;
+    out[4] = even_out[4] + t11_f;
+    out[5] = even_out[5] + t10_f;
+    out[6] = even_out[6] + t9b;
+    out[7] = even_out[7] + t8a;
+    out[8] = even_out[7] - t8a;
+    out[9] = even_out[6] - t9b;
     out[10] = even_out[5] - t10_f;
     out[11] = even_out[4] - t11_f;
     out[12] = even_out[3] - t12_f;
@@ -1481,14 +1490,22 @@ fn scalar_dct32_1d(input: &[i32; 32]) -> [i32; 32] {
     let t23a = (input[29] * c1[6] - input[3] * c1[7] + 2048) >> 12;
     let t24a = (input[29] * c1[7] + input[3] * c1[6] + 2048) >> 12;
 
-    let s16 = t16a + t17a; let s17 = t16a - t17a;
-    let s18 = t19a - t18a; let s19 = t19a + t18a;
-    let s20 = t20a + t21a; let s21 = t20a - t21a;
-    let s22 = t23a - t22a; let s23 = t23a + t22a;
-    let s24 = t24a + t25a; let s25 = t24a - t25a;
-    let s26 = t27a - t26a; let s27 = t27a + t26a;
-    let s28 = t28a + t29a; let s29 = t28a - t29a;
-    let s30 = t31a - t30a; let s31 = t31a + t30a;
+    let s16 = t16a + t17a;
+    let s17 = t16a - t17a;
+    let s18 = t19a - t18a;
+    let s19 = t19a + t18a;
+    let s20 = t20a + t21a;
+    let s21 = t20a - t21a;
+    let s22 = t23a - t22a;
+    let s23 = t23a + t22a;
+    let s24 = t24a + t25a;
+    let s25 = t24a - t25a;
+    let s26 = t27a - t26a;
+    let s27 = t27a + t26a;
+    let s28 = t28a + t29a;
+    let s29 = t28a - t29a;
+    let s30 = t31a - t30a;
+    let s31 = t31a + t30a;
 
     let u17a = (s30 * 799 - s17 * 4017 + 2048) >> 12;
     let u30a = (s30 * 4017 + s17 * 799 + 2048) >> 12;
@@ -1499,14 +1516,22 @@ fn scalar_dct32_1d(input: &[i32; 32]) -> [i32; 32] {
     let u22a = -((s25 * 2276 + s22 * 3406 + 2048) >> 12);
     let u25a = (s25 * 3406 - s22 * 2276 + 2048) >> 12;
 
-    let w16a = s16 + s19; let w19a = s16 - s19;
-    let w17 = u17a + u18a; let w18 = u17a - u18a;
-    let w20a = s23 - s20; let w23a = s23 + s20;
-    let w21 = u22a - u21a; let w22 = u22a + u21a;
-    let w24a = s24 + s27; let w27a = s24 - s27;
-    let w25 = u25a + u26a; let w26 = u25a - u26a;
-    let w28a = s31 - s28; let w31a = s31 + s28;
-    let w29 = u30a - u29a; let w30 = u30a + u29a;
+    let w16a = s16 + s19;
+    let w19a = s16 - s19;
+    let w17 = u17a + u18a;
+    let w18 = u17a - u18a;
+    let w20a = s23 - s20;
+    let w23a = s23 + s20;
+    let w21 = u22a - u21a;
+    let w22 = u22a + u21a;
+    let w24a = s24 + s27;
+    let w27a = s24 - s27;
+    let w25 = u25a + u26a;
+    let w26 = u25a - u26a;
+    let w28a = s31 - s28;
+    let w31a = s31 + s28;
+    let w29 = u30a - u29a;
+    let w30 = u30a + u29a;
 
     let x18a = (w29 * 1567 - w18 * 3784 + 2048) >> 12;
     let x29a = (w29 * 3784 + w18 * 1567 + 2048) >> 12;
@@ -1517,14 +1542,22 @@ fn scalar_dct32_1d(input: &[i32; 32]) -> [i32; 32] {
     let x21a = -((w26 * 3784 + w21 * 1567 + 2048) >> 12);
     let x26a = (w26 * 1567 - w21 * 3784 + 2048) >> 12;
 
-    let y16 = w16a + w23a; let y23 = w16a - w23a;
-    let y17a = w17 + w22; let y22a = w17 - w22;
-    let y18 = x18a + x21a; let y21 = x18a - x21a;
-    let y19a = x19 + x20; let y20a = x19 - x20;
-    let y24 = w31a - w24a; let y31 = w31a + w24a;
-    let y25a = w30 - w25; let y30a = w30 + w25;
-    let y26 = x29a - x26a; let y29 = x29a + x26a;
-    let y27a = x28 - x27; let y28a = x28 + x27;
+    let y16 = w16a + w23a;
+    let y23 = w16a - w23a;
+    let y17a = w17 + w22;
+    let y22a = w17 - w22;
+    let y18 = x18a + x21a;
+    let y21 = x18a - x21a;
+    let y19a = x19 + x20;
+    let y20a = x19 - x20;
+    let y24 = w31a - w24a;
+    let y31 = w31a + w24a;
+    let y25a = w30 - w25;
+    let y30a = w30 + w25;
+    let y26 = x29a - x26a;
+    let y29 = x29a + x26a;
+    let y27a = x28 - x27;
+    let y28a = x28 + x27;
 
     let z20 = (y27a * 2896 - y20a * 2896 + 2048) >> 12;
     let z27 = (y27a * 2896 + y20a * 2896 + 2048) >> 12;
@@ -1536,7 +1569,9 @@ fn scalar_dct32_1d(input: &[i32; 32]) -> [i32; 32] {
     let z24a = (y24 * 2896 + y23 * 2896 + 2048) >> 12;
 
     let mut out = [0i32; 32];
-    let odd = [y16, y17a, y18, y19a, z20, z21a, z22, z23a, z24a, z25, z26a, z27, y28a, y29, y30a, y31];
+    let odd = [
+        y16, y17a, y18, y19a, z20, z21a, z22, z23a, z24a, z25, z26a, z27, y28a, y29, y30a, y31,
+    ];
     for i in 0..16 {
         out[i] = even_out[i] + odd[15 - i];
         out[31 - i] = even_out[i] - odd[15 - i];

@@ -21,16 +21,14 @@
 use core::arch::aarch64::*;
 
 #[cfg(target_arch = "aarch64")]
-use archmage::{arcane, rite, Arm64};
+use archmage::{Arm64, arcane, rite};
 
 #[cfg(target_arch = "aarch64")]
 use safe_unaligned_simd::aarch64 as safe_simd;
 
-use super::itx_arm_neon_common::IDCT_COEFFS;
-use super::itx_arm_neon_8x8::{
-    smull_smlal_q, smull_smlsl_q, sqrshrn_pair, transpose_8x8h,
-};
+use super::itx_arm_neon_8x8::{smull_smlal_q, smull_smlsl_q, sqrshrn_pair, transpose_8x8h};
 use super::itx_arm_neon_16x16::idct_16_q;
+use super::itx_arm_neon_common::IDCT_COEFFS;
 
 /// Type alias for 16 NEON vectors.
 #[cfg(target_arch = "aarch64")]
@@ -65,13 +63,9 @@ pub(crate) type V16 = [int16x8_t; 16];
 pub(crate) fn idct32_odd_q(v: V16) -> V16 {
     // Load idct32 coefficients (offset 16 into IDCT_COEFFS = byte offset 32)
     // c0: [201, 4091, 3035, 2751, 1751, 3703, 3857, 1380]
-    let c0 = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IDCT_COEFFS[16..24]).unwrap(),
-    );
+    let c0 = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IDCT_COEFFS[16..24]).unwrap());
     // c1: [995, 3973, 3513, 2106, 2440, 3290, 4052, 601]
-    let c1 = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IDCT_COEFFS[24..32]).unwrap(),
-    );
+    let c1 = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IDCT_COEFFS[24..32]).unwrap());
 
     // Stage 1: 8 rotation pairs on odd-indexed inputs
     // Assembly maps: v[0]=input for index 1, v[1]=input for index 17, etc.
@@ -161,9 +155,7 @@ pub(crate) fn idct32_odd_q(v: V16) -> V16 {
 
     // Load main IDCT coefficients for butterfly stages
     // c_main: [2896, 23168, 1567, 3784, 799, 4017, 3406, 2276]
-    let c_main = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IDCT_COEFFS[0..8]).unwrap(),
-    );
+    let c_main = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IDCT_COEFFS[0..8]).unwrap());
 
     // Stage 2: Butterfly
     let s17 = vqsubq_s16(t16a, t17a); // t17
@@ -320,22 +312,22 @@ pub(crate) fn idct32_odd_q(v: V16) -> V16 {
 
     // Return t16..t31 in order
     [
-        y16,    // t16 (out16)
-        y17a,   // t17a (out17)
-        y18,    // t18 (out18)
-        y19a,   // t19a (out19)
-        z20,    // t20
-        z21a,   // t21a
-        z22,    // t22
-        z23a,   // t23a
-        z24a,   // t24a
-        z25,    // t25
-        z26a,   // t26a
-        z27,    // t27
-        y28a,   // t28a (out28)
-        y29,    // t29 (out29)
-        y30a,   // t30a (out30)
-        y31,    // t31 (out31)
+        y16,  // t16 (out16)
+        y17a, // t17a (out17)
+        y18,  // t18 (out18)
+        y19a, // t19a (out19)
+        z20,  // t20
+        z21a, // t21a
+        z22,  // t22
+        z23a, // t23a
+        z24a, // t24a
+        z25,  // t25
+        z26a, // t26a
+        z27,  // t27
+        y28a, // t28a (out28)
+        y29,  // t29 (out29)
+        y30a, // t30a (out30)
+        y31,  // t31 (out31)
     ]
 }
 
@@ -424,12 +416,24 @@ pub(crate) fn horz_dct_32x8(
 
     // Transpose the 16 even results into two 8x8 blocks
     let (et0, et1, et2, et3, et4, et5, et6, et7) = transpose_8x8h(
-        even_out[0], even_out[1], even_out[2], even_out[3],
-        even_out[4], even_out[5], even_out[6], even_out[7],
+        even_out[0],
+        even_out[1],
+        even_out[2],
+        even_out[3],
+        even_out[4],
+        even_out[5],
+        even_out[6],
+        even_out[7],
     );
     let (et8, et9, et10, et11, et12, et13, et14, et15) = transpose_8x8h(
-        even_out[8], even_out[9], even_out[10], even_out[11],
-        even_out[12], even_out[13], even_out[14], even_out[15],
+        even_out[8],
+        even_out[9],
+        even_out[10],
+        even_out[11],
+        even_out[12],
+        even_out[13],
+        even_out[14],
+        even_out[15],
     );
 
     // Store transposed even results to scratch (interleaved layout)
@@ -482,12 +486,18 @@ pub(crate) fn horz_dct_32x8(
     //   First block (high): transpose(odd[15], odd[14], ..., odd[8])
     //   Second block (low): transpose(odd[7], odd[6], ..., odd[0])
     let (ot15, ot14, ot13, ot12, ot11, ot10, ot9, ot8) = transpose_8x8h(
-        odd_out[15], odd_out[14], odd_out[13], odd_out[12],
-        odd_out[11], odd_out[10], odd_out[9], odd_out[8],
+        odd_out[15],
+        odd_out[14],
+        odd_out[13],
+        odd_out[12],
+        odd_out[11],
+        odd_out[10],
+        odd_out[9],
+        odd_out[8],
     );
     let (ot7, ot6, ot5, ot4, ot3, ot2, ot1, ot0) = transpose_8x8h(
-        odd_out[7], odd_out[6], odd_out[5], odd_out[4],
-        odd_out[3], odd_out[2], odd_out[1], odd_out[0],
+        odd_out[7], odd_out[6], odd_out[5], odd_out[4], odd_out[3], odd_out[2], odd_out[1],
+        odd_out[0],
     );
 
     let odd_t_hi = [ot15, ot14, ot13, ot12, ot11, ot10, ot9, ot8];
@@ -734,12 +744,7 @@ pub(crate) fn vert_dct_add_8x32_16bpc(
 /// ```
 #[cfg(target_arch = "aarch64")]
 #[rite(neon)]
-fn dc_only_32x32_8bpc(
-    dst: &mut [u8],
-    dst_base: usize,
-    dst_stride: isize,
-    coeff: &mut [i16],
-) {
+fn dc_only_32x32_8bpc(dst: &mut [u8], dst_base: usize, dst_stride: isize, coeff: &mut [i16]) {
     let dc = coeff[0];
     coeff[0] = 0;
 
@@ -885,15 +890,12 @@ fn identity_32x32_8bpc_impl(
             let rows = [r0, r1, r2, r3, r4, r5, r6, r7];
             for r in 0..8 {
                 let shifted = vrshrq_n_s16::<2>(rows[r]);
-                let row_off = dst_base
-                    .wrapping_add_signed((row_start + r) as isize * dst_stride)
-                    + col_start;
+                let row_off =
+                    dst_base.wrapping_add_signed((row_start + r) as isize * dst_stride) + col_start;
 
                 let dst_bytes: [u8; 8] = dst[row_off..row_off + 8].try_into().unwrap();
                 let dst_u8 = safe_simd::vld1_u8(&dst_bytes);
-                let sum = vreinterpretq_s16_u16(
-                    vaddw_u8(vreinterpretq_u16_s16(shifted), dst_u8),
-                );
+                let sum = vreinterpretq_s16_u16(vaddw_u8(vreinterpretq_u16_s16(shifted), dst_u8));
                 let result = vqmovun_s16(sum);
                 let mut out = [0u8; 8];
                 safe_simd::vst1_u8(&mut out, result);
@@ -951,8 +953,7 @@ pub(crate) fn inv_txfm_add_identity_identity_32x32_16bpc_neon_inner(
 
             // After "transpose": block[c][r] → output row r, col c
             for r in 0..8 {
-                let row_off = dst_base
-                    .wrapping_add_signed((row_start + r) as isize * dst_stride);
+                let row_off = dst_base.wrapping_add_signed((row_start + r) as isize * dst_stride);
                 for c in 0..8 {
                     let val = (block[c][r] + 2) >> 2; // shift=2
                     let d = dst[row_off + col_start + c] as i32;
@@ -1018,7 +1019,7 @@ pub(crate) fn inv_txfm_add_dct_dct_32x32_8bpc_neon_inner(
             32, // coeff_stride = height = 32
             &mut scratch,
             row_start * 32, // scratch_base = row_start * 32 (row-major scratch)
-            2, // shift
+            2,              // shift
         );
     }
 
@@ -1153,9 +1154,9 @@ fn scalar_dct16_1d(input: &[i32; 16]) -> [i32; 16] {
     let c = [401i32, 4076, 3166, 2598, 1931, 3612, 3920, 1189];
 
     // Stage 1: rotation pairs
-    let t8a  = (input[1] * c[0] - input[15] * c[1] + 2048) >> 12;
+    let t8a = (input[1] * c[0] - input[15] * c[1] + 2048) >> 12;
     let t15a = (input[1] * c[1] + input[15] * c[0] + 2048) >> 12;
-    let t9a  = (input[9] * c[2] - input[7] * c[3] + 2048) >> 12;
+    let t9a = (input[9] * c[2] - input[7] * c[3] + 2048) >> 12;
     let t14a = (input[9] * c[3] + input[7] * c[2] + 2048) >> 12;
     let t10a = (input[5] * c[4] - input[11] * c[5] + 2048) >> 12;
     let t13a = (input[5] * c[5] + input[11] * c[4] + 2048) >> 12;
@@ -1173,15 +1174,15 @@ fn scalar_dct16_1d(input: &[i32; 16]) -> [i32; 16] {
     let t15 = t15a + t14a;
 
     // Stage 3: rotations with 1567, 3784
-    let t9a  = (t14 * 1567 - t9 * 3784 + 2048) >> 12;
+    let t9a = (t14 * 1567 - t9 * 3784 + 2048) >> 12;
     let t14a = (t14 * 3784 + t9 * 1567 + 2048) >> 12;
     let t13a = (t13 * 1567 - t10 * 3784 + 2048) >> 12;
     let t10a = -((t13 * 3784 + t10 * 1567 + 2048) >> 12);
 
     // Stage 4: butterfly
-    let t8a  = t8 + t11;
+    let t8a = t8 + t11;
     let t11a = t8 - t11;
-    let t9b  = t9a + t10a;
+    let t9b = t9a + t10a;
     let t10b = t9a - t10a;
     let t12a = t15 - t12;
     let t15a = t15 + t12;
@@ -1196,16 +1197,16 @@ fn scalar_dct16_1d(input: &[i32; 16]) -> [i32; 16] {
 
     // Final butterfly
     let mut out = [0i32; 16];
-    out[0]  = even_out[0] + t15a;
-    out[1]  = even_out[1] + t14b;
-    out[2]  = even_out[2] + t13_f;
-    out[3]  = even_out[3] + t12_f;
-    out[4]  = even_out[4] + t11_f;
-    out[5]  = even_out[5] + t10_f;
-    out[6]  = even_out[6] + t9b;
-    out[7]  = even_out[7] + t8a;
-    out[8]  = even_out[7] - t8a;
-    out[9]  = even_out[6] - t9b;
+    out[0] = even_out[0] + t15a;
+    out[1] = even_out[1] + t14b;
+    out[2] = even_out[2] + t13_f;
+    out[3] = even_out[3] + t12_f;
+    out[4] = even_out[4] + t11_f;
+    out[5] = even_out[5] + t10_f;
+    out[6] = even_out[6] + t9b;
+    out[7] = even_out[7] + t8a;
+    out[8] = even_out[7] - t8a;
+    out[9] = even_out[6] - t9b;
     out[10] = even_out[5] - t10_f;
     out[11] = even_out[4] - t11_f;
     out[12] = even_out[3] - t12_f;
@@ -1368,10 +1369,7 @@ fn scalar_idct32_odd(v: &[i32; 16]) -> [i32; 16] {
     let z24a = (y24 * 2896 + y23 * 2896 + 2048) >> 12;
 
     [
-        y16, y17a, y18, y19a,
-        z20, z21a, z22, z23a,
-        z24a, z25, z26a, z27,
-        y28a, y29, y30a, y31,
+        y16, y17a, y18, y19a, z20, z21a, z22, z23a, z24a, z25, z26a, z27, y28a, y29, y30a, y31,
     ]
 }
 
@@ -1388,8 +1386,11 @@ mod tests {
     fn test_scalar_dct4() {
         let out = scalar_dct4_1d(4096, 0, 0, 0);
         // DC-only input: all outputs should be equal
-        assert!(out.iter().all(|&x| (x - out[0]).abs() <= 1),
-            "DC-only DCT4 should produce equal outputs, got {:?}", out);
+        assert!(
+            out.iter().all(|&x| (x - out[0]).abs() <= 1),
+            "DC-only DCT4 should produce equal outputs, got {:?}",
+            out
+        );
     }
 
     /// Test that the scalar 32-point odd part with zero input produces zero output.
@@ -1409,8 +1410,13 @@ mod tests {
         // All outputs should be approximately equal (DC component)
         let mean = out.iter().sum::<i32>() / 32;
         for (i, &v) in out.iter().enumerate() {
-            assert!((v - mean).abs() <= 2,
-                "DCT32 DC-only: output[{}]={} deviates from mean={}", i, v, mean);
+            assert!(
+                (v - mean).abs() <= 2,
+                "DCT32 DC-only: output[{}]={} deviates from mean={}",
+                i,
+                v,
+                mean
+            );
         }
     }
 
@@ -1427,7 +1433,9 @@ mod tests {
         // (Note: our scalar_dct32_1d is an inverse DCT, so applying it twice
         // with proper normalization should round-trip. Since we don't have
         // the forward DCT, just verify the output is reasonable.)
-        assert!(transformed.iter().all(|&x| x.abs() < 100000),
-            "Transform output should be bounded");
+        assert!(
+            transformed.iter().all(|&x| x.abs() < 100000),
+            "Transform output should be bounded"
+        );
     }
 }

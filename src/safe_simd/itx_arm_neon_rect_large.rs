@@ -39,15 +39,13 @@ use archmage::{Arm64, arcane, rite};
 #[cfg(target_arch = "aarch64")]
 use safe_unaligned_simd::aarch64 as safe_simd;
 
-use super::itx_arm_neon_common::IDCT_COEFFS;
-use super::itx_arm_neon_rect::{
-    RectTxType4, RectTxType8, apply_tx4_q, apply_tx8_q,
-    transpose_4x8h,
-};
 use super::itx_arm_neon_8x8::transpose_8x8h;
 use super::itx_arm_neon_16x16::{
-    IADST16_COEFFS_V0, IADST16_COEFFS_V1, TxType16,
-    idct_16_q, iadst_16_q, identity_16_q,
+    IADST16_COEFFS_V0, IADST16_COEFFS_V1, TxType16, iadst_16_q, idct_16_q, identity_16_q,
+};
+use super::itx_arm_neon_common::IDCT_COEFFS;
+use super::itx_arm_neon_rect::{
+    RectTxType4, RectTxType8, apply_tx4_q, apply_tx8_q, transpose_4x8h,
 };
 
 /// Type alias for 16 NEON 4h vectors (one full 16-point 4h transform state).
@@ -104,14 +102,12 @@ fn idct_16_4h(v: V16_4h) -> V16_4h {
         idct_8_4h(v[0], v[2], v[4], v[6], v[8], v[10], v[12], v[14]);
 
     // Load idct16 coefficients (the second 8 shorts)
-    let c1 = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IDCT_COEFFS[8..16]).unwrap(),
-    );
+    let c1 = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IDCT_COEFFS[8..16]).unwrap());
 
     // Stage 1: Rotation pairs on odd-indexed inputs
-    let t8a  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[1], v[15], c1, 0, 1));
+    let t8a = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[1], v[15], c1, 0, 1));
     let t15a = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[1], v[15], c1, 1, 0));
-    let t9a  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[9], v[7], c1, 2, 3));
+    let t9a = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[9], v[7], c1, 2, 3));
     let t14a = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[9], v[7], c1, 3, 2));
     let t10a = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[5], v[11], c1, 4, 5));
     let t13a = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[5], v[11], c1, 5, 4));
@@ -119,8 +115,8 @@ fn idct_16_4h(v: V16_4h) -> V16_4h {
     let t12a = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[13], v[3], c1, 7, 6));
 
     // Stage 2: Butterfly
-    let t9  = vqsub_s16(t8a, t9a);
-    let t8  = vqadd_s16(t8a, t9a);
+    let t9 = vqsub_s16(t8a, t9a);
+    let t8 = vqadd_s16(t8a, t9a);
     let t14 = vqsub_s16(t15a, t14a);
     let t15 = vqadd_s16(t15a, t14a);
     let t10 = vqsub_s16(t11a, t10a);
@@ -129,21 +125,19 @@ fn idct_16_4h(v: V16_4h) -> V16_4h {
     let t13 = vqsub_s16(t12a, t13a);
 
     // Stage 3: Rotations using idct4 coefficients
-    let c0 = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IDCT_COEFFS[0..8]).unwrap(),
-    );
+    let c0 = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IDCT_COEFFS[0..8]).unwrap());
 
-    let t9a  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(t14, t9, c0, 2, 3));
+    let t9a = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(t14, t9, c0, 2, 3));
     let t14a = vqrshrn_n_s32::<12>(smull_smlal_4h_q(t14, t9, c0, 3, 2));
     let t13a = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(t13, t10, c0, 2, 3));
     let t10a = vqrshrn_n_s32::<12>(vnegq_s32(smull_smlal_4h_q(t13, t10, c0, 3, 2)));
 
     // Stage 4: Butterfly
     let t11a = vqsub_s16(t8, t11);
-    let t8a  = vqadd_s16(t8, t11);
+    let t8a = vqadd_s16(t8, t11);
     let t12a = vqsub_s16(t15, t12);
     let t15a = vqadd_s16(t15, t12);
-    let t9b  = vqadd_s16(t9a, t10a);
+    let t9b = vqadd_s16(t9a, t10a);
     let t10b = vqsub_s16(t9a, t10a);
     let t13b = vqsub_s16(t14a, t13a);
     let t14b = vqadd_s16(t14a, t13a);
@@ -156,22 +150,22 @@ fn idct_16_4h(v: V16_4h) -> V16_4h {
 
     // Final butterfly
     [
-        vqadd_s16(e0, t15a),        // out0
-        vqadd_s16(e1, t14b),        // out1
-        vqadd_s16(e2, t13a_final),  // out2
-        vqadd_s16(e3, t12_final),   // out3
-        vqadd_s16(e4, t11_final),   // out4
-        vqadd_s16(e5, t10a_final),  // out5
-        vqadd_s16(e6, t9b),         // out6
-        vqadd_s16(e7, t8a),         // out7
-        vqsub_s16(e7, t8a),         // out8
-        vqsub_s16(e6, t9b),         // out9
-        vqsub_s16(e5, t10a_final),  // out10
-        vqsub_s16(e4, t11_final),   // out11
-        vqsub_s16(e3, t12_final),   // out12
-        vqsub_s16(e2, t13a_final),  // out13
-        vqsub_s16(e1, t14b),        // out14
-        vqsub_s16(e0, t15a),        // out15
+        vqadd_s16(e0, t15a),       // out0
+        vqadd_s16(e1, t14b),       // out1
+        vqadd_s16(e2, t13a_final), // out2
+        vqadd_s16(e3, t12_final),  // out3
+        vqadd_s16(e4, t11_final),  // out4
+        vqadd_s16(e5, t10a_final), // out5
+        vqadd_s16(e6, t9b),        // out6
+        vqadd_s16(e7, t8a),        // out7
+        vqsub_s16(e7, t8a),        // out8
+        vqsub_s16(e6, t9b),        // out9
+        vqsub_s16(e5, t10a_final), // out10
+        vqsub_s16(e4, t11_final),  // out11
+        vqsub_s16(e3, t12_final),  // out12
+        vqsub_s16(e2, t13a_final), // out13
+        vqsub_s16(e1, t14b),       // out14
+        vqsub_s16(e0, t15a),       // out15
     ]
 }
 
@@ -182,24 +176,20 @@ fn idct_16_4h(v: V16_4h) -> V16_4h {
 #[cfg(target_arch = "aarch64")]
 #[rite(neon)]
 fn iadst_16_4h(v: V16_4h) -> V16_4h {
-    let c0 = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IADST16_COEFFS_V0[..]).unwrap(),
-    );
-    let c1 = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IADST16_COEFFS_V1[..]).unwrap(),
-    );
+    let c0 = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IADST16_COEFFS_V0[..]).unwrap());
+    let c1 = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IADST16_COEFFS_V1[..]).unwrap());
 
     // Stage 1: 8 rotation pairs
-    let t0  = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[15], v[0], c0, 0, 1));
-    let t1  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[15], v[0], c0, 1, 0));
-    let t2  = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[13], v[2], c0, 2, 3));
-    let t3  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[13], v[2], c0, 3, 2));
-    let t4  = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[11], v[4], c0, 4, 5));
-    let t5  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[11], v[4], c0, 5, 4));
-    let t6  = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[9], v[6], c0, 6, 7));
-    let t7  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[9], v[6], c0, 7, 6));
-    let t8  = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[7], v[8], c1, 0, 1));
-    let t9  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[7], v[8], c1, 1, 0));
+    let t0 = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[15], v[0], c0, 0, 1));
+    let t1 = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[15], v[0], c0, 1, 0));
+    let t2 = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[13], v[2], c0, 2, 3));
+    let t3 = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[13], v[2], c0, 3, 2));
+    let t4 = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[11], v[4], c0, 4, 5));
+    let t5 = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[11], v[4], c0, 5, 4));
+    let t6 = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[9], v[6], c0, 6, 7));
+    let t7 = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[9], v[6], c0, 7, 6));
+    let t8 = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[7], v[8], c1, 0, 1));
+    let t9 = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[7], v[8], c1, 1, 0));
     let t10 = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[5], v[10], c1, 2, 3));
     let t11 = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[5], v[10], c1, 3, 2));
     let t12 = vqrshrn_n_s32::<12>(smull_smlal_4h_q(v[3], v[12], c1, 4, 5));
@@ -208,50 +198,48 @@ fn iadst_16_4h(v: V16_4h) -> V16_4h {
     let t15 = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(v[1], v[14], c1, 7, 6));
 
     // Load idct coefficients for the remaining stages
-    let ci = safe_simd::vld1q_s16(
-        <&[i16; 8]>::try_from(&IDCT_COEFFS[0..8]).unwrap(),
-    );
+    let ci = safe_simd::vld1q_s16(<&[i16; 8]>::try_from(&IDCT_COEFFS[0..8]).unwrap());
 
     // Stage 2: butterfly pairs
-    let s8a  = vqsub_s16(t0, t8);
-    let s0a  = vqadd_s16(t0, t8);
-    let s9a  = vqsub_s16(t1, t9);
-    let s1a  = vqadd_s16(t1, t9);
-    let s2a  = vqadd_s16(t2, t10);
+    let s8a = vqsub_s16(t0, t8);
+    let s0a = vqadd_s16(t0, t8);
+    let s9a = vqsub_s16(t1, t9);
+    let s1a = vqadd_s16(t1, t9);
+    let s2a = vqadd_s16(t2, t10);
     let s10a = vqsub_s16(t2, t10);
-    let s3a  = vqadd_s16(t3, t11);
+    let s3a = vqadd_s16(t3, t11);
     let s11a = vqsub_s16(t3, t11);
-    let s4a  = vqadd_s16(t4, t12);
+    let s4a = vqadd_s16(t4, t12);
     let s12a = vqsub_s16(t4, t12);
-    let s5a  = vqadd_s16(t5, t13);
+    let s5a = vqadd_s16(t5, t13);
     let s13a = vqsub_s16(t5, t13);
-    let s6a  = vqadd_s16(t6, t14);
+    let s6a = vqadd_s16(t6, t14);
     let s14a = vqsub_s16(t6, t14);
-    let s7a  = vqadd_s16(t7, t15);
+    let s7a = vqadd_s16(t7, t15);
     let s15a = vqsub_s16(t7, t15);
 
     // Stage 3: rotations
-    let u8_  = vqrshrn_n_s32::<12>(smull_smlal_4h_q(s8a, s9a, ci, 5, 4));
-    let u9   = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(s8a, s9a, ci, 4, 5));
-    let u10  = vqrshrn_n_s32::<12>(smull_smlal_4h_q(s10a, s11a, ci, 7, 6));
-    let u11  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(s10a, s11a, ci, 6, 7));
-    let u12  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(s13a, s12a, ci, 5, 4));
-    let u13  = vqrshrn_n_s32::<12>(smull_smlal_4h_q(s13a, s12a, ci, 4, 5));
-    let u14  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(s15a, s14a, ci, 7, 6));
-    let u15  = vqrshrn_n_s32::<12>(smull_smlal_4h_q(s15a, s14a, ci, 6, 7));
+    let u8_ = vqrshrn_n_s32::<12>(smull_smlal_4h_q(s8a, s9a, ci, 5, 4));
+    let u9 = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(s8a, s9a, ci, 4, 5));
+    let u10 = vqrshrn_n_s32::<12>(smull_smlal_4h_q(s10a, s11a, ci, 7, 6));
+    let u11 = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(s10a, s11a, ci, 6, 7));
+    let u12 = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(s13a, s12a, ci, 5, 4));
+    let u13 = vqrshrn_n_s32::<12>(smull_smlal_4h_q(s13a, s12a, ci, 4, 5));
+    let u14 = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(s15a, s14a, ci, 7, 6));
+    let u15 = vqrshrn_n_s32::<12>(smull_smlal_4h_q(s15a, s14a, ci, 6, 7));
 
     // Stage 4: butterfly pairs
-    let w4   = vqsub_s16(s0a, s4a);
-    let w0   = vqadd_s16(s0a, s4a);
-    let w5   = vqsub_s16(s1a, s5a);
-    let w1   = vqadd_s16(s1a, s5a);
-    let w2   = vqadd_s16(s2a, s6a);
-    let w6   = vqsub_s16(s2a, s6a);
-    let w3   = vqadd_s16(s3a, s7a);
-    let w7   = vqsub_s16(s3a, s7a);
-    let w8a  = vqadd_s16(u8_, u12);
+    let w4 = vqsub_s16(s0a, s4a);
+    let w0 = vqadd_s16(s0a, s4a);
+    let w5 = vqsub_s16(s1a, s5a);
+    let w1 = vqadd_s16(s1a, s5a);
+    let w2 = vqadd_s16(s2a, s6a);
+    let w6 = vqsub_s16(s2a, s6a);
+    let w3 = vqadd_s16(s3a, s7a);
+    let w7 = vqsub_s16(s3a, s7a);
+    let w8a = vqadd_s16(u8_, u12);
     let w12a = vqsub_s16(u8_, u12);
-    let w9a  = vqadd_s16(u9, u13);
+    let w9a = vqadd_s16(u9, u13);
     let w13a = vqsub_s16(u9, u13);
     let w10a = vqadd_s16(u10, u14);
     let w14a = vqsub_s16(u10, u14);
@@ -259,49 +247,51 @@ fn iadst_16_4h(v: V16_4h) -> V16_4h {
     let w15a = vqsub_s16(u11, u15);
 
     // Stage 5: rotations
-    let x4a  = vqrshrn_n_s32::<12>(smull_smlal_4h_q(w4, w5, ci, 3, 2));
-    let x5a  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(w4, w5, ci, 2, 3));
-    let x6a  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(w7, w6, ci, 3, 2));
-    let x7a  = vqrshrn_n_s32::<12>(smull_smlal_4h_q(w7, w6, ci, 2, 3));
-    let x12  = vqrshrn_n_s32::<12>(smull_smlal_4h_q(w12a, w13a, ci, 3, 2));
-    let x13  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(w12a, w13a, ci, 2, 3));
-    let x14  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(w15a, w14a, ci, 3, 2));
-    let x15  = vqrshrn_n_s32::<12>(smull_smlal_4h_q(w15a, w14a, ci, 2, 3));
+    let x4a = vqrshrn_n_s32::<12>(smull_smlal_4h_q(w4, w5, ci, 3, 2));
+    let x5a = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(w4, w5, ci, 2, 3));
+    let x6a = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(w7, w6, ci, 3, 2));
+    let x7a = vqrshrn_n_s32::<12>(smull_smlal_4h_q(w7, w6, ci, 2, 3));
+    let x12 = vqrshrn_n_s32::<12>(smull_smlal_4h_q(w12a, w13a, ci, 3, 2));
+    let x13 = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(w12a, w13a, ci, 2, 3));
+    let x14 = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(w15a, w14a, ci, 3, 2));
+    let x15 = vqrshrn_n_s32::<12>(smull_smlal_4h_q(w15a, w14a, ci, 2, 3));
 
     // Stage 6: Final butterfly + rotations
-    let o0   = vqadd_s16(w0, w2);
-    let t2a  = vqsub_s16(w0, w2);
-    let o15  = vqneg_s16(vqadd_s16(w1, w3));
-    let t3a  = vqsub_s16(w1, w3);
-    let o13  = vqneg_s16(vqadd_s16(x13, x15));
+    let o0 = vqadd_s16(w0, w2);
+    let t2a = vqsub_s16(w0, w2);
+    let o15 = vqneg_s16(vqadd_s16(w1, w3));
+    let t3a = vqsub_s16(w1, w3);
+    let o13 = vqneg_s16(vqadd_s16(x13, x15));
     let t15a = vqsub_s16(x13, x15);
-    let o2   = vqadd_s16(x12, x14);
+    let o2 = vqadd_s16(x12, x14);
     let t14a = vqsub_s16(x12, x14);
-    let o1   = vqneg_s16(vqadd_s16(w8a, w10a));
-    let y10  = vqsub_s16(w8a, w10a);
-    let o14  = vqadd_s16(w9a, w11a);
-    let y11  = vqsub_s16(w9a, w11a);
-    let o3   = vqneg_s16(vqadd_s16(x4a, x6a));
-    let y6   = vqsub_s16(x4a, x6a);
-    let o12  = vqadd_s16(x5a, x7a);
-    let y7   = vqsub_s16(x5a, x7a);
+    let o1 = vqneg_s16(vqadd_s16(w8a, w10a));
+    let y10 = vqsub_s16(w8a, w10a);
+    let o14 = vqadd_s16(w9a, w11a);
+    let y11 = vqsub_s16(w9a, w11a);
+    let o3 = vqneg_s16(vqadd_s16(x4a, x6a));
+    let y6 = vqsub_s16(x4a, x6a);
+    let o12 = vqadd_s16(x5a, x7a);
+    let y7 = vqsub_s16(x5a, x7a);
 
     // Final rotations using ci.h[0]=2896
-    let o8       = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(t2a, t3a, ci, 0, 0));
-    let o7_pre   = vqrshrn_n_s32::<12>(smull_smlal_4h_q(t2a, t3a, ci, 0, 0));
-    let o5_pre   = vqrshrn_n_s32::<12>(smull_smlal_4h_q(t14a, t15a, ci, 0, 0));
-    let o10      = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(t14a, t15a, ci, 0, 0));
-    let o4       = vqrshrn_n_s32::<12>(smull_smlal_4h_q(y6, y7, ci, 0, 0));
-    let o11_pre  = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(y6, y7, ci, 0, 0));
-    let o6       = vqrshrn_n_s32::<12>(smull_smlal_4h_q(y10, y11, ci, 0, 0));
-    let o9_pre   = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(y10, y11, ci, 0, 0));
+    let o8 = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(t2a, t3a, ci, 0, 0));
+    let o7_pre = vqrshrn_n_s32::<12>(smull_smlal_4h_q(t2a, t3a, ci, 0, 0));
+    let o5_pre = vqrshrn_n_s32::<12>(smull_smlal_4h_q(t14a, t15a, ci, 0, 0));
+    let o10 = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(t14a, t15a, ci, 0, 0));
+    let o4 = vqrshrn_n_s32::<12>(smull_smlal_4h_q(y6, y7, ci, 0, 0));
+    let o11_pre = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(y6, y7, ci, 0, 0));
+    let o6 = vqrshrn_n_s32::<12>(smull_smlal_4h_q(y10, y11, ci, 0, 0));
+    let o9_pre = vqrshrn_n_s32::<12>(smull_smlsl_4h_q(y10, y11, ci, 0, 0));
 
-    let o7  = vqneg_s16(o7_pre);
-    let o5  = vqneg_s16(o5_pre);
+    let o7 = vqneg_s16(o7_pre);
+    let o5 = vqneg_s16(o5_pre);
     let o11 = vqneg_s16(o11_pre);
-    let o9  = vqneg_s16(o9_pre);
+    let o9 = vqneg_s16(o9_pre);
 
-    [o0, o1, o2, o3, o4, o5, o6, o7, o8, o9, o10, o11, o12, o13, o14, o15]
+    [
+        o0, o1, o2, o3, o4, o5, o6, o7, o8, o9, o10, o11, o12, o13, o14, o15,
+    ]
 }
 
 /// 16-point identity transform on 16 int16x4_t vectors.
@@ -316,8 +306,8 @@ fn identity_16_4h(mut v: V16_4h) -> V16_4h {
 
     for vi in v.iter_mut() {
         let t = vqrdmulh_s16(*vi, scale);
-        *vi = vqadd_s16(*vi, *vi);  // vi *= 2
-        *vi = vqadd_s16(*vi, t);    // vi += round(vi * scale)
+        *vi = vqadd_s16(*vi, *vi); // vi *= 2
+        *vi = vqadd_s16(*vi, t); // vi += round(vi * scale)
     }
     v
 }
@@ -361,9 +351,7 @@ fn apply_tx16_q(tx: TxType16, v: [int16x8_t; 16]) -> [int16x8_t; 16] {
 /// Scale 8 int16x8_t vectors by 2896*8 using sqrdmulh.
 #[cfg(target_arch = "aarch64")]
 #[rite(neon)]
-fn scale_input_8h_8(
-    v: &mut [int16x8_t; 8],
-) {
+fn scale_input_8h_8(v: &mut [int16x8_t; 8]) {
     let scale = vdupq_n_s16((2896 * 8) as i16);
     for vi in v.iter_mut() {
         *vi = vqrdmulhq_s16(*vi, scale);
@@ -373,9 +361,7 @@ fn scale_input_8h_8(
 /// Scale 16 int16x8_t vectors by 2896*8 using sqrdmulh.
 #[cfg(target_arch = "aarch64")]
 #[rite(neon)]
-fn scale_input_8h_16(
-    v: &mut [int16x8_t; 16],
-) {
+fn scale_input_8h_16(v: &mut [int16x8_t; 16]) {
     let scale = vdupq_n_s16((2896 * 8) as i16);
     for vi in v.iter_mut() {
         *vi = vqrdmulhq_s16(*vi, scale);
@@ -389,12 +375,7 @@ fn scale_input_8h_16(
 /// Add 8 rows of 8 pixels to destination for 8bpc.
 #[cfg(target_arch = "aarch64")]
 #[rite(neon)]
-fn add_to_dst_8x8_8bpc(
-    dst: &mut [u8],
-    dst_base: usize,
-    stride: isize,
-    v: [int16x8_t; 8],
-) {
+fn add_to_dst_8x8_8bpc(dst: &mut [u8], dst_base: usize, stride: isize, v: [int16x8_t; 8]) {
     for (i, &row) in v.iter().enumerate() {
         let row_off = dst_base.wrapping_add_signed(i as isize * stride);
         let shifted = vrshrq_n_s16::<4>(row);
@@ -411,12 +392,7 @@ fn add_to_dst_8x8_8bpc(
 /// Add 16 rows of 8 pixels to destination for 8bpc.
 #[cfg(target_arch = "aarch64")]
 #[rite(neon)]
-fn add_to_dst_8x16_8bpc(
-    dst: &mut [u8],
-    dst_base: usize,
-    stride: isize,
-    v: [int16x8_t; 16],
-) {
+fn add_to_dst_8x16_8bpc(dst: &mut [u8], dst_base: usize, stride: isize, v: [int16x8_t; 16]) {
     for (i, &row) in v.iter().enumerate() {
         let row_off = dst_base.wrapping_add_signed(i as isize * stride);
         let shifted = vrshrq_n_s16::<4>(row);
@@ -436,12 +412,7 @@ fn add_to_dst_8x16_8bpc(
 /// adds to 4-pixel-wide destination rows.
 #[cfg(target_arch = "aarch64")]
 #[rite(neon)]
-fn add_to_dst_4x16_8bpc(
-    dst: &mut [u8],
-    dst_base: usize,
-    stride: isize,
-    v: V16_4h,
-) {
+fn add_to_dst_4x16_8bpc(dst: &mut [u8], dst_base: usize, stride: isize, v: V16_4h) {
     // Process pairs of rows: combine v[2n] and v[2n+1] into one int16x8_t
     for pair_idx in 0..8 {
         let combined = vcombine_s16(v[pair_idx * 2], v[pair_idx * 2 + 1]);
@@ -536,9 +507,7 @@ fn dc_only_rect_8bpc(
                 let off = row_off + half * 8;
                 let dst_bytes: [u8; 8] = dst[off..off + 8].try_into().unwrap();
                 let dst_u8 = safe_simd::vld1_u8(&dst_bytes);
-                let sum = vreinterpretq_s16_u16(
-                    vaddw_u8(vreinterpretq_u16_s16(v), dst_u8),
-                );
+                let sum = vreinterpretq_s16_u16(vaddw_u8(vreinterpretq_u16_s16(v), dst_u8));
                 let result = vqmovun_s16(sum);
                 let mut out = [0u8; 8];
                 safe_simd::vst1_u8(&mut out, result);
@@ -556,9 +525,7 @@ fn dc_only_rect_8bpc(
             bytes[4..8].copy_from_slice(&dst[r1_off..r1_off + 4]);
             let dst_u8 = safe_simd::vld1_u8(&bytes);
 
-            let sum = vreinterpretq_s16_u16(
-                vaddw_u8(vreinterpretq_u16_s16(v), dst_u8),
-            );
+            let sum = vreinterpretq_s16_u16(vaddw_u8(vreinterpretq_u16_s16(v), dst_u8));
             let result = vqmovun_s16(sum);
 
             let mut out = [0u8; 8];
@@ -633,13 +600,19 @@ pub(crate) fn inv_txfm_add_16x4_8bpc_neon(
         // Load first 4 columns: v16..v19 as .4h, then v16.d[1]..v19.d[1]
         for i in 0..4 {
             let low = safe_simd::vld1_s16(<&[i16; 4]>::try_from(&coeff[i * 4..i * 4 + 4]).unwrap());
-            let high = safe_simd::vld1_s16(<&[i16; 4]>::try_from(&coeff[16 + i * 4..16 + i * 4 + 4]).unwrap());
+            let high = safe_simd::vld1_s16(
+                <&[i16; 4]>::try_from(&coeff[16 + i * 4..16 + i * 4 + 4]).unwrap(),
+            );
             lo[i] = vcombine_s16(low, high);
         }
         // Load next 4 columns
         for i in 0..4 {
-            let low = safe_simd::vld1_s16(<&[i16; 4]>::try_from(&coeff[32 + i * 4..32 + i * 4 + 4]).unwrap());
-            let high = safe_simd::vld1_s16(<&[i16; 4]>::try_from(&coeff[48 + i * 4..48 + i * 4 + 4]).unwrap());
+            let low = safe_simd::vld1_s16(
+                <&[i16; 4]>::try_from(&coeff[32 + i * 4..32 + i * 4 + 4]).unwrap(),
+            );
+            let high = safe_simd::vld1_s16(
+                <&[i16; 4]>::try_from(&coeff[48 + i * 4..48 + i * 4 + 4]).unwrap(),
+            );
             hi[i] = vcombine_s16(low, high);
         }
 
@@ -899,8 +872,7 @@ pub(crate) fn inv_txfm_add_16x8_8bpc_neon(
         transpose_8x8h(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
 
     // Apply 8-point column transform (.8h) on left half
-    let (c0, c1, c2, c3, c4, c5, c6, c7) =
-        apply_tx8_q(col_tx, t0, t1, t2, t3, t4, t5, t6, t7);
+    let (c0, c1, c2, c3, c4, c5, c6, c7) = apply_tx8_q(col_tx, t0, t1, t2, t3, t4, t5, t6, t7);
 
     // Add left half to destination
     add_to_dst_8x8_8bpc(dst, dst_base, dst_stride, [c0, c1, c2, c3, c4, c5, c6, c7]);
@@ -910,11 +882,15 @@ pub(crate) fn inv_txfm_add_16x8_8bpc_neon(
         transpose_8x8h(v[8], v[9], v[10], v[11], v[12], v[13], v[14], v[15]);
 
     // Apply 8-point column transform (.8h) on right half
-    let (c0, c1, c2, c3, c4, c5, c6, c7) =
-        apply_tx8_q(col_tx, t0, t1, t2, t3, t4, t5, t6, t7);
+    let (c0, c1, c2, c3, c4, c5, c6, c7) = apply_tx8_q(col_tx, t0, t1, t2, t3, t4, t5, t6, t7);
 
     // Add right half to destination (offset by 8 columns)
-    add_to_dst_8x8_8bpc(dst, dst_base + 8, dst_stride, [c0, c1, c2, c3, c4, c5, c6, c7]);
+    add_to_dst_8x8_8bpc(
+        dst,
+        dst_base + 8,
+        dst_stride,
+        [c0, c1, c2, c3, c4, c5, c6, c7],
+    );
 
     coeff[0..128].fill(0);
 }
@@ -976,9 +952,9 @@ pub(crate) fn inv_txfm_add_8x16_8bpc_neon(
             // Identity: scale_input + identity shl #1 cancel with srshr>>1
             // So we just keep the scaled values
         } else {
-            let (h0, h1, h2, h3, h4, h5, h6, h7) =
-                apply_tx8_q(row_tx, high[0], high[1], high[2], high[3],
-                            high[4], high[5], high[6], high[7]);
+            let (h0, h1, h2, h3, h4, h5, h6, h7) = apply_tx8_q(
+                row_tx, high[0], high[1], high[2], high[3], high[4], high[5], high[6], high[7],
+            );
             high[0] = vrshrq_n_s16::<1>(h0);
             high[1] = vrshrq_n_s16::<1>(h1);
             high[2] = vrshrq_n_s16::<1>(h2);
@@ -989,9 +965,9 @@ pub(crate) fn inv_txfm_add_8x16_8bpc_neon(
             high[7] = vrshrq_n_s16::<1>(h7);
         }
 
-        let (h0, h1, h2, h3, h4, h5, h6, h7) =
-            transpose_8x8h(high[0], high[1], high[2], high[3],
-                           high[4], high[5], high[6], high[7]);
+        let (h0, h1, h2, h3, h4, h5, h6, h7) = transpose_8x8h(
+            high[0], high[1], high[2], high[3], high[4], high[5], high[6], high[7],
+        );
         high = [h0, h1, h2, h3, h4, h5, h6, h7];
     }
 
@@ -1008,9 +984,9 @@ pub(crate) fn inv_txfm_add_8x16_8bpc_neon(
     if is_identity_row {
         // Identity: scale_input + identity shl #1 cancel with srshr>>1
     } else {
-        let (l0, l1, l2, l3, l4, l5, l6, l7) =
-            apply_tx8_q(row_tx, low[0], low[1], low[2], low[3],
-                        low[4], low[5], low[6], low[7]);
+        let (l0, l1, l2, l3, l4, l5, l6, l7) = apply_tx8_q(
+            row_tx, low[0], low[1], low[2], low[3], low[4], low[5], low[6], low[7],
+        );
         low[0] = vrshrq_n_s16::<1>(l0);
         low[1] = vrshrq_n_s16::<1>(l1);
         low[2] = vrshrq_n_s16::<1>(l2);
@@ -1021,9 +997,9 @@ pub(crate) fn inv_txfm_add_8x16_8bpc_neon(
         low[7] = vrshrq_n_s16::<1>(l7);
     }
 
-    let (l0, l1, l2, l3, l4, l5, l6, l7) =
-        transpose_8x8h(low[0], low[1], low[2], low[3],
-                       low[4], low[5], low[6], low[7]);
+    let (l0, l1, l2, l3, l4, l5, l6, l7) = transpose_8x8h(
+        low[0], low[1], low[2], low[3], low[4], low[5], low[6], low[7],
+    );
     low = [l0, l1, l2, l3, l4, l5, l6, l7];
 
     // Combine into 16 x int16x8_t: rows 0-7 from low, rows 8-15 from high
@@ -1058,29 +1034,100 @@ macro_rules! def_rect_entry_16x4 {
             bitdepth_max: i32,
         ) {
             inv_txfm_add_16x4_8bpc_neon(
-                token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-                $row, $col,
+                token,
+                dst,
+                dst_base,
+                dst_stride,
+                coeff,
+                eob,
+                bitdepth_max,
+                $row,
+                $col,
             );
         }
     };
 }
 
-def_rect_entry_16x4!(inv_txfm_add_dct_dct_16x4_8bpc_neon_inner, TxType16::Dct, RectTxType4::Dct);
-def_rect_entry_16x4!(inv_txfm_add_identity_identity_16x4_8bpc_neon_inner, TxType16::Identity, RectTxType4::Identity);
-def_rect_entry_16x4!(inv_txfm_add_dct_adst_16x4_8bpc_neon_inner, TxType16::Dct, RectTxType4::Adst);
-def_rect_entry_16x4!(inv_txfm_add_dct_flipadst_16x4_8bpc_neon_inner, TxType16::Dct, RectTxType4::FlipAdst);
-def_rect_entry_16x4!(inv_txfm_add_dct_identity_16x4_8bpc_neon_inner, TxType16::Dct, RectTxType4::Identity);
-def_rect_entry_16x4!(inv_txfm_add_adst_dct_16x4_8bpc_neon_inner, TxType16::Adst, RectTxType4::Dct);
-def_rect_entry_16x4!(inv_txfm_add_adst_adst_16x4_8bpc_neon_inner, TxType16::Adst, RectTxType4::Adst);
-def_rect_entry_16x4!(inv_txfm_add_adst_flipadst_16x4_8bpc_neon_inner, TxType16::Adst, RectTxType4::FlipAdst);
-def_rect_entry_16x4!(inv_txfm_add_flipadst_dct_16x4_8bpc_neon_inner, TxType16::FlipAdst, RectTxType4::Dct);
-def_rect_entry_16x4!(inv_txfm_add_flipadst_adst_16x4_8bpc_neon_inner, TxType16::FlipAdst, RectTxType4::Adst);
-def_rect_entry_16x4!(inv_txfm_add_flipadst_flipadst_16x4_8bpc_neon_inner, TxType16::FlipAdst, RectTxType4::FlipAdst);
-def_rect_entry_16x4!(inv_txfm_add_identity_dct_16x4_8bpc_neon_inner, TxType16::Identity, RectTxType4::Dct);
-def_rect_entry_16x4!(inv_txfm_add_adst_identity_16x4_8bpc_neon_inner, TxType16::Adst, RectTxType4::Identity);
-def_rect_entry_16x4!(inv_txfm_add_flipadst_identity_16x4_8bpc_neon_inner, TxType16::FlipAdst, RectTxType4::Identity);
-def_rect_entry_16x4!(inv_txfm_add_identity_adst_16x4_8bpc_neon_inner, TxType16::Identity, RectTxType4::Adst);
-def_rect_entry_16x4!(inv_txfm_add_identity_flipadst_16x4_8bpc_neon_inner, TxType16::Identity, RectTxType4::FlipAdst);
+def_rect_entry_16x4!(
+    inv_txfm_add_dct_dct_16x4_8bpc_neon_inner,
+    TxType16::Dct,
+    RectTxType4::Dct
+);
+def_rect_entry_16x4!(
+    inv_txfm_add_identity_identity_16x4_8bpc_neon_inner,
+    TxType16::Identity,
+    RectTxType4::Identity
+);
+def_rect_entry_16x4!(
+    inv_txfm_add_dct_adst_16x4_8bpc_neon_inner,
+    TxType16::Dct,
+    RectTxType4::Adst
+);
+def_rect_entry_16x4!(
+    inv_txfm_add_dct_flipadst_16x4_8bpc_neon_inner,
+    TxType16::Dct,
+    RectTxType4::FlipAdst
+);
+def_rect_entry_16x4!(
+    inv_txfm_add_dct_identity_16x4_8bpc_neon_inner,
+    TxType16::Dct,
+    RectTxType4::Identity
+);
+def_rect_entry_16x4!(
+    inv_txfm_add_adst_dct_16x4_8bpc_neon_inner,
+    TxType16::Adst,
+    RectTxType4::Dct
+);
+def_rect_entry_16x4!(
+    inv_txfm_add_adst_adst_16x4_8bpc_neon_inner,
+    TxType16::Adst,
+    RectTxType4::Adst
+);
+def_rect_entry_16x4!(
+    inv_txfm_add_adst_flipadst_16x4_8bpc_neon_inner,
+    TxType16::Adst,
+    RectTxType4::FlipAdst
+);
+def_rect_entry_16x4!(
+    inv_txfm_add_flipadst_dct_16x4_8bpc_neon_inner,
+    TxType16::FlipAdst,
+    RectTxType4::Dct
+);
+def_rect_entry_16x4!(
+    inv_txfm_add_flipadst_adst_16x4_8bpc_neon_inner,
+    TxType16::FlipAdst,
+    RectTxType4::Adst
+);
+def_rect_entry_16x4!(
+    inv_txfm_add_flipadst_flipadst_16x4_8bpc_neon_inner,
+    TxType16::FlipAdst,
+    RectTxType4::FlipAdst
+);
+def_rect_entry_16x4!(
+    inv_txfm_add_identity_dct_16x4_8bpc_neon_inner,
+    TxType16::Identity,
+    RectTxType4::Dct
+);
+def_rect_entry_16x4!(
+    inv_txfm_add_adst_identity_16x4_8bpc_neon_inner,
+    TxType16::Adst,
+    RectTxType4::Identity
+);
+def_rect_entry_16x4!(
+    inv_txfm_add_flipadst_identity_16x4_8bpc_neon_inner,
+    TxType16::FlipAdst,
+    RectTxType4::Identity
+);
+def_rect_entry_16x4!(
+    inv_txfm_add_identity_adst_16x4_8bpc_neon_inner,
+    TxType16::Identity,
+    RectTxType4::Adst
+);
+def_rect_entry_16x4!(
+    inv_txfm_add_identity_flipadst_16x4_8bpc_neon_inner,
+    TxType16::Identity,
+    RectTxType4::FlipAdst
+);
 
 // ============================================================================
 // Public entry points for 4x16 transforms (16 combinations)
@@ -1100,29 +1147,117 @@ macro_rules! def_rect_entry_4x16 {
             bitdepth_max: i32,
         ) {
             inv_txfm_add_4x16_8bpc_neon(
-                token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-                $row, $col, $eob_half,
+                token,
+                dst,
+                dst_base,
+                dst_stride,
+                coeff,
+                eob,
+                bitdepth_max,
+                $row,
+                $col,
+                $eob_half,
             );
         }
     };
 }
 
-def_rect_entry_4x16!(inv_txfm_add_dct_dct_4x16_8bpc_neon_inner, RectTxType4::Dct, TxType16::Dct, 29);
-def_rect_entry_4x16!(inv_txfm_add_identity_identity_4x16_8bpc_neon_inner, RectTxType4::Identity, TxType16::Identity, 29);
-def_rect_entry_4x16!(inv_txfm_add_dct_adst_4x16_8bpc_neon_inner, RectTxType4::Dct, TxType16::Adst, 29);
-def_rect_entry_4x16!(inv_txfm_add_dct_flipadst_4x16_8bpc_neon_inner, RectTxType4::Dct, TxType16::FlipAdst, 29);
-def_rect_entry_4x16!(inv_txfm_add_dct_identity_4x16_8bpc_neon_inner, RectTxType4::Dct, TxType16::Identity, 8);
-def_rect_entry_4x16!(inv_txfm_add_adst_dct_4x16_8bpc_neon_inner, RectTxType4::Adst, TxType16::Dct, 29);
-def_rect_entry_4x16!(inv_txfm_add_adst_adst_4x16_8bpc_neon_inner, RectTxType4::Adst, TxType16::Adst, 29);
-def_rect_entry_4x16!(inv_txfm_add_adst_flipadst_4x16_8bpc_neon_inner, RectTxType4::Adst, TxType16::FlipAdst, 29);
-def_rect_entry_4x16!(inv_txfm_add_flipadst_dct_4x16_8bpc_neon_inner, RectTxType4::FlipAdst, TxType16::Dct, 29);
-def_rect_entry_4x16!(inv_txfm_add_flipadst_adst_4x16_8bpc_neon_inner, RectTxType4::FlipAdst, TxType16::Adst, 29);
-def_rect_entry_4x16!(inv_txfm_add_flipadst_flipadst_4x16_8bpc_neon_inner, RectTxType4::FlipAdst, TxType16::FlipAdst, 29);
-def_rect_entry_4x16!(inv_txfm_add_identity_dct_4x16_8bpc_neon_inner, RectTxType4::Identity, TxType16::Dct, 32);
-def_rect_entry_4x16!(inv_txfm_add_adst_identity_4x16_8bpc_neon_inner, RectTxType4::Adst, TxType16::Identity, 8);
-def_rect_entry_4x16!(inv_txfm_add_flipadst_identity_4x16_8bpc_neon_inner, RectTxType4::FlipAdst, TxType16::Identity, 8);
-def_rect_entry_4x16!(inv_txfm_add_identity_adst_4x16_8bpc_neon_inner, RectTxType4::Identity, TxType16::Adst, 32);
-def_rect_entry_4x16!(inv_txfm_add_identity_flipadst_4x16_8bpc_neon_inner, RectTxType4::Identity, TxType16::FlipAdst, 32);
+def_rect_entry_4x16!(
+    inv_txfm_add_dct_dct_4x16_8bpc_neon_inner,
+    RectTxType4::Dct,
+    TxType16::Dct,
+    29
+);
+def_rect_entry_4x16!(
+    inv_txfm_add_identity_identity_4x16_8bpc_neon_inner,
+    RectTxType4::Identity,
+    TxType16::Identity,
+    29
+);
+def_rect_entry_4x16!(
+    inv_txfm_add_dct_adst_4x16_8bpc_neon_inner,
+    RectTxType4::Dct,
+    TxType16::Adst,
+    29
+);
+def_rect_entry_4x16!(
+    inv_txfm_add_dct_flipadst_4x16_8bpc_neon_inner,
+    RectTxType4::Dct,
+    TxType16::FlipAdst,
+    29
+);
+def_rect_entry_4x16!(
+    inv_txfm_add_dct_identity_4x16_8bpc_neon_inner,
+    RectTxType4::Dct,
+    TxType16::Identity,
+    8
+);
+def_rect_entry_4x16!(
+    inv_txfm_add_adst_dct_4x16_8bpc_neon_inner,
+    RectTxType4::Adst,
+    TxType16::Dct,
+    29
+);
+def_rect_entry_4x16!(
+    inv_txfm_add_adst_adst_4x16_8bpc_neon_inner,
+    RectTxType4::Adst,
+    TxType16::Adst,
+    29
+);
+def_rect_entry_4x16!(
+    inv_txfm_add_adst_flipadst_4x16_8bpc_neon_inner,
+    RectTxType4::Adst,
+    TxType16::FlipAdst,
+    29
+);
+def_rect_entry_4x16!(
+    inv_txfm_add_flipadst_dct_4x16_8bpc_neon_inner,
+    RectTxType4::FlipAdst,
+    TxType16::Dct,
+    29
+);
+def_rect_entry_4x16!(
+    inv_txfm_add_flipadst_adst_4x16_8bpc_neon_inner,
+    RectTxType4::FlipAdst,
+    TxType16::Adst,
+    29
+);
+def_rect_entry_4x16!(
+    inv_txfm_add_flipadst_flipadst_4x16_8bpc_neon_inner,
+    RectTxType4::FlipAdst,
+    TxType16::FlipAdst,
+    29
+);
+def_rect_entry_4x16!(
+    inv_txfm_add_identity_dct_4x16_8bpc_neon_inner,
+    RectTxType4::Identity,
+    TxType16::Dct,
+    32
+);
+def_rect_entry_4x16!(
+    inv_txfm_add_adst_identity_4x16_8bpc_neon_inner,
+    RectTxType4::Adst,
+    TxType16::Identity,
+    8
+);
+def_rect_entry_4x16!(
+    inv_txfm_add_flipadst_identity_4x16_8bpc_neon_inner,
+    RectTxType4::FlipAdst,
+    TxType16::Identity,
+    8
+);
+def_rect_entry_4x16!(
+    inv_txfm_add_identity_adst_4x16_8bpc_neon_inner,
+    RectTxType4::Identity,
+    TxType16::Adst,
+    32
+);
+def_rect_entry_4x16!(
+    inv_txfm_add_identity_flipadst_4x16_8bpc_neon_inner,
+    RectTxType4::Identity,
+    TxType16::FlipAdst,
+    32
+);
 
 // ============================================================================
 // Public entry points for 16x8 transforms (16 combinations)
@@ -1142,29 +1277,100 @@ macro_rules! def_rect_entry_16x8 {
             bitdepth_max: i32,
         ) {
             inv_txfm_add_16x8_8bpc_neon(
-                token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-                $row, $col,
+                token,
+                dst,
+                dst_base,
+                dst_stride,
+                coeff,
+                eob,
+                bitdepth_max,
+                $row,
+                $col,
             );
         }
     };
 }
 
-def_rect_entry_16x8!(inv_txfm_add_dct_dct_16x8_8bpc_neon_inner, TxType16::Dct, RectTxType8::Dct);
-def_rect_entry_16x8!(inv_txfm_add_identity_identity_16x8_8bpc_neon_inner, TxType16::Identity, RectTxType8::Identity);
-def_rect_entry_16x8!(inv_txfm_add_dct_adst_16x8_8bpc_neon_inner, TxType16::Dct, RectTxType8::Adst);
-def_rect_entry_16x8!(inv_txfm_add_dct_flipadst_16x8_8bpc_neon_inner, TxType16::Dct, RectTxType8::FlipAdst);
-def_rect_entry_16x8!(inv_txfm_add_dct_identity_16x8_8bpc_neon_inner, TxType16::Dct, RectTxType8::Identity);
-def_rect_entry_16x8!(inv_txfm_add_adst_dct_16x8_8bpc_neon_inner, TxType16::Adst, RectTxType8::Dct);
-def_rect_entry_16x8!(inv_txfm_add_adst_adst_16x8_8bpc_neon_inner, TxType16::Adst, RectTxType8::Adst);
-def_rect_entry_16x8!(inv_txfm_add_adst_flipadst_16x8_8bpc_neon_inner, TxType16::Adst, RectTxType8::FlipAdst);
-def_rect_entry_16x8!(inv_txfm_add_flipadst_dct_16x8_8bpc_neon_inner, TxType16::FlipAdst, RectTxType8::Dct);
-def_rect_entry_16x8!(inv_txfm_add_flipadst_adst_16x8_8bpc_neon_inner, TxType16::FlipAdst, RectTxType8::Adst);
-def_rect_entry_16x8!(inv_txfm_add_flipadst_flipadst_16x8_8bpc_neon_inner, TxType16::FlipAdst, RectTxType8::FlipAdst);
-def_rect_entry_16x8!(inv_txfm_add_identity_dct_16x8_8bpc_neon_inner, TxType16::Identity, RectTxType8::Dct);
-def_rect_entry_16x8!(inv_txfm_add_adst_identity_16x8_8bpc_neon_inner, TxType16::Adst, RectTxType8::Identity);
-def_rect_entry_16x8!(inv_txfm_add_flipadst_identity_16x8_8bpc_neon_inner, TxType16::FlipAdst, RectTxType8::Identity);
-def_rect_entry_16x8!(inv_txfm_add_identity_adst_16x8_8bpc_neon_inner, TxType16::Identity, RectTxType8::Adst);
-def_rect_entry_16x8!(inv_txfm_add_identity_flipadst_16x8_8bpc_neon_inner, TxType16::Identity, RectTxType8::FlipAdst);
+def_rect_entry_16x8!(
+    inv_txfm_add_dct_dct_16x8_8bpc_neon_inner,
+    TxType16::Dct,
+    RectTxType8::Dct
+);
+def_rect_entry_16x8!(
+    inv_txfm_add_identity_identity_16x8_8bpc_neon_inner,
+    TxType16::Identity,
+    RectTxType8::Identity
+);
+def_rect_entry_16x8!(
+    inv_txfm_add_dct_adst_16x8_8bpc_neon_inner,
+    TxType16::Dct,
+    RectTxType8::Adst
+);
+def_rect_entry_16x8!(
+    inv_txfm_add_dct_flipadst_16x8_8bpc_neon_inner,
+    TxType16::Dct,
+    RectTxType8::FlipAdst
+);
+def_rect_entry_16x8!(
+    inv_txfm_add_dct_identity_16x8_8bpc_neon_inner,
+    TxType16::Dct,
+    RectTxType8::Identity
+);
+def_rect_entry_16x8!(
+    inv_txfm_add_adst_dct_16x8_8bpc_neon_inner,
+    TxType16::Adst,
+    RectTxType8::Dct
+);
+def_rect_entry_16x8!(
+    inv_txfm_add_adst_adst_16x8_8bpc_neon_inner,
+    TxType16::Adst,
+    RectTxType8::Adst
+);
+def_rect_entry_16x8!(
+    inv_txfm_add_adst_flipadst_16x8_8bpc_neon_inner,
+    TxType16::Adst,
+    RectTxType8::FlipAdst
+);
+def_rect_entry_16x8!(
+    inv_txfm_add_flipadst_dct_16x8_8bpc_neon_inner,
+    TxType16::FlipAdst,
+    RectTxType8::Dct
+);
+def_rect_entry_16x8!(
+    inv_txfm_add_flipadst_adst_16x8_8bpc_neon_inner,
+    TxType16::FlipAdst,
+    RectTxType8::Adst
+);
+def_rect_entry_16x8!(
+    inv_txfm_add_flipadst_flipadst_16x8_8bpc_neon_inner,
+    TxType16::FlipAdst,
+    RectTxType8::FlipAdst
+);
+def_rect_entry_16x8!(
+    inv_txfm_add_identity_dct_16x8_8bpc_neon_inner,
+    TxType16::Identity,
+    RectTxType8::Dct
+);
+def_rect_entry_16x8!(
+    inv_txfm_add_adst_identity_16x8_8bpc_neon_inner,
+    TxType16::Adst,
+    RectTxType8::Identity
+);
+def_rect_entry_16x8!(
+    inv_txfm_add_flipadst_identity_16x8_8bpc_neon_inner,
+    TxType16::FlipAdst,
+    RectTxType8::Identity
+);
+def_rect_entry_16x8!(
+    inv_txfm_add_identity_adst_16x8_8bpc_neon_inner,
+    TxType16::Identity,
+    RectTxType8::Adst
+);
+def_rect_entry_16x8!(
+    inv_txfm_add_identity_flipadst_16x8_8bpc_neon_inner,
+    TxType16::Identity,
+    RectTxType8::FlipAdst
+);
 
 // ============================================================================
 // Public entry points for 8x16 transforms (16 combinations)
@@ -1184,26 +1390,114 @@ macro_rules! def_rect_entry_8x16 {
             bitdepth_max: i32,
         ) {
             inv_txfm_add_8x16_8bpc_neon(
-                token, dst, dst_base, dst_stride, coeff, eob, bitdepth_max,
-                $row, $col, $eob_half,
+                token,
+                dst,
+                dst_base,
+                dst_stride,
+                coeff,
+                eob,
+                bitdepth_max,
+                $row,
+                $col,
+                $eob_half,
             );
         }
     };
 }
 
-def_rect_entry_8x16!(inv_txfm_add_dct_dct_8x16_8bpc_neon_inner, RectTxType8::Dct, TxType16::Dct, 43);
-def_rect_entry_8x16!(inv_txfm_add_identity_identity_8x16_8bpc_neon_inner, RectTxType8::Identity, TxType16::Identity, 43);
-def_rect_entry_8x16!(inv_txfm_add_dct_adst_8x16_8bpc_neon_inner, RectTxType8::Dct, TxType16::Adst, 43);
-def_rect_entry_8x16!(inv_txfm_add_dct_flipadst_8x16_8bpc_neon_inner, RectTxType8::Dct, TxType16::FlipAdst, 43);
-def_rect_entry_8x16!(inv_txfm_add_dct_identity_8x16_8bpc_neon_inner, RectTxType8::Dct, TxType16::Identity, 8);
-def_rect_entry_8x16!(inv_txfm_add_adst_dct_8x16_8bpc_neon_inner, RectTxType8::Adst, TxType16::Dct, 43);
-def_rect_entry_8x16!(inv_txfm_add_adst_adst_8x16_8bpc_neon_inner, RectTxType8::Adst, TxType16::Adst, 43);
-def_rect_entry_8x16!(inv_txfm_add_adst_flipadst_8x16_8bpc_neon_inner, RectTxType8::Adst, TxType16::FlipAdst, 43);
-def_rect_entry_8x16!(inv_txfm_add_flipadst_dct_8x16_8bpc_neon_inner, RectTxType8::FlipAdst, TxType16::Dct, 43);
-def_rect_entry_8x16!(inv_txfm_add_flipadst_adst_8x16_8bpc_neon_inner, RectTxType8::FlipAdst, TxType16::Adst, 43);
-def_rect_entry_8x16!(inv_txfm_add_flipadst_flipadst_8x16_8bpc_neon_inner, RectTxType8::FlipAdst, TxType16::FlipAdst, 43);
-def_rect_entry_8x16!(inv_txfm_add_identity_dct_8x16_8bpc_neon_inner, RectTxType8::Identity, TxType16::Dct, 64);
-def_rect_entry_8x16!(inv_txfm_add_adst_identity_8x16_8bpc_neon_inner, RectTxType8::Adst, TxType16::Identity, 8);
-def_rect_entry_8x16!(inv_txfm_add_flipadst_identity_8x16_8bpc_neon_inner, RectTxType8::FlipAdst, TxType16::Identity, 8);
-def_rect_entry_8x16!(inv_txfm_add_identity_adst_8x16_8bpc_neon_inner, RectTxType8::Identity, TxType16::Adst, 64);
-def_rect_entry_8x16!(inv_txfm_add_identity_flipadst_8x16_8bpc_neon_inner, RectTxType8::Identity, TxType16::FlipAdst, 64);
+def_rect_entry_8x16!(
+    inv_txfm_add_dct_dct_8x16_8bpc_neon_inner,
+    RectTxType8::Dct,
+    TxType16::Dct,
+    43
+);
+def_rect_entry_8x16!(
+    inv_txfm_add_identity_identity_8x16_8bpc_neon_inner,
+    RectTxType8::Identity,
+    TxType16::Identity,
+    43
+);
+def_rect_entry_8x16!(
+    inv_txfm_add_dct_adst_8x16_8bpc_neon_inner,
+    RectTxType8::Dct,
+    TxType16::Adst,
+    43
+);
+def_rect_entry_8x16!(
+    inv_txfm_add_dct_flipadst_8x16_8bpc_neon_inner,
+    RectTxType8::Dct,
+    TxType16::FlipAdst,
+    43
+);
+def_rect_entry_8x16!(
+    inv_txfm_add_dct_identity_8x16_8bpc_neon_inner,
+    RectTxType8::Dct,
+    TxType16::Identity,
+    8
+);
+def_rect_entry_8x16!(
+    inv_txfm_add_adst_dct_8x16_8bpc_neon_inner,
+    RectTxType8::Adst,
+    TxType16::Dct,
+    43
+);
+def_rect_entry_8x16!(
+    inv_txfm_add_adst_adst_8x16_8bpc_neon_inner,
+    RectTxType8::Adst,
+    TxType16::Adst,
+    43
+);
+def_rect_entry_8x16!(
+    inv_txfm_add_adst_flipadst_8x16_8bpc_neon_inner,
+    RectTxType8::Adst,
+    TxType16::FlipAdst,
+    43
+);
+def_rect_entry_8x16!(
+    inv_txfm_add_flipadst_dct_8x16_8bpc_neon_inner,
+    RectTxType8::FlipAdst,
+    TxType16::Dct,
+    43
+);
+def_rect_entry_8x16!(
+    inv_txfm_add_flipadst_adst_8x16_8bpc_neon_inner,
+    RectTxType8::FlipAdst,
+    TxType16::Adst,
+    43
+);
+def_rect_entry_8x16!(
+    inv_txfm_add_flipadst_flipadst_8x16_8bpc_neon_inner,
+    RectTxType8::FlipAdst,
+    TxType16::FlipAdst,
+    43
+);
+def_rect_entry_8x16!(
+    inv_txfm_add_identity_dct_8x16_8bpc_neon_inner,
+    RectTxType8::Identity,
+    TxType16::Dct,
+    64
+);
+def_rect_entry_8x16!(
+    inv_txfm_add_adst_identity_8x16_8bpc_neon_inner,
+    RectTxType8::Adst,
+    TxType16::Identity,
+    8
+);
+def_rect_entry_8x16!(
+    inv_txfm_add_flipadst_identity_8x16_8bpc_neon_inner,
+    RectTxType8::FlipAdst,
+    TxType16::Identity,
+    8
+);
+def_rect_entry_8x16!(
+    inv_txfm_add_identity_adst_8x16_8bpc_neon_inner,
+    RectTxType8::Identity,
+    TxType16::Adst,
+    64
+);
+def_rect_entry_8x16!(
+    inv_txfm_add_identity_flipadst_8x16_8bpc_neon_inner,
+    RectTxType8::Identity,
+    TxType16::FlipAdst,
+    64
+);
