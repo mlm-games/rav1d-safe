@@ -12,15 +12,18 @@ Safe SIMD fork of rav1d — 160k lines of hand-written assembly replaced by safe
 **Spec**: `RAYON-THREADING-SPEC.md` (2027 lines) — complete data access patterns + ownership model.
 
 **Implementation plan** (Phase 1: scalar row-slice validation):
-- [ ] `PlaneRows` type + `split_rows_by_tiles` column splitter
-- [ ] Row-slice scalar MC: `put_rows`, `prep_rows`, `put_8tap_rows`, `put_bilin_rows`
-- [ ] Row-slice scalar compound: `avg_rows`, `w_avg_rows`, `mask_rows`, `w_mask_rows`, `blend_rows`
-- [ ] Row-slice ITX: `inv_txfm_add_rows`
-- [ ] Row-slice ipred: all 14 modes reading from topleft scratch
+- [x] `PlaneRows` type + `split_rows_by_tiles` column splitter (8 tests)
+- [x] Row-slice scalar MC: `put_rows`, `prep_rows`, `put_8tap_rows`, `put_bilin_rows` (4 tests)
+- [x] Row-slice scalar compound: `avg_rows`, `w_avg_rows`, `mask_rows`, `blend_rows` (included above)
+- [x] Row-slice ITX: `inv_txfm_add_rows` (2 tests)
+- [x] Row-slice ipred: DC variants, V, H, paeth, smooth variants, CFL, palette (5 tests)
+- [x] Parity tests: 13 cross-validation tests (MC, ITX, ipred, tile integration)
+- [x] Rayon pipeline: `run_pipeline` with tile-parallel recon via rayon::scope (5 tests)
+- [x] True parallelism: drain + spawn per-tile for concurrent execution
 - [ ] Row-slice loopfilter, CDEF, LR, film grain
 - [ ] Wire into decode pipeline alongside existing PicOffset path
 - [ ] Validate: 766/768 conformance at scalar CPU level
-- [ ] Rayon scope integration with channel-based SB-row pipeline
+- [ ] SB-row pipelining via ProgressiveFrame
 
 **Key design**: "re-split, don't persist" — row slices are temporary views per phase, re-created from the flat buffer. Tile recon gets column strips; filtering gets full-width rows.
 
