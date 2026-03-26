@@ -20,9 +20,13 @@ Safe SIMD fork of rav1d — 160k lines of hand-written assembly replaced by safe
 - [x] Parity tests: 13 cross-validation tests (MC, ITX, ipred, tile integration)
 - [x] Rayon pipeline: `run_pipeline` with tile-parallel recon via rayon::scope (5 tests)
 - [x] True parallelism: drain + spawn per-tile for concurrent execution
+- [x] ProgressiveFrame with monotonic freeze boundary (9 tests)
+- [x] Rayon decode path with per-tile Rav1dTaskContext — 14/14 conformance (sequential tiles)
+- [x] Actual parallel tile execution — 14/14 conformance with unchecked (rayon::scope::spawn)
+- [x] FramePlanesMut/TilePlaneRows — DisjointMut-free pixel types (3 tests)
+- [ ] Replace PicOffset with TilePlaneRows in recon_b_intra/recon_b_inter
 - [ ] Row-slice loopfilter, CDEF, LR, film grain
-- [ ] Wire into decode pipeline alongside existing PicOffset path
-- [ ] Validate: 766/768 conformance at scalar CPU level
+- [ ] Validate: forbid(unsafe_code) tile-parallel conformance (no unchecked needed)
 - [ ] SB-row pipelining via ProgressiveFrame
 
 **Key design**: "re-split, don't persist" — row slices are temporary views per phase, re-created from the flat buffer. Tile recon gets column strips; filtering gets full-width rows.
