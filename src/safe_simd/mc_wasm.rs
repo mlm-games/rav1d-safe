@@ -8,8 +8,7 @@
 //! - No pmulhi: synthesize from i32x4_extmul + shift + narrow
 //! - No cross-lane pack: i16x8_narrow_i32x4 / u8x16_narrow_i16x8 are in-order
 
-#![cfg_attr(not(feature = "unchecked"), forbid(unsafe_code))]
-#![cfg_attr(feature = "unchecked", deny(unsafe_code))]
+#![forbid(unsafe_code)]
 
 #[cfg(target_arch = "wasm32")]
 use core::arch::wasm32::*;
