@@ -264,7 +264,7 @@ Supported targets: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `i68
 
 New code in this fork (safe SIMD implementations, managed API, tooling) is dual-licensed:
 
-- **[AGPL-3.0-or-later](LICENSE-AGPL)** for open-source use
+- **[AGPL-3.0](LICENSE-AGPL3)** for open-source use
 - **Commercial license** available from [Imazen](https://imazen.io) for proprietary use
 
 The upstream rav1d/dav1d code retains its original **[BSD-2-Clause](COPYING)** license.
