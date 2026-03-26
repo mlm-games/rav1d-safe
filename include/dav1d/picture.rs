@@ -703,6 +703,43 @@ impl<'a> Rav1dPictureDataComponentOffset<'a> {
         (guard, self.offset)
     }
 
+    /// Create a tracked mutable guard covering exactly a w×h pixel block
+    /// starting at this offset. Returns `(guard, 0)` since the guard starts
+    /// at self.offset.
+    ///
+    /// For positive strides, covers `(h-1)*stride + w` pixels from self.offset.
+    /// For negative strides, covers the same span but starting `(h-1)*stride`
+    /// pixels before self.offset.
+    #[inline]
+    #[cfg_attr(debug_assertions, track_caller)]
+    pub fn narrow_guard_mut<BD: BitDepth>(
+        &self,
+        w: usize,
+        h: usize,
+    ) -> (
+        DisjointMutGuard<'a, Rav1dPictureDataComponentInner, [BD::Pixel]>,
+        usize,
+    ) {
+        use crate::src::strided::Strided as _;
+        let pxstride = self.data.pixel_stride::<BD>();
+        let abs_stride = pxstride.unsigned_abs();
+        let total = if h == 0 || w == 0 {
+            0
+        } else {
+            (h - 1) * abs_stride + w
+        };
+        if pxstride >= 0 {
+            let guard = self.data.slice_mut::<BD, _>((self.offset.., ..total));
+            (guard, 0)
+        } else {
+            // Negative stride: rows go upward, so the first pixel row
+            // is at the highest address and the last row is at the lowest.
+            let start = self.offset + 1 - total;
+            let guard = self.data.slice_mut::<BD, _>((start.., ..total));
+            (guard, total - 1)
+        }
+    }
+
     /// Create a tracked immutable guard covering the entire picture component.
     #[inline]
     #[cfg_attr(debug_assertions, track_caller)]

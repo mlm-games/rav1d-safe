@@ -559,7 +559,7 @@ pub fn avg_dispatch<BD: BitDepth>(
 ) -> bool {
     use zerocopy::IntoBytes;
     let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
+    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
     let dst_bytes = dst_guard.as_mut_bytes();
     let dst_offset = dst_base * pixel_size;
     let dst_stride = dst.stride();
@@ -620,7 +620,7 @@ pub fn w_avg_dispatch<BD: BitDepth>(
 ) -> bool {
     use zerocopy::IntoBytes;
     let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
+    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
     let dst_bytes = dst_guard.as_mut_bytes();
     let dst_offset = dst_base * pixel_size;
     let dst_stride = dst.stride();
@@ -684,7 +684,7 @@ pub fn mask_dispatch<BD: BitDepth>(
 ) -> bool {
     use zerocopy::IntoBytes;
     let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
+    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
     let dst_bytes = dst_guard.as_mut_bytes();
     let dst_offset = dst_base * pixel_size;
     let dst_stride = dst.stride();
