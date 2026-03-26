@@ -139,6 +139,7 @@ pub mod src {
     mod qm;
     pub(crate) mod relaxed_atomic;
     mod scan;
+    pub(crate) mod frame_pixel_data;
     pub(crate) mod frame_rows;
     pub(crate) mod ipred_rows;
     pub(crate) mod itx_rows;
