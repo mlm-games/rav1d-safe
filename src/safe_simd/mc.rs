@@ -618,15 +618,13 @@ const PW_2048: i16 = 2048;
 #[arcane]
 fn w_avg_8bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
     h: i32,
     weight: i32,
 ) {
-    let mut dst = dst.flex_mut();
     let w = w as usize;
     let h = h as usize;
 
@@ -642,7 +640,7 @@ fn w_avg_8bpc_avx2_safe(
     for row in 0..h {
         let tmp1_row = &tmp1_ptr[row * w..][..w];
         let tmp2_row = &tmp2_ptr[row * w..][..w];
-        let dst_row = &mut dst[row * dst_stride..][..w];
+        let dst_row = &mut dst_rows[row][..w];
 
         let mut col = 0;
         while col + 32 <= w {
@@ -704,13 +702,14 @@ pub unsafe extern "C" fn w_avg_8bpc_avx2(
     _bitdepth_max: i32,
     _dst: *const FFISafe<PicOffset>,
 ) {
+    let stride = dst_stride as usize;
     let dst = unsafe {
-        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
+        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * stride)
     };
+    let mut rows: Vec<&mut [u8]> = dst.chunks_mut(stride).take(h as usize).collect();
     w_avg_8bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut rows,
         tmp1,
         tmp2,
         w,
@@ -724,15 +723,13 @@ pub unsafe extern "C" fn w_avg_8bpc_avx2(
 #[arcane]
 fn w_avg_8bpc_avx512_safe(
     _token: Server64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
     h: i32,
     weight: i32,
 ) {
-    let mut dst = dst.flex_mut();
     let w = w as usize;
     let h = h as usize;
 
@@ -749,7 +746,7 @@ fn w_avg_8bpc_avx512_safe(
     for row in 0..h {
         let tmp1_row = &tmp1_ptr[row * w..][..w];
         let tmp2_row = &tmp2_ptr[row * w..][..w];
-        let dst_row = &mut dst[row * dst_stride..][..w];
+        let dst_row = &mut dst_rows[row][..w];
 
         let mut col = 0;
 
@@ -816,8 +813,7 @@ fn w_avg_8bpc_avx512_safe(
 #[arcane]
 fn w_avg_16bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
@@ -825,7 +821,6 @@ fn w_avg_16bpc_avx2_safe(
     weight: i32,
     bitdepth_max: i32,
 ) {
-    let mut dst = dst.flex_mut();
     let w = w as usize;
     let h = h as usize;
 
@@ -850,7 +845,7 @@ fn w_avg_16bpc_avx2_safe(
     for row in 0..h {
         let tmp1_row = &tmp1[row * w..][..w];
         let tmp2_row = &tmp2[row * w..][..w];
-        let dst_row_bytes = &mut dst[row * dst_stride..][..w * 2];
+        let dst_row_bytes = &mut dst_rows[row][..w * 2];
         let dst_row: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(dst_row_bytes).unwrap();
 
         let mut col = 0usize;
@@ -914,13 +909,14 @@ pub unsafe extern "C" fn w_avg_16bpc_avx2(
     bitdepth_max: i32,
     _dst: *const FFISafe<PicOffset>,
 ) {
+    let stride = dst_stride as usize;
     let dst = unsafe {
-        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
+        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * stride)
     };
+    let mut rows: Vec<&mut [u8]> = dst.chunks_mut(stride).take(h as usize).collect();
     w_avg_16bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut rows,
         tmp1,
         tmp2,
         w,
@@ -937,8 +933,7 @@ pub unsafe extern "C" fn w_avg_16bpc_avx2(
 #[arcane]
 fn w_avg_16bpc_avx512_safe(
     _token: Server64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
@@ -946,7 +941,6 @@ fn w_avg_16bpc_avx512_safe(
     weight: i32,
     bitdepth_max: i32,
 ) {
-    let mut dst = dst.flex_mut();
     let w = w as usize;
     let h = h as usize;
 
@@ -969,7 +963,7 @@ fn w_avg_16bpc_avx512_safe(
     for row in 0..h {
         let tmp1_row = &tmp1[row * w..][..w];
         let tmp2_row = &tmp2[row * w..][..w];
-        let dst_row_bytes = &mut dst[row * dst_stride..][..w * 2];
+        let dst_row_bytes = &mut dst_rows[row][..w * 2];
         let dst_row: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(dst_row_bytes).unwrap();
 
         let mut col = 0usize;
@@ -1060,16 +1054,13 @@ pub unsafe extern "C" fn w_avg_scalar(
 #[arcane]
 fn mask_8bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
     h: i32,
     mask: &[u8],
 ) {
-    let mut dst = dst.flex_mut();
-    let mask = mask.flex();
     let w = w as usize;
     let h = h as usize;
 
@@ -1079,7 +1070,7 @@ fn mask_8bpc_avx2_safe(
         let tmp1_row = &tmp1[row * w..][..w];
         let tmp2_row = &tmp2[row * w..][..w];
         let mask_row = &mask[row * w..][..w];
-        let dst_row = &mut dst[row * dst_stride..][..w];
+        let dst_row = &mut dst_rows[row][..w];
 
         let mut col = 0usize;
 
@@ -1157,14 +1148,15 @@ pub unsafe extern "C" fn mask_8bpc_avx2(
     _bitdepth_max: i32,
     _dst: *const FFISafe<PicOffset>,
 ) {
+    let stride = dst_stride as usize;
     let dst = unsafe {
-        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
+        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * stride)
     };
     let mask = unsafe { std::slice::from_raw_parts(mask_ptr, (w * h) as usize) };
+    let mut rows: Vec<&mut [u8]> = dst.chunks_mut(stride).take(h as usize).collect();
     mask_8bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut rows,
         tmp1,
         tmp2,
         w,
@@ -1180,16 +1172,13 @@ pub unsafe extern "C" fn mask_8bpc_avx2(
 #[arcane]
 fn mask_8bpc_avx512_safe(
     _token: Server64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
     h: i32,
     mask: &[u8],
 ) {
-    let mut dst = dst.flex_mut();
-    let mask = mask.flex();
     let w = w as usize;
     let h = h as usize;
 
@@ -1199,7 +1188,7 @@ fn mask_8bpc_avx512_safe(
         let tmp1_row = &tmp1[row * w..][..w];
         let tmp2_row = &tmp2[row * w..][..w];
         let mask_row = &mask[row * w..][..w];
-        let dst_row = &mut dst[row * dst_stride..][..w];
+        let dst_row = &mut dst_rows[row][..w];
 
         let mut col = 0usize;
 
@@ -1307,8 +1296,7 @@ fn mask_8bpc_avx512_safe(
 #[arcane]
 fn mask_16bpc_avx512_safe(
     _token: Server64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
@@ -1316,8 +1304,6 @@ fn mask_16bpc_avx512_safe(
     mask: &[u8],
     bitdepth_max: i32,
 ) {
-    let mut dst = dst.flex_mut();
-    let mask = mask.flex();
     let w = w as usize;
     let h = h as usize;
     let max = bitdepth_max as i32;
@@ -1339,7 +1325,7 @@ fn mask_16bpc_avx512_safe(
         let tmp1_row = &tmp1[row * w..][..w];
         let tmp2_row = &tmp2[row * w..][..w];
         let mask_row = &mask[row * w..][..w];
-        let dst_row_bytes = &mut dst[row * dst_stride..][..w * 2];
+        let dst_row_bytes = &mut dst_rows[row][..w * 2];
         let dst_row: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(dst_row_bytes).unwrap();
 
         let mut col = 0usize;
@@ -1429,8 +1415,7 @@ fn mask_16bpc_avx512_safe(
 #[arcane]
 fn mask_16bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp1: &[i16; COMPINTER_LEN],
     tmp2: &[i16; COMPINTER_LEN],
     w: i32,
@@ -1438,8 +1423,6 @@ fn mask_16bpc_avx2_safe(
     mask: &[u8],
     bitdepth_max: i32,
 ) {
-    let mut dst = dst.flex_mut();
-    let mask = mask.flex();
     let w = w as usize;
     let h = h as usize;
     let max = bitdepth_max as i32;
@@ -1463,7 +1446,7 @@ fn mask_16bpc_avx2_safe(
         let tmp1_row = &tmp1[row * w..][..w];
         let tmp2_row = &tmp2[row * w..][..w];
         let mask_row = &mask[row * w..][..w];
-        let dst_row_bytes = &mut dst[row * dst_stride..][..w * 2];
+        let dst_row_bytes = &mut dst_rows[row][..w * 2];
         let dst_row: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(dst_row_bytes).unwrap();
 
         let mut col = 0usize;
@@ -1530,14 +1513,15 @@ pub unsafe extern "C" fn mask_16bpc_avx2(
     bitdepth_max: i32,
     _dst: *const FFISafe<PicOffset>,
 ) {
+    let stride = dst_stride as usize;
     let dst = unsafe {
-        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
+        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * stride)
     };
     let mask = unsafe { std::slice::from_raw_parts(mask_ptr, (w * h) as usize) };
+    let mut rows: Vec<&mut [u8]> = dst.chunks_mut(stride).take(h as usize).collect();
     mask_16bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut rows,
         tmp1,
         tmp2,
         w,
@@ -1600,16 +1584,12 @@ use crate::src::internal::{SCRATCH_INTER_INTRA_BUF_LEN, SCRATCH_LAP_LEN};
 #[arcane]
 fn blend_8bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp: &[u8],
     w: i32,
     h: i32,
     mask: &[u8],
 ) {
-    let mut dst = dst.flex_mut();
-    let tmp = tmp.flex();
-    let mask = mask.flex();
     let w = w as usize;
     let h = h as usize;
 
@@ -1617,7 +1597,7 @@ fn blend_8bpc_avx2_safe(
     let rnd = _mm256_set1_epi16(32);
 
     for row in 0..h {
-        let dst_row = &mut dst[row * dst_stride..][..w];
+        let dst_row = &mut dst_rows[row][..w];
         let tmp_row = &tmp[row * w..][..w];
         let mask_row = &mask[row * w..][..w];
 
@@ -1676,15 +1656,16 @@ pub unsafe extern "C" fn blend_8bpc_avx2(
     mask_ptr: *const u8,
     _dst: *const FFISafe<PicOffset>,
 ) {
+    let stride = dst_stride as usize;
     let dst = unsafe {
-        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
+        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * stride)
     };
     let tmp_slice = unsafe { std::slice::from_raw_parts(tmp as *const u8, (w * h) as usize) };
     let mask = unsafe { std::slice::from_raw_parts(mask_ptr, (w * h) as usize) };
+    let mut rows: Vec<&mut [u8]> = dst.chunks_mut(stride).take(h as usize).collect();
     blend_8bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut rows,
         tmp_slice,
         w,
         h,
@@ -1697,16 +1678,12 @@ pub unsafe extern "C" fn blend_8bpc_avx2(
 #[arcane]
 fn blend_16bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp: &[u8],
     w: i32,
     h: i32,
     mask: &[u8],
 ) {
-    let mut dst = dst.flex_mut();
-    let tmp = tmp.flex();
-    let mask = mask.flex();
     let w = w as usize;
     let h = h as usize;
 
@@ -1714,7 +1691,7 @@ fn blend_16bpc_avx2_safe(
     let sixty_four = _mm256_set1_epi32(64);
 
     for row in 0..h {
-        let dst_row_bytes = &mut dst[row * dst_stride..][..w * 2];
+        let dst_row_bytes = &mut dst_rows[row][..w * 2];
         let dst_row: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(dst_row_bytes).unwrap();
         let tmp_row_bytes = &tmp[row * w * 2..][..w * 2];
         let tmp_row: &[u16] =
@@ -1777,15 +1754,16 @@ pub unsafe extern "C" fn blend_16bpc_avx2(
     mask_ptr: *const u8,
     _dst: *const FFISafe<PicOffset>,
 ) {
+    let stride = dst_stride as usize;
     let dst = unsafe {
-        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
+        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * stride)
     };
     let tmp_slice = unsafe { std::slice::from_raw_parts(tmp as *const u8, (w * h) as usize * 2) };
     let mask = unsafe { std::slice::from_raw_parts(mask_ptr, (w * h) as usize) };
+    let mut rows: Vec<&mut [u8]> = dst.chunks_mut(stride).take(h as usize).collect();
     blend_16bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut rows,
         tmp_slice,
         w,
         h,
@@ -1808,14 +1786,11 @@ use crate::src::tables::dav1d_obmc_masks;
 #[arcane]
 fn blend_v_8bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp: &[u8],
     w: i32,
     h: i32,
 ) {
-    let mut dst = dst.flex_mut();
-    let tmp = tmp.flex();
     let w = w as usize;
     let h = h as usize;
     // blend_v: mask indexed by column, offset by w, only process w*3/4 columns
@@ -1826,7 +1801,7 @@ fn blend_v_8bpc_avx2_safe(
     let sixty_four = _mm256_set1_epi16(64);
 
     for row in 0..h {
-        let dst_row = &mut dst[row * dst_stride..][..w_eff];
+        let dst_row = &mut dst_rows[row][..w_eff];
         // tmp uses full w stride even though we only write w_eff columns
         let tmp_row = &tmp[row * w..][..w_eff];
 
@@ -1882,14 +1857,15 @@ pub unsafe extern "C" fn blend_v_8bpc_avx2(
     h: i32,
     _dst: *const FFISafe<PicOffset>,
 ) {
+    let stride = dst_stride as usize;
     let dst = unsafe {
-        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
+        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * stride)
     };
     let tmp_slice = unsafe { std::slice::from_raw_parts(tmp as *const u8, (w * h) as usize) };
+    let mut rows: Vec<&mut [u8]> = dst.chunks_mut(stride).take(h as usize).collect();
     blend_v_8bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut rows,
         tmp_slice,
         w,
         h,
@@ -1901,14 +1877,11 @@ pub unsafe extern "C" fn blend_v_8bpc_avx2(
 #[arcane]
 fn blend_h_8bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp: &[u8],
     w: i32,
     h: i32,
 ) {
-    let mut dst = dst.flex_mut();
-    let tmp = tmp.flex();
     let w = w as usize;
     let h = h as usize;
     // blend_h: mask indexed by row, offset by h, only process h*3/4 rows
@@ -1919,7 +1892,7 @@ fn blend_h_8bpc_avx2_safe(
     let sixty_four = _mm256_set1_epi16(64);
 
     for row in 0..h_eff {
-        let dst_row = &mut dst[row * dst_stride..][..w];
+        let dst_row = &mut dst_rows[row][..w];
         let tmp_row = &tmp[row * w..][..w];
         let m = obmc_mask[row];
 
@@ -1974,14 +1947,15 @@ pub unsafe extern "C" fn blend_h_8bpc_avx2(
     h: i32,
     _dst: *const FFISafe<PicOffset>,
 ) {
+    let stride = dst_stride as usize;
     let dst = unsafe {
-        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
+        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * stride)
     };
     let tmp_slice = unsafe { std::slice::from_raw_parts(tmp as *const u8, (w * h) as usize) };
+    let mut rows: Vec<&mut [u8]> = dst.chunks_mut(stride).take(h as usize).collect();
     blend_h_8bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut rows,
         tmp_slice,
         w,
         h,
@@ -1993,14 +1967,11 @@ pub unsafe extern "C" fn blend_h_8bpc_avx2(
 #[arcane]
 fn blend_v_16bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp: &[u8],
     w: i32,
     h: i32,
 ) {
-    let mut dst = dst.flex_mut();
-    let tmp = tmp.flex();
     let w = w as usize;
     let h = h as usize;
     // blend_v: mask indexed by column, offset by w, only process w*3/4 columns
@@ -2011,7 +1982,7 @@ fn blend_v_16bpc_avx2_safe(
     let sixty_four = _mm256_set1_epi32(64);
 
     for row in 0..h {
-        let dst_row_bytes = &mut dst[row * dst_stride..][..w_eff * 2];
+        let dst_row_bytes = &mut dst_rows[row][..w_eff * 2];
         let dst_row: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(dst_row_bytes).unwrap();
         // tmp uses full w stride
         let tmp_row_bytes = &tmp[row * w * 2..][..w_eff * 2];
@@ -2072,14 +2043,15 @@ pub unsafe extern "C" fn blend_v_16bpc_avx2(
     h: i32,
     _dst: *const FFISafe<PicOffset>,
 ) {
+    let stride = dst_stride as usize;
     let dst = unsafe {
-        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
+        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * stride)
     };
     let tmp_slice = unsafe { std::slice::from_raw_parts(tmp as *const u8, (w * h) as usize * 2) };
+    let mut rows: Vec<&mut [u8]> = dst.chunks_mut(stride).take(h as usize).collect();
     blend_v_16bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut rows,
         tmp_slice,
         w,
         h,
@@ -2091,14 +2063,11 @@ pub unsafe extern "C" fn blend_v_16bpc_avx2(
 #[arcane]
 fn blend_h_16bpc_avx2_safe(
     _token: Desktop64,
-    dst: &mut [u8],
-    dst_stride: usize,
+    dst_rows: &mut [&mut [u8]],
     tmp: &[u8],
     w: i32,
     h: i32,
 ) {
-    let mut dst = dst.flex_mut();
-    let tmp = tmp.flex();
     let w = w as usize;
     let h = h as usize;
     // blend_h: mask indexed by row, offset by h, only process h*3/4 rows
@@ -2109,7 +2078,7 @@ fn blend_h_16bpc_avx2_safe(
     let sixty_four = _mm256_set1_epi32(64);
 
     for row in 0..h_eff {
-        let dst_row_bytes = &mut dst[row * dst_stride..][..w * 2];
+        let dst_row_bytes = &mut dst_rows[row][..w * 2];
         let dst_row: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(dst_row_bytes).unwrap();
         let tmp_row_bytes = &tmp[row * w * 2..][..w * 2];
         let tmp_row: &[u16] =
@@ -2165,14 +2134,15 @@ pub unsafe extern "C" fn blend_h_16bpc_avx2(
     h: i32,
     _dst: *const FFISafe<PicOffset>,
 ) {
+    let stride = dst_stride as usize;
     let dst = unsafe {
-        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * dst_stride as usize)
+        std::slice::from_raw_parts_mut(dst_ptr as *mut u8, h as usize * stride)
     };
     let tmp_slice = unsafe { std::slice::from_raw_parts(tmp as *const u8, (w * h) as usize * 2) };
+    let mut rows: Vec<&mut [u8]> = dst.chunks_mut(stride).take(h as usize).collect();
     blend_h_16bpc_avx2_safe(
         Desktop64::forge_token_dangerously(),
-        dst,
-        dst_stride as usize,
+        &mut rows,
         tmp_slice,
         w,
         h,
@@ -11480,13 +11450,17 @@ pub(crate) fn w_avg_dispatch_inner<BD: BitDepth>(
         return false;
     };
     let bd_c = bd.into_c();
+    let stride = dst_stride.unsigned_abs();
     match BD::BPC {
         BPC::BPC8 => {
+            let mut rows: Vec<&mut [u8]> = dst_bytes[dst_offset..]
+                .chunks_mut(stride)
+                .take(h as usize)
+                .collect();
             if let Some(t512) = avx512_token {
                 w_avg_8bpc_avx512_safe(
                     t512,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    &mut rows,
                     tmp1,
                     tmp2,
                     w,
@@ -11496,8 +11470,7 @@ pub(crate) fn w_avg_dispatch_inner<BD: BitDepth>(
             } else {
                 w_avg_8bpc_avx2_safe(
                     token,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    &mut rows,
                     tmp1,
                     tmp2,
                     w,
@@ -11507,11 +11480,14 @@ pub(crate) fn w_avg_dispatch_inner<BD: BitDepth>(
             }
         }
         BPC::BPC16 => {
+            let mut rows: Vec<&mut [u8]> = dst_bytes[dst_offset..]
+                .chunks_mut(stride)
+                .take(h as usize)
+                .collect();
             if let Some(t512) = avx512_token {
                 w_avg_16bpc_avx512_safe(
                     t512,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    &mut rows,
                     tmp1,
                     tmp2,
                     w,
@@ -11522,8 +11498,7 @@ pub(crate) fn w_avg_dispatch_inner<BD: BitDepth>(
             } else {
                 w_avg_16bpc_avx2_safe(
                     token,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    &mut rows,
                     tmp1,
                     tmp2,
                     w,
@@ -11581,13 +11556,17 @@ pub(crate) fn mask_dispatch_inner<BD: BitDepth>(
         return false;
     };
     let bd_c = bd.into_c();
+    let stride = dst_stride.unsigned_abs();
     match BD::BPC {
         BPC::BPC8 => {
+            let mut rows: Vec<&mut [u8]> = dst_bytes[dst_offset..]
+                .chunks_mut(stride)
+                .take(h as usize)
+                .collect();
             if let Some(t512) = avx512_token {
                 mask_8bpc_avx512_safe(
                     t512,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    &mut rows,
                     tmp1,
                     tmp2,
                     w,
@@ -11597,8 +11576,7 @@ pub(crate) fn mask_dispatch_inner<BD: BitDepth>(
             } else {
                 mask_8bpc_avx2_safe(
                     token,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    &mut rows,
                     tmp1,
                     tmp2,
                     w,
@@ -11608,11 +11586,14 @@ pub(crate) fn mask_dispatch_inner<BD: BitDepth>(
             }
         }
         BPC::BPC16 => {
+            let mut rows: Vec<&mut [u8]> = dst_bytes[dst_offset..]
+                .chunks_mut(stride)
+                .take(h as usize)
+                .collect();
             if let Some(t512) = avx512_token {
                 mask_16bpc_avx512_safe(
                     t512,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    &mut rows,
                     tmp1,
                     tmp2,
                     w,
@@ -11623,8 +11604,7 @@ pub(crate) fn mask_dispatch_inner<BD: BitDepth>(
             } else {
                 mask_16bpc_avx2_safe(
                     token,
-                    &mut dst_bytes[dst_offset..],
-                    dst_stride as usize,
+                    &mut rows,
                     tmp1,
                     tmp2,
                     w,
@@ -11675,11 +11655,15 @@ pub(crate) fn blend_dispatch_inner<BD: BitDepth>(
     let Some(token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
+    let stride = dst_stride.unsigned_abs();
+    let mut rows: Vec<&mut [u8]> = dst_bytes[dst_offset..]
+        .chunks_mut(stride)
+        .take(h as usize)
+        .collect();
     match BD::BPC {
         BPC::BPC8 => blend_8bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride as usize,
+            &mut rows,
             tmp_bytes,
             w,
             h,
@@ -11687,8 +11671,7 @@ pub(crate) fn blend_dispatch_inner<BD: BitDepth>(
         ),
         BPC::BPC16 => blend_16bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride as usize,
+            &mut rows,
             tmp_bytes,
             w,
             h,
@@ -11735,35 +11718,36 @@ pub(crate) fn blend_dir_dispatch_inner<BD: BitDepth>(
     let Some(token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
+    let stride = dst_stride.unsigned_abs();
+    let mut rows: Vec<&mut [u8]> = dst_bytes[dst_offset..]
+        .chunks_mut(stride)
+        .take(h as usize)
+        .collect();
     match (BD::BPC, is_h) {
         (BPC::BPC8, true) => blend_h_8bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride as usize,
+            &mut rows,
             tmp_bytes,
             w,
             h,
         ),
         (BPC::BPC8, false) => blend_v_8bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride as usize,
+            &mut rows,
             tmp_bytes,
             w,
             h,
         ),
         (BPC::BPC16, true) => blend_h_16bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride as usize,
+            &mut rows,
             tmp_bytes,
             w,
             h,
         ),
         (BPC::BPC16, false) => blend_v_16bpc_avx2_safe(
             token,
-            &mut dst_bytes[dst_offset..],
-            dst_stride as usize,
+            &mut rows,
             tmp_bytes,
             w,
             h,
@@ -13079,9 +13063,15 @@ mod tests {
                     dst_a.fill(0);
                     dst_b.fill(0);
 
-                    w_avg_8bpc_avx2_safe(token, &mut dst_a, w as usize, &tmp1, &tmp2, w, h, weight);
+                    {
+                        let mut rows: Vec<&mut [u8]> = dst_a.chunks_mut(w as usize).take(h as usize).collect();
+                        w_avg_8bpc_avx2_safe(token, &mut rows, &tmp1, &tmp2, w, h, weight);
+                    }
 
-                    w_avg_8bpc_avx2_safe(token, &mut dst_b, w as usize, &tmp1, &tmp2, w, h, weight);
+                    {
+                        let mut rows: Vec<&mut [u8]> = dst_b.chunks_mut(w as usize).take(h as usize).collect();
+                        w_avg_8bpc_avx2_safe(token, &mut rows, &tmp1, &tmp2, w, h, weight);
+                    }
 
                     assert_eq!(
                         dst_a,
@@ -13127,9 +13117,15 @@ mod tests {
                     dst_a.fill(0);
                     dst_b.fill(0);
 
-                    mask_8bpc_avx2_safe(token, &mut dst_a, w as usize, &tmp1, &tmp2, w, h, &mask);
+                    {
+                        let mut rows: Vec<&mut [u8]> = dst_a.chunks_mut(w as usize).take(h as usize).collect();
+                        mask_8bpc_avx2_safe(token, &mut rows, &tmp1, &tmp2, w, h, &mask);
+                    }
 
-                    mask_8bpc_avx2_safe(token, &mut dst_b, w as usize, &tmp1, &tmp2, w, h, &mask);
+                    {
+                        let mut rows: Vec<&mut [u8]> = dst_b.chunks_mut(w as usize).take(h as usize).collect();
+                        mask_8bpc_avx2_safe(token, &mut rows, &tmp1, &tmp2, w, h, &mask);
+                    }
 
                     assert_eq!(
                         dst_a,
