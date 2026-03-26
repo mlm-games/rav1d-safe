@@ -110,6 +110,22 @@ fn get_num_threads(s: &Rav1dSettings) -> NumThreads {
     } else {
         rav1d_num_logical_processors().get().clamp(1, 256)
     };
+    // Without `unchecked`, DisjointMut runtime overlap checking is active.
+    // Multithreaded decode triggers false-positive overlaps on the loopfilter
+    // level cache (concurrent read during deblock vs write during reconstruction).
+    // Clamp to single-threaded to prevent runtime panics.
+    #[cfg(not(feature = "unchecked"))]
+    let n_tc = if n_tc > 1 {
+        #[cfg(debug_assertions)]
+        eprintln!(
+            "rav1d: threads={} requested but `unchecked` feature not enabled; \
+             falling back to single-threaded. Enable `unchecked` for multithreading.",
+            n_tc
+        );
+        1
+    } else {
+        n_tc
+    };
     let n_fc = if s.max_frame_delay != 0 {
         cmp::min(s.max_frame_delay as usize, n_tc)
     } else {

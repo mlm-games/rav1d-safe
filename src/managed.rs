@@ -111,6 +111,10 @@ pub struct Settings {
     /// With frame threading enabled (threads >= 2 or threads == 0), `decode()` may return `None`
     /// even when complete frame data is provided, as frames are processed asynchronously.
     /// Call `decode()` or `flush()` multiple times to drain buffered frames.
+    ///
+    /// **Note:** Multithreading requires the `unchecked` feature. Without it, the decoder
+    /// silently falls back to single-threaded mode to avoid runtime panics from
+    /// DisjointMut overlap detection.
     pub threads: u32,
 
     /// Apply film grain synthesis during decoding
