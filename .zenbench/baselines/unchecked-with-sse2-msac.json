@@ -1,6 +1,6 @@
 {
-  "run_id": "1774504160-edea1",
-  "timestamp": "2026-03-26T05:49:30Z",
+  "run_id": "1774504633-f23dd",
+  "timestamp": "2026-03-26T05:57:27Z",
   "git_hash": "093eda15ba7f8fb490a16b9f4daf5ecb186f725c",
   "ci_environment": null,
   "comparisons": [
@@ -11,18 +11,18 @@
           "name": "decode",
           "summary": {
             "n": 30,
-            "min": 235934647.0,
-            "max": 260760547.0,
-            "mean": 251130919.66666666,
-            "variance": 27991481505826.14,
-            "median": 250258581.5,
-            "mad": 3072151.0574999996
+            "min": 250187963.0,
+            "max": 271237046.0,
+            "mean": 258056015.99999997,
+            "variance": 39377909416300.8,
+            "median": 255498380.5,
+            "mad": 5497562.342999999
           },
-          "cold_start_ns": 235455377.0,
+          "cold_start_ns": 252273715.0,
           "mean_ci": {
-            "lower": 249248946.66666666,
-            "median": 251136499.93333334,
-            "upper": 252911637.83333334
+            "lower": 255890239.5,
+            "median": 258033893.56666666,
+            "upper": 260341865.0
           }
         }
       ],
@@ -42,15 +42,15 @@
   ],
   "standalones": [],
   "total_time": {
-    "millis": 10503
+    "millis": 13945
   },
-  "gate_waits": 25,
+  "gate_waits": 30,
   "gate_wait_time": {
     "millis": 0
   },
   "unreliable": false,
   "timer_resolution_ns": 10,
-  "loop_overhead_ns": 0.1853,
+  "loop_overhead_ns": 0.1833,
   "testbed": {
     "cpu_model": "AMD Ryzen 9 7950X 16-Core Processor",
     "arch": "x86_64",
@@ -59,8 +59,8 @@
     "physical_cores": 16
   },
   "calibration": {
-    "integer_ns": 0.2402707,
-    "memory_bw_gibps": 92.56516587677724,
-    "memory_lat_ns": 10.176401
+    "integer_ns": 0.2307147,
+    "memory_bw_gibps": 112.0296546977171,
+    "memory_lat_ns": 9.581975
   }
 }
