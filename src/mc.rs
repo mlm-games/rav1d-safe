@@ -1482,6 +1482,44 @@ impl mc::Fn {
             }
         }
     }
+
+    /// Row-slice MC put: writes to dst_rows, reads from src_rows (immutable ref frame).
+    ///
+    /// For 8-tap filtering, src_rows must include 3 rows above and 4 rows below
+    /// the block (7 extra rows total). src_rows[3] is the first block row.
+    /// For bilinear, src_rows needs 1 extra row below (src_rows[0] is first row).
+    /// For fullpel (mx=0, my=0), no extra rows needed.
+    #[cfg(not(feature = "asm"))]
+    #[allow(dead_code)]
+    pub fn call_rows<BD: BitDepth>(
+        &self,
+        filter: Filter2d,
+        dst_rows: &mut [&mut [BD::Pixel]],
+        dst_x: usize,
+        src_rows: &[&[BD::Pixel]],
+        src_x: usize,
+        w: i32,
+        h: i32,
+        mx: i32,
+        my: i32,
+        bd: BD,
+    ) {
+        use crate::src::mc_rows;
+
+        let w = w as usize;
+        let h = h as usize;
+        let mx = mx as usize;
+        let my = my as usize;
+
+        match filter {
+            Filter2d::Bilinear => mc_rows::put_bilin_rows::<BD>(
+                dst_rows, dst_x, src_rows, src_x, w, h, mx, my, bd,
+            ),
+            _ => mc_rows::put_8tap_rows::<BD>(
+                dst_rows, dst_x, src_rows, src_x, w, h, mx, my, filter.hv(), bd,
+            ),
+        }
+    }
 }
 
 wrap_fn_ptr!(pub unsafe extern "C" fn mc_scaled(
@@ -1753,6 +1791,24 @@ impl avg::Fn {
                 avg_direct::<BD>(dst, tmp1, tmp2, w, h, bd)
             }
         }
+    }
+
+    /// Row-slice variant of avg.
+    #[cfg(not(feature = "asm"))]
+    #[allow(dead_code)]
+    pub fn call_rows<BD: BitDepth>(
+        &self,
+        dst_rows: &mut [&mut [BD::Pixel]],
+        dst_x: usize,
+        tmp1: &[i16],
+        tmp2: &[i16],
+        w: i32,
+        h: i32,
+        bd: BD,
+    ) {
+        crate::src::mc_rows::avg_rows::<BD>(
+            dst_rows, dst_x, tmp1, tmp2, w as usize, h as usize, bd,
+        );
     }
 }
 
