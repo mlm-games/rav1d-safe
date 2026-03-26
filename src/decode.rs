@@ -4917,9 +4917,14 @@ fn rav1d_decode_frame_rayon(c: &Rav1dContext, f: &mut Rav1dFrameData) -> Rav1dRe
                         remaining = tail;
                         let t = &mut head[0];
                         s.spawn(move |_| {
+                            // Force scalar dispatch on tile worker threads.
+                            // Scalar uses per-row DisjointMut guards (narrow),
+                            // avoiding the block-wide guard overlap between tiles.
+                            crate::src::cpu::set_force_scalar(true);
                             if rav1d_decode_tile_sbrow(c, t, f_shared).is_err() {
                                 err.store(true, Ordering::Relaxed);
                             }
+                            crate::src::cpu::set_force_scalar(false);
                         });
                     }
                 });

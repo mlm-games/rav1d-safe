@@ -247,11 +247,39 @@ pub(crate) fn rav1d_get_cpu_flags() -> CpuFlags {
     CpuFlags::from_bits_truncate(flags & mask)
 }
 
+/// Thread-local flag to force scalar dispatch (no SIMD).
+/// Used by rayon tile workers to avoid DisjointMut overlap from
+/// block-wide SIMD guards. When set, `summon_avx2()` returns None
+/// and all DSP dispatch falls through to per-row scalar.
+std::thread_local! {
+    static FORCE_SCALAR: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Set the thread-local force-scalar flag. While set, all SIMD dispatch
+/// on this thread returns `false`/`None`, forcing the per-row scalar path.
+///
+/// This is used by rayon tile workers: the scalar path acquires per-row
+/// DisjointMut guards (width `w` each) instead of block-wide guards
+/// (width `(h-1)*stride + w`), so tiles with disjoint column ranges
+/// never conflict even in checked mode.
+pub(crate) fn set_force_scalar(force: bool) {
+    FORCE_SCALAR.with(|f| f.set(force));
+}
+
+/// Check if the current thread is forced to scalar dispatch.
+#[inline(always)]
+pub(crate) fn is_force_scalar() -> bool {
+    FORCE_SCALAR.with(|f| f.get())
+}
+
 /// Check if a specific CPU feature is enabled after applying the mask.
 /// Used by safe_simd dispatch functions to respect `rav1d_set_cpu_flags_mask`.
 #[cfg(target_arch = "x86_64")]
 #[inline(always)]
 pub(crate) fn simd_enabled(flag: CpuFlags) -> bool {
+    if is_force_scalar() {
+        return false;
+    }
     rav1d_get_cpu_flags().contains(flag)
 }
 
