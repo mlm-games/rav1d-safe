@@ -238,6 +238,53 @@ mod tests {
     }
 
     #[test]
+    fn pipeline_concurrent_tile_writes_no_corruption() {
+        // Stress test: 4 tiles writing to a large buffer concurrently.
+        // Each tile fills its columns with a unique value.
+        // After pipeline, verify no cross-tile corruption.
+        let width = 256;
+        let height = 128;
+        let stride = width;
+        let sb_height = 64;
+        let tile_w = 64;
+        let boundaries: Vec<usize> = (0..=4).map(|i| i * tile_w).collect();
+
+        let mut buf = vec![0u8; stride * height];
+        let config = PipelineConfig::new(width, height, stride, sb_height, boundaries);
+
+        run_pipeline(
+            &mut buf,
+            &config,
+            |rows, tile_idx, sby| {
+                // Each tile writes (tile_idx * 16 + sby) to all its pixels
+                let val = (tile_idx * 16 + sby) as u8;
+                for row in rows.iter_mut() {
+                    row.fill(val);
+                }
+            },
+            |_rows, _sby| {},
+        );
+
+        // Verify each tile's region has the correct value
+        for sby in 0..2 {
+            let row_start = sby * sb_height;
+            for tile_idx in 0..4 {
+                let expected = (tile_idx * 16 + sby) as u8;
+                let col_start = tile_idx * tile_w;
+                for y in row_start..row_start + sb_height {
+                    for x in col_start..col_start + tile_w {
+                        assert_eq!(
+                            buf[y * stride + x],
+                            expected,
+                            "corruption at ({x},{y}): tile={tile_idx} sby={sby}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn pipeline_handles_partial_last_sb_row() {
         // Height 20, sb_height 8 → 3 SB rows: 8, 8, 4
         let mut buf = vec![0u8; 8 * 20];
