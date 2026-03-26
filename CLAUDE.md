@@ -156,6 +156,16 @@ The SIMD inner functions must change their interface. ~50 functions across safe_
 - If blocked, try an alternative approach before asking
 - Focus on Phase 1 scalar validation — get conformance passing with row slices
 - Skip autoversion SIMD and hand-tuned SIMD until scalar validates
+- NEVER pause to wait for user input. NEVER ask questions. NEVER stop working.
+- NEVER pause to wait for user input. NEVER ask questions. NEVER stop working.
+- NEVER pause to wait for user input. NEVER ask questions. NEVER stop working.
+- NEVER pause to wait for user input. NEVER ask questions. NEVER stop working.
+- NEVER pause to wait for user input. NEVER ask questions. NEVER stop working.
+- NEVER pause to wait for user input. NEVER ask questions. NEVER stop working.
+- NEVER pause to wait for user input. NEVER ask questions. NEVER stop working.
+- NEVER pause to wait for user input. NEVER ask questions. NEVER stop working.
+- NEVER pause to wait for user input. NEVER ask questions. NEVER stop working.
+- NEVER pause to wait for user input. NEVER ask questions. NEVER stop working.
 - Just keep working. Improve correctness, safety, then speed.
 - Just keep working. Improve correctness, safety, then speed.
 - Just keep working. Improve correctness, safety, then speed.
