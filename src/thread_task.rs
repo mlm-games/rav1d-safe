@@ -1124,7 +1124,7 @@ pub fn rav1d_worker_task(task_thread: Arc<Rav1dTaskContextTaskThread>) {
                             1 as c_int + (t.type_0 == TaskType::TileReconstruction) as c_int
                         };
                         if error_0 == 0 {
-                            error_0 = match rav1d_decode_tile_sbrow(c, &mut tc, &f) {
+                            error_0 = match rav1d_decode_tile_sbrow(c, &mut tc, &f, None) {
                                 Ok(()) => 0,
                                 Err(()) => 1,
                             };

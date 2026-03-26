@@ -4105,6 +4105,8 @@ pub(crate) fn rav1d_decode_tile_sbrow(
     c: &Rav1dContext,
     t: &mut Rav1dTaskContext,
     f: &Rav1dFrameData,
+    // None = use f.cur.data (default). Some = per-tile pixel buffers.
+    pixel_data_override: Option<&[Rav1dPictureDataComponent; 3]>,
 ) -> Result<(), ()> {
     let seq_hdr = &***f.seq_hdr.as_ref().unwrap();
     let root_bl = if seq_hdr.sb128 != 0 {
@@ -4155,7 +4157,7 @@ pub(crate) fn rav1d_decode_tile_sbrow(
             if c.flush.load(Ordering::Acquire) {
                 return Err(());
             }
-            let cur_data = &f.cur.data.as_ref().unwrap().data;
+            let cur_data = pixel_data_override.unwrap_or(&f.cur.data.as_ref().unwrap().data);
             decode_sb(
                 c,
                 t,
@@ -4822,7 +4824,7 @@ fn rav1d_decode_frame_main(c: &Rav1dContext, f: &mut Rav1dFrameData) -> Rav1dRes
             }
             for col in 0..cols {
                 t.ts = tile_row * cols + col;
-                rav1d_decode_tile_sbrow(c, &mut t, f).map_err(|()| EINVAL)?;
+                rav1d_decode_tile_sbrow(c, &mut t, f, None).map_err(|()| EINVAL)?;
             }
             if f.frame_hdr().frame_type.is_inter_or_switch() {
                 c.dsp
@@ -4928,11 +4930,12 @@ fn rav1d_decode_frame_rayon(c: &Rav1dContext, f: &mut Rav1dFrameData) -> Rav1dRe
                         remaining = tail;
                         let t = &mut head[0];
                         s.spawn(move |_| {
-                            // Force scalar dispatch on tile worker threads.
-                            // Scalar uses per-row DisjointMut guards (narrow),
-                            // avoiding the block-wide guard overlap between tiles.
+                            // Pass None for pixel_data_override — uses f.cur.data.
+                            // TODO: Pass per-tile pixel components to eliminate
+                            // DisjointMut entirely (the spec goal).
+                            // For now, force scalar to avoid block-wide guard overlap.
                             crate::src::cpu::set_force_scalar(true);
-                            if rav1d_decode_tile_sbrow(c, t, f_shared).is_err() {
+                            if rav1d_decode_tile_sbrow(c, t, f_shared, None).is_err() {
                                 err.store(true, Ordering::Relaxed);
                             }
                             crate::src::cpu::set_force_scalar(false);
