@@ -38,6 +38,7 @@ rav1d-disjoint-mut = { version = "0.3.0", path = "crates/rav1d-disjoint-mut", de
 libc = { version = "0.2", optional = true }
 parking_lot = "0.12.2"
 paste = "1.0.14"
+rayon = "1.11.0"
 raw-cpuid = "11.0.1"
 strum = { version = "0.28", features = ["derive"] }
 to_method = "1.1.0"

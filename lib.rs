@@ -139,6 +139,7 @@ pub mod src {
     mod qm;
     pub(crate) mod relaxed_atomic;
     mod scan;
+    pub(crate) mod plane_rows;
     pub(crate) mod strided;
     mod thread_task;
     mod warpmv;
