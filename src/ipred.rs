@@ -1676,33 +1676,42 @@ fn cfl_ac_rust<BD: BitDepth>(
     let [ss_hor, ss_ver] = [is_ss_hor, is_ss_ver].map(|is_ss| is_ss as u8);
     let y_pxstride = y_src.pixel_stride::<BD>();
 
-    // Single guard covering all source rows instead of per-pixel guards.
-    // Source spans (height-h_pad)<<ss_ver rows, (width-w_pad)<<ss_hor cols.
+    // Per-row guards to avoid block-wide overlap between concurrent tiles.
+    // Each iteration reads 1-2 luma rows (depending on ss_ver).
     let active_h = height - h_pad;
     let active_w = width - w_pad;
-    let src_rows = active_h << ss_ver as usize;
     let src_cols = active_w << ss_hor as usize;
-    let (src_guard, src_base) = y_src.strided_slice::<BD>(src_cols, src_rows);
-    let row_stride = y_pxstride << ss_ver;
 
     for y in 0..active_h {
-        let row_off = y as isize * row_stride;
+        // Read luma row(s) for this chroma row with per-row guards
+        let row0_src = y_src + (y as isize * (y_pxstride << ss_ver));
+        let row0 = &*row0_src.slice::<BD>(src_cols);
+
         let aci = y * width;
-        for x in 0..active_w {
-            let sx = (x << ss_hor) as isize;
-            let base_idx = src_base.wrapping_add_signed(row_off + sx);
-            let mut ac_sum = src_guard[base_idx].as_::<i32>();
-            if is_ss_hor {
-                ac_sum += src_guard[base_idx + 1].as_::<i32>();
-            }
-            if is_ss_ver {
-                let below = src_base.wrapping_add_signed(row_off + y_pxstride + sx);
-                ac_sum += src_guard[below].as_::<i32>();
+        if is_ss_ver {
+            let row1_src = row0_src + y_pxstride;
+            let row1 = &*row1_src.slice::<BD>(src_cols);
+            for x in 0..active_w {
+                let sx = x << ss_hor;
+                let mut ac_sum = row0[sx].as_::<i32>();
                 if is_ss_hor {
-                    ac_sum += src_guard[below + 1].as_::<i32>();
+                    ac_sum += row0[sx + 1].as_::<i32>();
                 }
+                ac_sum += row1[sx].as_::<i32>();
+                if is_ss_hor {
+                    ac_sum += row1[sx + 1].as_::<i32>();
+                }
+                ac[aci + x] = (ac_sum << 1 + !is_ss_ver as u8 + !is_ss_hor as u8) as i16;
             }
-            ac[aci + x] = (ac_sum << 1 + !is_ss_ver as u8 + !is_ss_hor as u8) as i16;
+        } else {
+            for x in 0..active_w {
+                let sx = x << ss_hor;
+                let mut ac_sum = row0[sx].as_::<i32>();
+                if is_ss_hor {
+                    ac_sum += row0[sx + 1].as_::<i32>();
+                }
+                ac[aci + x] = (ac_sum << 1 + !is_ss_ver as u8 + !is_ss_hor as u8) as i16;
+            }
         }
         for x in active_w..width {
             ac[aci + x] = ac[aci + x - 1];
