@@ -172,7 +172,7 @@ fn dc_128_is_half_max() {
 
 #[test]
 fn smooth_uniform_produces_uniform() {
-    let mut topleft = [100u8; SCRATCH_EDGE_LEN];
+    let topleft = [100u8; SCRATCH_EDGE_LEN];
     let mut dst_buf = vec![0u8; 64];
     let mut dst_rows: Vec<&mut [u8]> = dst_buf.chunks_mut(8).collect();
 

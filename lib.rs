@@ -143,6 +143,7 @@ pub mod src {
     pub(crate) mod itx_rows;
     pub(crate) mod mc_rows;
     pub(crate) mod plane_rows;
+    pub(crate) mod rayon_pipeline;
     pub(crate) mod strided;
     mod thread_task;
     mod warpmv;
