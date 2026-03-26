@@ -615,33 +615,7 @@ impl<'a> Rav1dPictureDataComponentOffset<'a> {
         DisjointMutGuard<'a, Rav1dPictureDataComponentInner, [BD::Pixel]>,
         usize,
     ) {
-        #[cfg(not(feature = "mt"))]
-        {
-            let _ = (w, h);
-            return self.full_guard_mut::<BD>();
-        }
-        #[cfg(feature = "mt")]
-        {
-            if !crate::src::cpu::is_multithreaded() {
-                return self.full_guard_mut::<BD>();
-            }
-            let pxstride = self.data.pixel_stride::<BD>();
-            let abs_stride = pxstride.unsigned_abs();
-            if pxstride >= 0 {
-                let total = if h == 0 { 0 } else { (h - 1) * abs_stride + w };
-                let guard = self.data.dm().mut_slice_as_strided::<_, BD::Pixel>(
-                    (self.offset.., ..total), abs_stride, w,
-                );
-                (guard, 0)
-            } else {
-                let total = if h == 0 { 0 } else { (h - 1) * abs_stride + w };
-                let start = self.offset - (h - 1) * abs_stride;
-                let guard = self.data.dm().mut_slice_as_strided::<_, BD::Pixel>(
-                    (start.., ..total), abs_stride, w,
-                );
-                (guard, (h - 1) * abs_stride)
-            }
-        }
+        self.narrow_guard_mut::<BD>(w, h)
     }
 
     /// Create a tracked immutable guard covering a strided w×h pixel region.
@@ -655,32 +629,35 @@ impl<'a> Rav1dPictureDataComponentOffset<'a> {
         DisjointImmutGuard<'a, Rav1dPictureDataComponentInner, [BD::Pixel]>,
         usize,
     ) {
-        #[cfg(not(feature = "mt"))]
-        {
-            let _ = (w, h);
-            return self.full_guard::<BD>();
-        }
-        #[cfg(feature = "mt")]
-        {
-            if !crate::src::cpu::is_multithreaded() {
-                return self.full_guard::<BD>();
-            }
-            let pxstride = self.data.pixel_stride::<BD>();
-            let abs_stride = pxstride.unsigned_abs();
-            if pxstride >= 0 {
-                let total = if h == 0 { 0 } else { (h - 1) * abs_stride + w };
-                let guard = self.data.dm().slice_as_strided::<_, BD::Pixel>(
-                    (self.offset.., ..total), abs_stride, w,
-                );
-                (guard, 0)
-            } else {
-                let total = if h == 0 { 0 } else { (h - 1) * abs_stride + w };
-                let start = self.offset - (h - 1) * abs_stride;
-                let guard = self.data.dm().slice_as_strided::<_, BD::Pixel>(
-                    (start.., ..total), abs_stride, w,
-                );
-                (guard, (h - 1) * abs_stride)
-            }
+        self.narrow_guard::<BD>(w, h)
+    }
+
+    /// Create a tracked immutable guard covering exactly a w×h pixel block.
+    #[inline]
+    #[cfg_attr(debug_assertions, track_caller)]
+    pub fn narrow_guard<BD: BitDepth>(
+        &self,
+        w: usize,
+        h: usize,
+    ) -> (
+        DisjointImmutGuard<'a, Rav1dPictureDataComponentInner, [BD::Pixel]>,
+        usize,
+    ) {
+        use crate::src::strided::Strided as _;
+        let pxstride = self.data.pixel_stride::<BD>();
+        let abs_stride = pxstride.unsigned_abs();
+        let total = if h == 0 || w == 0 {
+            0
+        } else {
+            (h - 1) * abs_stride + w
+        };
+        if pxstride >= 0 {
+            let guard = self.data.slice::<BD, _>((self.offset.., ..total));
+            (guard, 0)
+        } else {
+            let start = self.offset + 1 - total;
+            let guard = self.data.slice::<BD, _>((start.., ..total));
+            (guard, total - 1)
         }
     }
 
