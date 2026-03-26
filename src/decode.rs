@@ -18,6 +18,7 @@ use crate::include::dav1d::headers::Rav1dWarpedMotionParams;
 use crate::include::dav1d::headers::Rav1dWarpedMotionType;
 use crate::include::dav1d::headers::SgrIdx;
 use crate::include::dav1d::picture::Rav1dPicture;
+use crate::include::dav1d::picture::Rav1dPictureDataComponent;
 use crate::src::align::AlignedVec64;
 use crate::src::c_arc::CArc;
 use crate::src::cdf::CdfMvComponent;
@@ -1149,6 +1150,7 @@ fn decode_b(
     bs: BlockSize,
     bp: BlockPartition,
     intra_edge_flags: EdgeFlags,
+    pixel_data: &[Rav1dPictureDataComponent; 3],
 ) -> Result<(), ()> {
     let seq_hdr = &***f.seq_hdr.as_ref().unwrap();
     use std::fmt;
@@ -1199,7 +1201,7 @@ fn decode_b(
     let FrameThreadPassState::First(ts_c) = pass else {
         match &b.ii {
             Av1BlockIntraInter::Intra(intra) => {
-                (bd_fn.recon_b_intra)(f, t, None, bs, intra_edge_flags, b, intra);
+                (bd_fn.recon_b_intra)(f, t, None, bs, intra_edge_flags, b, intra, pixel_data);
 
                 let y_mode = intra.y_mode;
                 let y_mode_nofilt = if y_mode == FILTER_PRED {
@@ -1279,7 +1281,7 @@ fn decode_b(
                     }
                 }
 
-                (bd_fn.recon_b_inter)(f, t, None, bs, b, inter)?;
+                (bd_fn.recon_b_inter)(f, t, None, bs, b, inter, pixel_data)?;
 
                 let filter = &dav1d_filter_dir[inter.filter2d as usize];
                 CaseSet::<32, false>::many(
@@ -1930,7 +1932,7 @@ fn decode_b(
         if t.frame_thread.pass == 1 {
             (bd_fn.read_coef_blocks)(f, t, ts_c, bs, b);
         } else {
-            (bd_fn.recon_b_intra)(f, t, Some(ts_c), bs, intra_edge_flags, b, &intra);
+            (bd_fn.recon_b_intra)(f, t, Some(ts_c), bs, intra_edge_flags, b, &intra, pixel_data);
         }
 
         if f.frame_hdr().loopfilter.level_y != [0, 0] {
@@ -2175,7 +2177,7 @@ fn decode_b(
         if t.frame_thread.pass == 1 {
             (bd_fn.read_coef_blocks)(f, t, ts_c, bs, b);
         } else {
-            (bd_fn.recon_b_inter)(f, t, Some(ts_c), bs, b, &inter)?;
+            (bd_fn.recon_b_inter)(f, t, Some(ts_c), bs, b, &inter, pixel_data)?;
         }
 
         splat_intrabc_mv(c, t, &f.rf, bs, r#ref, bw4 as usize, bh4 as usize);
@@ -3062,7 +3064,7 @@ fn decode_b(
         if t.frame_thread.pass == 1 {
             (bd_fn.read_coef_blocks)(f, t, ts_c, bs, b);
         } else {
-            (bd_fn.recon_b_inter)(f, t, Some(ts_c), bs, b, &inter)?;
+            (bd_fn.recon_b_inter)(f, t, Some(ts_c), bs, b, &inter, pixel_data)?;
         }
 
         let frame_hdr = f.frame_hdr();
@@ -3439,6 +3441,7 @@ fn decode_sb(
     pass: &mut FrameThreadPassState,
     bl: BlockLevel,
     edge_index: EdgeIndex,
+    pixel_data: &[Rav1dPictureDataComponent; 3],
 ) -> Result<(), ()> {
     let ts = &f.ts[t.ts];
     let hsz = 16 >> bl as u8;
@@ -3460,6 +3463,7 @@ fn decode_sb(
             pass,
             next_bl,
             intra_edge.branch(sb128, edge_index).split[0],
+            pixel_data,
         );
     }
 
@@ -3528,20 +3532,20 @@ fn decode_sb(
         match bp {
             BlockPartition::None => {
                 let node = intra_edge.node(sb128, edge_index);
-                decode_b(c, t, f, pass, bl, b[0], bp, node.o)?;
+                decode_b(c, t, f, pass, bl, b[0], bp, node.o, pixel_data)?;
             }
             BlockPartition::H => {
                 let node = intra_edge.node(sb128, edge_index);
-                decode_b(c, t, f, pass, bl, b[0], bp, node.h[0])?;
+                decode_b(c, t, f, pass, bl, b[0], bp, node.h[0], pixel_data)?;
                 t.b.y += hsz;
-                decode_b(c, t, f, pass, bl, b[0], bp, node.h[1])?;
+                decode_b(c, t, f, pass, bl, b[0], bp, node.h[1], pixel_data)?;
                 t.b.y -= hsz;
             }
             BlockPartition::V => {
                 let node = intra_edge.node(sb128, edge_index);
-                decode_b(c, t, f, pass, bl, b[0], bp, node.v[0])?;
+                decode_b(c, t, f, pass, bl, b[0], bp, node.v[0], pixel_data)?;
                 t.b.x += hsz;
-                decode_b(c, t, f, pass, bl, b[0], bp, node.v[1])?;
+                decode_b(c, t, f, pass, bl, b[0], bp, node.v[1], pixel_data)?;
                 t.b.x -= hsz;
             }
             BlockPartition::Split => {
@@ -3558,16 +3562,17 @@ fn decode_sb(
                             BlockSize::Bs4x4,
                             bp,
                             EdgeFlags::ALL_TR_AND_BL,
+                            pixel_data,
                         )?;
                         let tl_filter = t.tl_4x4_filter;
                         t.b.x += 1;
-                        decode_b(c, t, f, pass, bl, BlockSize::Bs4x4, bp, tip.split[0])?;
+                        decode_b(c, t, f, pass, bl, BlockSize::Bs4x4, bp, tip.split[0], pixel_data)?;
                         t.b.x -= 1;
                         t.b.y += 1;
-                        decode_b(c, t, f, pass, bl, BlockSize::Bs4x4, bp, tip.split[1])?;
+                        decode_b(c, t, f, pass, bl, BlockSize::Bs4x4, bp, tip.split[1], pixel_data)?;
                         t.b.x += 1;
                         t.tl_4x4_filter = tl_filter;
-                        decode_b(c, t, f, pass, bl, BlockSize::Bs4x4, bp, tip.split[2])?;
+                        decode_b(c, t, f, pass, bl, BlockSize::Bs4x4, bp, tip.split[2], pixel_data)?;
                         t.b.x -= 1;
                         t.b.y -= 1;
                         if cfg!(target_arch = "x86_64") && t.frame_thread.pass != 0 {
@@ -3583,14 +3588,14 @@ fn decode_sb(
                     }
                     Some(next_bl) => {
                         let branch = intra_edge.branch(sb128, edge_index);
-                        decode_sb(c, t, f, pass, next_bl, branch.split[0])?;
+                        decode_sb(c, t, f, pass, next_bl, branch.split[0], pixel_data)?;
                         t.b.x += hsz;
-                        decode_sb(c, t, f, pass, next_bl, branch.split[1])?;
+                        decode_sb(c, t, f, pass, next_bl, branch.split[1], pixel_data)?;
                         t.b.x -= hsz;
                         t.b.y += hsz;
-                        decode_sb(c, t, f, pass, next_bl, branch.split[2])?;
+                        decode_sb(c, t, f, pass, next_bl, branch.split[2], pixel_data)?;
                         t.b.x += hsz;
-                        decode_sb(c, t, f, pass, next_bl, branch.split[3])?;
+                        decode_sb(c, t, f, pass, next_bl, branch.split[3], pixel_data)?;
                         t.b.x -= hsz;
                         t.b.y -= hsz;
                     }
@@ -3598,69 +3603,69 @@ fn decode_sb(
             }
             BlockPartition::TopSplit => {
                 let node = intra_edge.node(sb128, edge_index);
-                decode_b(c, t, f, pass, bl, b[0], bp, EdgeFlags::ALL_TR_AND_BL)?;
+                decode_b(c, t, f, pass, bl, b[0], bp, EdgeFlags::ALL_TR_AND_BL, pixel_data)?;
                 t.b.x += hsz;
-                decode_b(c, t, f, pass, bl, b[0], bp, node.v[1])?;
+                decode_b(c, t, f, pass, bl, b[0], bp, node.v[1], pixel_data)?;
                 t.b.x -= hsz;
                 t.b.y += hsz;
-                decode_b(c, t, f, pass, bl, b[1], bp, node.h[1])?;
+                decode_b(c, t, f, pass, bl, b[1], bp, node.h[1], pixel_data)?;
                 t.b.y -= hsz;
             }
             BlockPartition::BottomSplit => {
                 let node = intra_edge.node(sb128, edge_index);
-                decode_b(c, t, f, pass, bl, b[0], bp, node.h[0])?;
+                decode_b(c, t, f, pass, bl, b[0], bp, node.h[0], pixel_data)?;
                 t.b.y += hsz;
-                decode_b(c, t, f, pass, bl, b[1], bp, node.v[0])?;
+                decode_b(c, t, f, pass, bl, b[1], bp, node.v[0], pixel_data)?;
                 t.b.x += hsz;
-                decode_b(c, t, f, pass, bl, b[1], bp, EdgeFlags::empty())?;
+                decode_b(c, t, f, pass, bl, b[1], bp, EdgeFlags::empty(), pixel_data)?;
                 t.b.x -= hsz;
                 t.b.y -= hsz;
             }
             BlockPartition::LeftSplit => {
                 let node = intra_edge.node(sb128, edge_index);
-                decode_b(c, t, f, pass, bl, b[0], bp, EdgeFlags::ALL_TR_AND_BL)?;
+                decode_b(c, t, f, pass, bl, b[0], bp, EdgeFlags::ALL_TR_AND_BL, pixel_data)?;
                 t.b.y += hsz;
-                decode_b(c, t, f, pass, bl, b[0], bp, node.h[1])?;
+                decode_b(c, t, f, pass, bl, b[0], bp, node.h[1], pixel_data)?;
                 t.b.y -= hsz;
                 t.b.x += hsz;
-                decode_b(c, t, f, pass, bl, b[1], bp, node.v[1])?;
+                decode_b(c, t, f, pass, bl, b[1], bp, node.v[1], pixel_data)?;
                 t.b.x -= hsz;
             }
             BlockPartition::RightSplit => {
                 let node = intra_edge.node(sb128, edge_index);
-                decode_b(c, t, f, pass, bl, b[0], bp, node.v[0])?;
+                decode_b(c, t, f, pass, bl, b[0], bp, node.v[0], pixel_data)?;
                 t.b.x += hsz;
-                decode_b(c, t, f, pass, bl, b[1], bp, node.h[0])?;
+                decode_b(c, t, f, pass, bl, b[1], bp, node.h[0], pixel_data)?;
                 t.b.y += hsz;
-                decode_b(c, t, f, pass, bl, b[1], bp, EdgeFlags::empty())?;
+                decode_b(c, t, f, pass, bl, b[1], bp, EdgeFlags::empty(), pixel_data)?;
                 t.b.y -= hsz;
                 t.b.x -= hsz;
             }
             BlockPartition::H4 => {
                 let branch = intra_edge.branch(sb128, edge_index);
                 let node = &branch.node;
-                decode_b(c, t, f, pass, bl, b[0], bp, node.h[0])?;
+                decode_b(c, t, f, pass, bl, b[0], bp, node.h[0], pixel_data)?;
                 t.b.y += hsz >> 1;
-                decode_b(c, t, f, pass, bl, b[0], bp, branch.h4)?;
+                decode_b(c, t, f, pass, bl, b[0], bp, branch.h4, pixel_data)?;
                 t.b.y += hsz >> 1;
-                decode_b(c, t, f, pass, bl, b[0], bp, EdgeFlags::ALL_LEFT_HAS_BOTTOM)?;
+                decode_b(c, t, f, pass, bl, b[0], bp, EdgeFlags::ALL_LEFT_HAS_BOTTOM, pixel_data)?;
                 t.b.y += hsz >> 1;
                 if t.b.y < f.bh {
-                    decode_b(c, t, f, pass, bl, b[0], bp, node.h[1])?;
+                    decode_b(c, t, f, pass, bl, b[0], bp, node.h[1], pixel_data)?;
                 }
                 t.b.y -= hsz * 3 >> 1;
             }
             BlockPartition::V4 => {
                 let branch = intra_edge.branch(sb128, edge_index);
                 let node = &branch.node;
-                decode_b(c, t, f, pass, bl, b[0], bp, node.v[0])?;
+                decode_b(c, t, f, pass, bl, b[0], bp, node.v[0], pixel_data)?;
                 t.b.x += hsz >> 1;
-                decode_b(c, t, f, pass, bl, b[0], bp, branch.v4)?;
+                decode_b(c, t, f, pass, bl, b[0], bp, branch.v4, pixel_data)?;
                 t.b.x += hsz >> 1;
-                decode_b(c, t, f, pass, bl, b[0], bp, EdgeFlags::ALL_TOP_HAS_RIGHT)?;
+                decode_b(c, t, f, pass, bl, b[0], bp, EdgeFlags::ALL_TOP_HAS_RIGHT, pixel_data)?;
                 t.b.x += hsz >> 1;
                 if t.b.x < f.bw {
-                    decode_b(c, t, f, pass, bl, b[0], bp, node.v[1])?;
+                    decode_b(c, t, f, pass, bl, b[0], bp, node.v[1], pixel_data)?;
                 }
                 t.b.x -= hsz * 3 >> 1;
             }
@@ -3701,9 +3706,9 @@ fn decode_sb(
         if is_split {
             let branch = intra_edge.branch(sb128, edge_index);
             bp = BlockPartition::Split;
-            decode_sb(c, t, f, pass, next_bl, branch.split[0])?;
+            decode_sb(c, t, f, pass, next_bl, branch.split[0], pixel_data)?;
             t.b.x += hsz;
-            decode_sb(c, t, f, pass, next_bl, branch.split[1])?;
+            decode_sb(c, t, f, pass, next_bl, branch.split[1], pixel_data)?;
             t.b.x -= hsz;
         } else {
             let node = intra_edge.node(sb128, edge_index);
@@ -3717,6 +3722,7 @@ fn decode_sb(
                 dav1d_block_sizes[bl as usize][bp as usize][0],
                 bp,
                 node.h[0],
+                pixel_data,
             )?;
         }
     } else {
@@ -3759,9 +3765,9 @@ fn decode_sb(
         if is_split {
             let branch = intra_edge.branch(sb128, edge_index);
             bp = BlockPartition::Split;
-            decode_sb(c, t, f, pass, next_bl, branch.split[0])?;
+            decode_sb(c, t, f, pass, next_bl, branch.split[0], pixel_data)?;
             t.b.y += hsz;
-            decode_sb(c, t, f, pass, next_bl, branch.split[2])?;
+            decode_sb(c, t, f, pass, next_bl, branch.split[2], pixel_data)?;
             t.b.y -= hsz;
         } else {
             let node = intra_edge.node(sb128, edge_index);
@@ -3775,6 +3781,7 @@ fn decode_sb(
                 dav1d_block_sizes[bl as usize][bp as usize][0],
                 bp,
                 node.v[0],
+                pixel_data,
             )?;
         }
     }
@@ -4148,6 +4155,7 @@ pub(crate) fn rav1d_decode_tile_sbrow(
             if c.flush.load(Ordering::Acquire) {
                 return Err(());
             }
+            let cur_data = &f.cur.data.as_ref().unwrap().data;
             decode_sb(
                 c,
                 t,
@@ -4155,6 +4163,7 @@ pub(crate) fn rav1d_decode_tile_sbrow(
                 &mut FrameThreadPassState::Second,
                 root_bl,
                 EdgeIndex::root(),
+                cur_data,
             )?;
             if t.b.x & 16 != 0 || f.seq_hdr().sb128 != 0 {
                 t.a += 1;
@@ -4263,6 +4272,7 @@ pub(crate) fn rav1d_decode_tile_sbrow(
                 read_restoration_info(ts, &mut lr, p, frame_type, debug_block_info!(f, t.b));
             }
         }
+        let cur_data = &f.cur.data.as_ref().unwrap().data;
         decode_sb(
             c,
             t,
@@ -4270,6 +4280,7 @@ pub(crate) fn rav1d_decode_tile_sbrow(
             &mut FrameThreadPassState::First(&mut f.ts[t.ts].context.try_lock().unwrap()),
             root_bl,
             EdgeIndex::root(),
+            cur_data,
         )?;
         if t.b.x & 16 != 0 || f.seq_hdr().sb128 != 0 {
             t.a += 1;

@@ -137,6 +137,7 @@ pub(crate) type ReconBIntraFn = fn(
     EdgeFlags,
     &Av1Block,
     &Av1BlockIntra,
+    &[Rav1dPictureDataComponent; 3], // pixel_data: overridable per-tile pixel target
 ) -> ();
 
 pub(crate) type ReconBInterFn = fn(
@@ -146,6 +147,7 @@ pub(crate) type ReconBInterFn = fn(
     BlockSize,
     &Av1Block,
     &Av1BlockInter,
+    &[Rav1dPictureDataComponent; 3], // pixel_data: overridable per-tile pixel target
 ) -> Result<(), ()>;
 
 pub(crate) type FilterSbrowFn =
@@ -2099,9 +2101,10 @@ pub(crate) fn rav1d_recon_b_intra<BD: BitDepth>(
     intra_edge_flags: EdgeFlags,
     b: &Av1Block,
     intra: &Av1BlockIntra,
+    pixel_data: &[Rav1dPictureDataComponent; 3],
 ) {
     let bd = BD::from_c(f.bitdepth_max);
-    let cur_data = &f.cur.data.as_ref().unwrap().data;
+    let cur_data = pixel_data;
     let ts = &f.ts[t.ts];
 
     let bx4 = t.b.x & 31;
@@ -2792,9 +2795,10 @@ pub(crate) fn rav1d_recon_b_inter<BD: BitDepth>(
     bs: BlockSize,
     b: &Av1Block,
     inter: &Av1BlockInter,
+    pixel_data: &[Rav1dPictureDataComponent; 3],
 ) -> Result<(), ()> {
     let bd = BD::from_c(f.bitdepth_max);
-    let cur_data = &f.cur.data.as_ref().unwrap().data;
+    let cur_data = pixel_data;
 
     let ts = &f.ts[t.ts];
     let bx4 = t.b.x & 31;
