@@ -427,6 +427,39 @@ impl itxfm::Fn {
             } else {
                 // Direct dispatch: no function pointers, no extern "C" ABI overhead.
 
+                // Tile-parallel mode: per-row guards + SIMD dispatch
+                // Each row gets its own narrow guard (width w, height 1). No stride gaps.
+                // ITX does read-modify-write; mutable per-row guards support both.
+                #[cfg(target_arch = "x86_64")]
+                if crate::src::cpu::is_force_scalar() {
+                    let txsz = TxfmSize::from_repr(tx_size).unwrap();
+                    let (w, h) = txsz.to_wh();
+                    let pxstride = dst.pixel_stride::<BD>();
+
+                    // Acquire all h per-row guards simultaneously
+                    let mut guards: Vec<_> = (0..h)
+                        .map(|y| {
+                            let row = dst + (y as isize * pxstride);
+                            row.slice_mut::<BD>(w)
+                        })
+                        .collect();
+
+                    // Create mutable row slices from the guards
+                    let mut rows: Vec<&mut [BD::Pixel]> = guards
+                        .iter_mut()
+                        .map(|g| &mut g[..w])
+                        .collect();
+
+                    // Try SIMD dispatch with per-row slices (no block-wide guard!)
+                    if crate::src::safe_simd::itx::itxfm_add_dispatch_rows::<BD>(
+                        tx_size, tx_type, &mut rows, 0, coeff, eob, bd,
+                    ) {
+                        return;
+                    }
+                    // Fall through to scalar if SIMD unavailable
+                    drop(guards);
+                }
+
                 // Save pre-SIMD state for comparison testing
                 #[cfg(feature = "simd_test")]
                 let pre_state = {
