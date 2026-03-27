@@ -16416,3 +16416,141 @@ pub fn itxfm_add_dispatch<BD: BitDepth>(
         ),
     }
 }
+
+/// Maximum buffer size for the ITX gather/scatter temporary.
+/// 64x64 at 16bpc = 64 * 64 * 2 = 8192 bytes.
+const ITX_ROWS_BUF_SIZE: usize = 64 * 64 * 2;
+
+/// Safe dispatch for ITX SIMD operating on per-row pixel slices.
+///
+/// Gathers existing pixels from `dst_rows` into a contiguous stack buffer,
+/// runs the SIMD inner function (read-modify-write), then scatters results
+/// back to `dst_rows[y][dst_x..dst_x+w]`.
+///
+/// Returns `true` if a SIMD implementation handled the call.
+#[cfg(not(feature = "asm"))]
+pub fn itxfm_add_dispatch_rows<BD: BitDepth>(
+    tx_size: usize,
+    tx_type: usize,
+    dst_rows: &mut [&mut [BD::Pixel]],
+    dst_x: usize,
+    coeff: &mut [BD::Coef],
+    eob: i32,
+    bd: BD,
+) -> bool {
+    use crate::include::common::bitdepth::BPC;
+    use zerocopy::{FromBytes, IntoBytes};
+
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        let _ = (tx_size, tx_type, dst_rows, dst_x, coeff, eob, bd);
+        return false;
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        let Some(token) = crate::src::cpu::summon_avx2() else {
+            return false;
+        };
+
+        let txfm = match crate::src::levels::TxfmSize::from_repr(tx_size) {
+            Some(t) => t,
+            None => return false,
+        };
+        let (w, h) = txfm.to_wh();
+        let pixel_size = std::mem::size_of::<BD::Pixel>();
+        let row_bytes = w * pixel_size;
+        let buf_needed = row_bytes * h;
+        let bd_c = bd.into_c();
+
+        assert!(buf_needed <= ITX_ROWS_BUF_SIZE, "itx block too large: {w}x{h}");
+
+        // Reinterpret coeff as &mut [i16] (safe via zerocopy)
+        let coeff_i16: &mut [i16] = FromBytes::mut_from_bytes(coeff.as_mut_bytes())
+            .expect("coeff alignment/size mismatch for i16 reinterpretation");
+
+        match BD::BPC {
+            BPC::BPC8 => {
+                // Gather: copy existing pixels into contiguous buffer
+                let mut buf = [0u8; ITX_ROWS_BUF_SIZE];
+                for y in 0..h {
+                    let src_pixels = &dst_rows[y][dst_x..dst_x + w];
+                    let src_bytes: &[u8] = src_pixels.as_bytes();
+                    buf[y * row_bytes..(y + 1) * row_bytes].copy_from_slice(src_bytes);
+                }
+
+                let dst_buf = &mut buf[..buf_needed];
+                let stride_u = row_bytes;
+                let stride_i = row_bytes as isize;
+
+                let handled = itxfm_dispatch_8bpc(
+                    token,
+                    tx_size,
+                    tx_type as TxfmType,
+                    dst_buf,
+                    0,       // base
+                    stride_u,
+                    stride_i,
+                    coeff_i16,
+                    eob,
+                    bd_c,
+                );
+
+                if !handled {
+                    return false;
+                }
+
+                // Scatter: copy results back to per-row slices
+                for y in 0..h {
+                    let src_row = &buf[y * row_bytes..(y + 1) * row_bytes];
+                    let dst_pixel_row = &mut dst_rows[y][dst_x..dst_x + w];
+                    let dst_row_bytes: &mut [u8] = dst_pixel_row.as_mut_bytes();
+                    dst_row_bytes.copy_from_slice(src_row);
+                }
+
+                true
+            }
+            BPC::BPC16 => {
+                // Use a u16 buffer to guarantee alignment for the inner function
+                let mut buf_u16 = [0u16; 64 * 64];
+                let buf_u16_needed = w * h;
+
+                // Gather: copy existing pixels into contiguous u16 buffer
+                for y in 0..h {
+                    let src_pixels = &dst_rows[y][dst_x..dst_x + w];
+                    let src_bytes: &[u8] = src_pixels.as_bytes();
+                    let dst_slice = &mut buf_u16[y * w..(y + 1) * w];
+                    let dst_bytes: &mut [u8] = dst_slice.as_mut_bytes();
+                    dst_bytes.copy_from_slice(src_bytes);
+                }
+
+                let handled = itxfm_dispatch_16bpc(
+                    token,
+                    tx_size,
+                    tx_type as TxfmType,
+                    &mut buf_u16[..buf_u16_needed],
+                    0,         // base
+                    row_bytes, // byte_stride
+                    coeff_i16,
+                    eob,
+                    bd_c,
+                );
+
+                if !handled {
+                    return false;
+                }
+
+                // Scatter: copy results back to per-row slices
+                for y in 0..h {
+                    let src_slice = &buf_u16[y * w..(y + 1) * w];
+                    let src_bytes: &[u8] = src_slice.as_bytes();
+                    let dst_pixel_row = &mut dst_rows[y][dst_x..dst_x + w];
+                    let dst_row_bytes: &mut [u8] = dst_pixel_row.as_mut_bytes();
+                    dst_row_bytes.copy_from_slice(src_bytes);
+                }
+
+                true
+            }
+        }
+    }
+}

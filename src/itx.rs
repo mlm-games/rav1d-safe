@@ -522,6 +522,17 @@ impl itxfm::Fn {
         eob: i32,
         bd: BD,
     ) {
+        // Try SIMD dispatch first (gather/scatter on per-row slices)
+        #[cfg(target_arch = "x86_64")]
+        {
+            if crate::src::safe_simd::itx::itxfm_add_dispatch_rows::<BD>(
+                tx_size, tx_type, dst_rows, dst_x, coeff, eob, bd,
+            ) {
+                return;
+            }
+        }
+
+        // Scalar fallback
         use crate::src::itx_rows;
 
         let txsz = TxfmSize::from_repr(tx_size).unwrap();

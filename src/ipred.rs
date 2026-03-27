@@ -279,16 +279,27 @@ impl angular_ipred::Fn {
         width: c_int,
         height: c_int,
         angle: c_int,
-        _max_width: c_int,
-        _max_height: c_int,
+        max_width: c_int,
+        max_height: c_int,
         bd: BD,
     ) {
+        // Try SIMD dispatch first (operates on per-row slices via gather/scatter)
+        #[cfg(target_arch = "x86_64")]
+        {
+            if crate::src::safe_simd::ipred::intra_pred_dispatch_rows::<BD>(
+                mode, dst_rows, dst_x, topleft, topleft_off,
+                width, height, angle, max_width, max_height, bd,
+            ) {
+                return;
+            }
+        }
+
+        // Scalar fallback
         use crate::src::ipred_rows;
 
         let w = width as usize;
         let h = height as usize;
 
-        // Dispatch to row-slice ipred functions (scalar only for now)
         match mode {
             0 => ipred_rows::dc_pred_rows::<BD>(
                 dst_rows, dst_x, topleft, topleft_off, width, height, bd,
@@ -309,11 +320,10 @@ impl angular_ipred::Fn {
                 dst_rows, dst_x, width, height, bd,
             ),
             6 | 7 | 8 => {
-                // Z1/Z2/Z3: angular prediction — not yet ported to row slices.
-                // Fall back to PicOffset path for now.
-                // TODO: port z1/z2/z3 to row-slice API
+                // Z1/Z2/Z3: angular prediction — not yet ported to scalar row slices.
+                // SIMD path above handles these via gather/scatter.
                 unimplemented!(
-                    "angular prediction mode {mode} not yet ported to row slices"
+                    "angular prediction mode {mode} not yet ported to scalar row slices"
                 );
             }
             9 => ipred_rows::smooth_pred_rows::<BD>(
@@ -329,10 +339,10 @@ impl angular_ipred::Fn {
                 dst_rows, dst_x, topleft, topleft_off, w, h,
             ),
             13 => {
-                // Filter prediction — not yet ported to row slices.
-                // TODO: port filter_pred to row-slice API
+                // Filter prediction — not yet ported to scalar row slices.
+                // SIMD path above handles this via gather/scatter.
                 unimplemented!(
-                    "filter prediction mode 13 not yet ported to row slices"
+                    "filter prediction mode 13 not yet ported to scalar row slices"
                 );
             }
             _ => unreachable!(),
