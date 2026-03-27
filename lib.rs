@@ -149,6 +149,7 @@ pub mod src {
     pub(crate) mod rayon_pipeline;
     pub(crate) mod row_pic_offset;
     pub(crate) mod tile_pixel_buf;
+    pub(crate) mod tile_plane_rows;
     pub(crate) mod tile_workers;
     pub(crate) mod strided;
     mod thread_task;
