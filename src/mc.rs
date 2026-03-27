@@ -613,40 +613,6 @@ fn avg_direct<BD: BitDepth>(
     h: i32,
     bd: BD,
 ) {
-    // Tile-parallel mode: per-row guards + SIMD dispatch
-    // Each row gets its own narrow guard (width w, height 1). No stride gaps.
-    // Tiles with disjoint column ranges have non-overlapping per-row guards.
-    #[cfg(target_arch = "x86_64")]
-    if crate::src::cpu::is_force_scalar() {
-        let pxstride = dst.pixel_stride::<BD>();
-        let wu = w as usize;
-        let hu = h as usize;
-
-        // Acquire all h per-row guards simultaneously
-        let mut guards: Vec<_> = (0..hu)
-            .map(|y| {
-                let row = dst + (y as isize * pxstride);
-                row.slice_mut::<BD>(wu)
-            })
-            .collect();
-
-        // Create mutable row slices from the guards
-        let mut rows: Vec<&mut [BD::Pixel]> = guards
-            .iter_mut()
-            .map(|g| &mut g[..wu])
-            .collect();
-
-        // Try SIMD dispatch with per-row slices (no block-wide guard!)
-        if crate::src::safe_simd::mc::avg_dispatch_rows::<BD>(
-            &mut rows, tmp1, tmp2, w, h, bd,
-        ) {
-            return;
-        }
-        // Fall through to scalar if SIMD unavailable
-        // Guards still held — scalar avg_rust will re-acquire guards (redundant but correct)
-        drop(guards);
-    }
-
     #[cfg(target_arch = "x86_64")]
     if crate::src::safe_simd::mc::avg_dispatch::<BD>(dst, tmp1, tmp2, w, h, bd) {
         return;
@@ -674,33 +640,6 @@ fn w_avg_direct<BD: BitDepth>(
     weight: i32,
     bd: BD,
 ) {
-    // Tile-parallel mode: per-row guards + SIMD dispatch
-    #[cfg(target_arch = "x86_64")]
-    if crate::src::cpu::is_force_scalar() {
-        let pxstride = dst.pixel_stride::<BD>();
-        let wu = w as usize;
-        let hu = h as usize;
-
-        let mut guards: Vec<_> = (0..hu)
-            .map(|y| {
-                let row = dst + (y as isize * pxstride);
-                row.slice_mut::<BD>(wu)
-            })
-            .collect();
-
-        let mut rows: Vec<&mut [BD::Pixel]> = guards
-            .iter_mut()
-            .map(|g| &mut g[..wu])
-            .collect();
-
-        if crate::src::safe_simd::mc::w_avg_dispatch_rows::<BD>(
-            &mut rows, tmp1, tmp2, w, h, weight, bd,
-        ) {
-            return;
-        }
-        drop(guards);
-    }
-
     #[cfg(target_arch = "x86_64")]
     if crate::src::safe_simd::mc::w_avg_dispatch::<BD>(dst, tmp1, tmp2, w, h, weight, bd) {
         return;
@@ -728,33 +667,6 @@ fn mask_direct<BD: BitDepth>(
     mask: &[u8],
     bd: BD,
 ) {
-    // Tile-parallel mode: per-row guards + SIMD dispatch
-    #[cfg(target_arch = "x86_64")]
-    if crate::src::cpu::is_force_scalar() {
-        let pxstride = dst.pixel_stride::<BD>();
-        let wu = w as usize;
-        let hu = h as usize;
-
-        let mut guards: Vec<_> = (0..hu)
-            .map(|y| {
-                let row = dst + (y as isize * pxstride);
-                row.slice_mut::<BD>(wu)
-            })
-            .collect();
-
-        let mut rows: Vec<&mut [BD::Pixel]> = guards
-            .iter_mut()
-            .map(|g| &mut g[..wu])
-            .collect();
-
-        if crate::src::safe_simd::mc::mask_dispatch_rows::<BD>(
-            &mut rows, tmp1, tmp2, w, h, mask, bd,
-        ) {
-            return;
-        }
-        drop(guards);
-    }
-
     #[cfg(target_arch = "x86_64")]
     if crate::src::safe_simd::mc::mask_dispatch::<BD>(dst, tmp1, tmp2, w, h, mask, bd) {
         return;
@@ -780,34 +692,6 @@ fn blend_direct<BD: BitDepth>(
     h: i32,
     mask: &[u8],
 ) {
-    // Tile-parallel mode: per-row guards + SIMD dispatch
-    // blend reads AND writes dst — mutable per-row guards provide both.
-    #[cfg(target_arch = "x86_64")]
-    if crate::src::cpu::is_force_scalar() {
-        let pxstride = dst.pixel_stride::<BD>();
-        let wu = w as usize;
-        let hu = h as usize;
-
-        let mut guards: Vec<_> = (0..hu)
-            .map(|y| {
-                let row = dst + (y as isize * pxstride);
-                row.slice_mut::<BD>(wu)
-            })
-            .collect();
-
-        let mut rows: Vec<&mut [BD::Pixel]> = guards
-            .iter_mut()
-            .map(|g| &mut g[..wu])
-            .collect();
-
-        if crate::src::safe_simd::mc::blend_dispatch_rows::<BD>(
-            &mut rows, tmp, w, h, mask,
-        ) {
-            return;
-        }
-        drop(guards);
-    }
-
     #[cfg(target_arch = "x86_64")]
     if crate::src::safe_simd::mc::blend_dispatch::<BD>(dst, tmp, w, h, mask) {
         return;
@@ -979,34 +863,6 @@ fn blend_dir_direct<BD: BitDepth>(
     w: i32,
     h: i32,
 ) {
-    // Tile-parallel mode: per-row guards + SIMD dispatch
-    // blend_dir reads AND writes dst — mutable per-row guards provide both.
-    #[cfg(target_arch = "x86_64")]
-    if crate::src::cpu::is_force_scalar() {
-        let pxstride = dst.pixel_stride::<BD>();
-        let wu = w as usize;
-        let hu = h as usize;
-
-        let mut guards: Vec<_> = (0..hu)
-            .map(|y| {
-                let row = dst + (y as isize * pxstride);
-                row.slice_mut::<BD>(wu)
-            })
-            .collect();
-
-        let mut rows: Vec<&mut [BD::Pixel]> = guards
-            .iter_mut()
-            .map(|g| &mut g[..wu])
-            .collect();
-
-        if crate::src::safe_simd::mc::blend_dir_dispatch_rows::<BD>(
-            is_h, &mut rows, tmp, w, h,
-        ) {
-            return;
-        }
-        drop(guards);
-    }
-
     #[cfg(target_arch = "x86_64")]
     if crate::src::safe_simd::mc::blend_dir_dispatch::<BD>(is_h, dst, tmp, w, h) {
         return;

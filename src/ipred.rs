@@ -101,40 +101,6 @@ fn intra_pred_direct<BD: BitDepth>(
     max_height: c_int,
     bd: BD,
 ) {
-    // Tile-parallel mode: per-row guards + SIMD dispatch
-    // Each row gets its own narrow guard (width w, height 1). No stride gaps.
-    // Tiles with disjoint column ranges have non-overlapping per-row guards.
-    #[cfg(target_arch = "x86_64")]
-    if crate::src::cpu::is_force_scalar() {
-        let pxstride = dst.pixel_stride::<BD>();
-        let wu = width as usize;
-        let hu = height as usize;
-
-        // Acquire all h per-row guards simultaneously
-        let mut guards: Vec<_> = (0..hu)
-            .map(|y| {
-                let row = dst + (y as isize * pxstride);
-                row.slice_mut::<BD>(wu)
-            })
-            .collect();
-
-        // Create mutable row slices from the guards
-        let mut rows: Vec<&mut [BD::Pixel]> = guards
-            .iter_mut()
-            .map(|g| &mut g[..wu])
-            .collect();
-
-        // Try SIMD dispatch with per-row slices (no block-wide guard!)
-        if crate::src::safe_simd::ipred::intra_pred_dispatch_rows::<BD>(
-            mode, &mut rows, 0, topleft, topleft_off,
-            width, height, angle, max_width, max_height, bd,
-        ) {
-            return;
-        }
-        // Fall through to scalar if SIMD unavailable
-        drop(guards);
-    }
-
     #[cfg(target_arch = "x86_64")]
     if crate::src::safe_simd::ipred::intra_pred_dispatch::<BD>(
         mode,
