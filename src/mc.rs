@@ -2019,6 +2019,42 @@ impl w_mask::Fn {
             }
         }
     }
+
+    /// Row-slice variant — tries SIMD first, no scalar fallback (w_mask_rows not implemented).
+    #[cfg(not(feature = "asm"))]
+    #[allow(dead_code)]
+    pub fn call_rows<BD: BitDepth>(
+        &self,
+        layout: Rav1dPixelLayoutSubSampled,
+        dst_rows: &mut [&mut [BD::Pixel]],
+        dst_x: usize,
+        tmp1: &[i16],
+        tmp2: &[i16],
+        w: i32,
+        h: i32,
+        mask: &mut [u8; SEG_MASK_LEN],
+        sign: i32,
+        bd: BD,
+    ) {
+        #[cfg(target_arch = "x86_64")]
+        {
+            let wu = w as usize;
+            let hu = h as usize;
+            let mut sub_rows: Vec<&mut [BD::Pixel]> = dst_rows[..hu]
+                .iter_mut()
+                .map(|row| &mut row[dst_x..dst_x + wu])
+                .collect();
+            if crate::src::safe_simd::mc::w_mask_dispatch_rows::<BD>(
+                layout, &mut sub_rows, tmp1, tmp2, w, h, mask, sign, bd,
+            ) {
+                return;
+            }
+        }
+
+        // No scalar fallback — w_mask_rows not yet implemented in mc_rows.
+        // Fall through to PicOffset-based path if SIMD unavailable.
+        let _ = (layout, dst_rows, dst_x, tmp1, tmp2, w, h, mask, sign, bd);
+    }
 }
 
 wrap_fn_ptr!(pub unsafe extern "C" fn blend(
@@ -2055,6 +2091,39 @@ impl blend::Fn {
             }
         }
     }
+
+    /// Row-slice variant — tries SIMD first, falls back to scalar.
+    #[cfg(not(feature = "asm"))]
+    #[allow(dead_code)]
+    pub fn call_rows<BD: BitDepth>(
+        &self,
+        dst_rows: &mut [&mut [BD::Pixel]],
+        dst_x: usize,
+        tmp: &[BD::Pixel],
+        w: i32,
+        h: i32,
+        mask: &[u8],
+    ) {
+        #[cfg(target_arch = "x86_64")]
+        {
+            let wu = w as usize;
+            let hu = h as usize;
+            let mut sub_rows: Vec<&mut [BD::Pixel]> = dst_rows[..hu]
+                .iter_mut()
+                .map(|row| &mut row[dst_x..dst_x + wu])
+                .collect();
+            if crate::src::safe_simd::mc::blend_dispatch_rows::<BD>(
+                &mut sub_rows, tmp, w, h, mask,
+            ) {
+                return;
+            }
+        }
+
+        // Scalar fallback
+        crate::src::mc_rows::blend_rows::<BD>(
+            dst_rows, dst_x, tmp, w as usize, h as usize, mask,
+        );
+    }
 }
 
 wrap_fn_ptr!(pub unsafe extern "C" fn blend_dir(
@@ -2088,6 +2157,47 @@ impl blend_dir::Fn {
             } else {
                 blend_dir_direct::<BD>(is_h, dst, tmp, w, h)
             }
+        }
+    }
+
+    /// Row-slice variant — tries SIMD first, falls back to scalar.
+    ///
+    /// `is_h`: true for blend_h, false for blend_v.
+    #[cfg(not(feature = "asm"))]
+    #[allow(dead_code)]
+    pub fn call_rows<BD: BitDepth>(
+        &self,
+        is_h: bool,
+        dst_rows: &mut [&mut [BD::Pixel]],
+        dst_x: usize,
+        tmp: &[BD::Pixel],
+        w: i32,
+        h: i32,
+    ) {
+        #[cfg(target_arch = "x86_64")]
+        {
+            let wu = w as usize;
+            let hu = h as usize;
+            let mut sub_rows: Vec<&mut [BD::Pixel]> = dst_rows[..hu]
+                .iter_mut()
+                .map(|row| &mut row[dst_x..dst_x + wu])
+                .collect();
+            if crate::src::safe_simd::mc::blend_dir_dispatch_rows::<BD>(
+                is_h, &mut sub_rows, tmp, w, h,
+            ) {
+                return;
+            }
+        }
+
+        // Scalar fallback
+        if is_h {
+            crate::src::mc_rows::blend_h_rows::<BD>(
+                dst_rows, dst_x, tmp, w as usize, h as usize,
+            );
+        } else {
+            crate::src::mc_rows::blend_v_rows::<BD>(
+                dst_rows, dst_x, tmp, w as usize, h as usize,
+            );
         }
     }
 }
