@@ -20,6 +20,7 @@ use crate::include::dav1d::headers::SgrIdx;
 use crate::include::dav1d::picture::Rav1dPicture;
 use crate::include::dav1d::picture::Rav1dPictureDataComponent;
 use crate::src::align::AlignedVec64;
+use crate::src::strided::Strided as _;
 use crate::src::c_arc::CArc;
 use crate::src::cdf::CdfMvComponent;
 use crate::src::cdf::CdfThreadContext;
@@ -33,6 +34,7 @@ use crate::src::disjoint_mut::DisjointMut;
 use crate::src::disjoint_mut::DisjointMutSlice;
 use crate::src::disjoint_mut::TryResizable;
 use crate::src::disjoint_mut::TryResizableWith;
+use rav1d_disjoint_mut::PicBuf;
 use crate::src::enum_map::DefaultValue;
 use crate::src::enum_map::enum_map;
 use crate::src::enum_map::enum_map_ty;
@@ -4274,7 +4276,7 @@ pub(crate) fn rav1d_decode_tile_sbrow(
                 read_restoration_info(ts, &mut lr, p, frame_type, debug_block_info!(f, t.b));
             }
         }
-        let cur_data = &f.cur.data.as_ref().unwrap().data;
+        let cur_data = pixel_data_override.unwrap_or(&f.cur.data.as_ref().unwrap().data);
         decode_sb(
             c,
             t,
@@ -4306,7 +4308,9 @@ pub(crate) fn rav1d_decode_tile_sbrow(
     }
 
     // backup pre-loopfilter pixels for intra prediction of the next sbrow
-    if t.frame_thread.pass != 1 {
+    // Skip when using per-tile pixel buffers — the caller will copy back to
+    // f.cur.data first, then call backup_ipred_edge on the merged frame.
+    if t.frame_thread.pass != 1 && pixel_data_override.is_none() {
         (f.bd_fn().backup_ipred_edge)(f, t);
     }
 
@@ -4891,6 +4895,57 @@ fn rav1d_decode_frame_rayon(c: &Rav1dContext, f: &mut Rav1dFrameData) -> Rav1dRe
     let filter_ttd = Arc::new(Rav1dTaskContextTaskThread::new(Arc::clone(&task_thread_data)));
     let mut filter_ctx = Box::new(Rav1dTaskContext::new(filter_ttd));
 
+    // --- Per-tile pixel buffers (one set of [Y, U, V] per tile column) ---
+    //
+    // Each tile gets its own DisjointMut-backed pixel buffer with the same
+    // stride and total byte length as the frame's planes. This eliminates
+    // all DisjointMut contention between parallel tiles — each tile writes
+    // to its private buffer, and we merge results back to f.cur.data after
+    // the rayon scope completes.
+    //
+    // The buffers use frame-absolute layout so all pixel offset calculations
+    // in the recon code work unchanged. Only the SB row's byte range is
+    // copied in/out; the rest stays zeroed.
+    let frame_data = f.cur.data.as_ref().unwrap();
+    let layout = f.cur.p.layout;
+    let pixel_size: usize = if f.cur.p.bpc > 8 { 2 } else { 1 };
+    let ss_ver_y = 0usize;
+    let ss_hor_y = 0usize;
+    let ss_ver_uv = (layout == Rav1dPixelLayout::I420) as usize;
+    let ss_hor_uv = (layout != Rav1dPixelLayout::I444) as usize;
+
+    // Collect per-plane metadata: (byte_len, stride, ss_ver, ss_hor)
+    let plane_info: [(usize, isize, usize, usize); 3] = [
+        (frame_data.data[0].byte_len(), frame_data.data[0].stride(), ss_ver_y, ss_hor_y),
+        (frame_data.data[1].byte_len(), frame_data.data[1].stride(), ss_ver_uv, ss_hor_uv),
+        (frame_data.data[2].byte_len(), frame_data.data[2].stride(), ss_ver_uv, ss_hor_uv),
+    ];
+
+    // Allocate per-tile pixel buffers — reused across all SB rows.
+    // Each buffer matches the frame component's byte_len so that frame-absolute
+    // offsets work unchanged inside the recon code.
+    let alignment = 64usize; // RAV1D_PICTURE_ALIGNMENT
+    let mut tile_pixel_bufs: Vec<[Rav1dPictureDataComponent; 3]> = (0..cols)
+        .map(|_| {
+            std::array::from_fn(|p| {
+                let (byte_len, stride, _, _) = plane_info[p];
+                if byte_len == 0 {
+                    Rav1dPictureDataComponent::from_parts(
+                        PicBuf::from_vec_aligned(Vec::new(), alignment, 0),
+                        stride,
+                    )
+                } else {
+                    let alloc_size = byte_len + alignment;
+                    let buf = vec![0u8; alloc_size];
+                    Rav1dPictureDataComponent::from_parts(
+                        PicBuf::from_vec_aligned(buf, alignment, byte_len),
+                        stride,
+                    )
+                }
+            })
+        })
+        .collect();
+
     for (tile_row, sbh_start_end) in row_start_sb[..rows + 1].windows(2).take(rows).enumerate() {
         let [sbh_start, sbh_end] = <[u16; 2]>::try_from(sbh_start_end).unwrap();
         let sbh_end = cmp::min(sbh_end.into(), f.sbh);
@@ -4913,6 +4968,56 @@ fn rav1d_decode_frame_rayon(c: &Rav1dContext, f: &mut Rav1dFrameData) -> Rav1dRe
 
             // === TILE-PARALLEL RECONSTRUCTION ===
             let recon_start = std::time::Instant::now();
+
+            // Compute SB row byte ranges for each plane and copy frame → tile buffers.
+            let sb_pixel_h_luma = cmp::min(
+                (f.sb_step * 4) as usize,
+                f.cur.p.h as usize - (by * 4) as usize,
+            );
+            // Per-plane: (byte_range_start, byte_range_end) for this SB row.
+            let sb_byte_ranges: [(usize, usize); 3] = std::array::from_fn(|p| {
+                let (byte_len, stride, ss_ver, _ss_hor) = plane_info[p];
+                if byte_len == 0 {
+                    return (0, 0);
+                }
+                let abs_stride = stride.unsigned_abs();
+                let plane_h = if p == 0 {
+                    sb_pixel_h_luma
+                } else {
+                    (sb_pixel_h_luma + ss_ver) >> ss_ver
+                };
+                let pixel_y = if p == 0 {
+                    (by * 4) as usize
+                } else {
+                    ((by * 4) as usize) >> ss_ver
+                };
+                if stride >= 0 {
+                    let start = pixel_y * abs_stride;
+                    let end = cmp::min(start + plane_h * abs_stride, byte_len);
+                    (start, end)
+                } else {
+                    // Negative stride: row 0 is at the END of the buffer.
+                    // Row r is at byte offset: byte_len - (r + 1) * abs_stride
+                    let row_end = pixel_y + plane_h;
+                    let start = byte_len - row_end * abs_stride;
+                    let end = byte_len - pixel_y * abs_stride;
+                    (start, cmp::min(end, byte_len))
+                }
+            });
+
+            // Copy entire frame buffer to each tile buffer (debug: full copy).
+            for col in 0..cols {
+                for p in 0..3 {
+                    let byte_len = plane_info[p].0;
+                    if byte_len == 0 {
+                        continue;
+                    }
+                    let src = &*frame_data.data[p].dm().index(0..byte_len);
+                    let mut dst = tile_pixel_bufs[col][p].dm().index_mut(0..byte_len);
+                    dst.copy_from_slice(src);
+                }
+            }
+
             {
                 for col in 0..cols {
                     tile_contexts[col].ts = tile_row * cols + col;
@@ -4922,29 +5027,81 @@ fn rav1d_decode_frame_rayon(c: &Rav1dContext, f: &mut Rav1dFrameData) -> Rav1dRe
 
                 let had_error = std::sync::atomic::AtomicBool::new(false);
                 let tile_slice = tile_contexts.as_mut_slice();
+                let buf_slice = tile_pixel_bufs.as_slice();
                 rayon::scope(|s| {
                     let mut remaining = tile_slice;
                     let err = &had_error;
-                    for _col in 0..cols {
+                    for col in 0..cols {
                         let (head, tail) = remaining.split_at_mut(1);
                         remaining = tail;
                         let t = &mut head[0];
+                        let tile_comp = &buf_slice[col];
                         s.spawn(move |_| {
-                            // Pass None for pixel_data_override — uses f.cur.data.
-                            // TODO: Pass per-tile pixel components to eliminate
-                            // DisjointMut entirely (the spec goal).
-                            // For now, force scalar to avoid block-wide guard overlap.
-                            crate::src::cpu::set_force_scalar(true);
-                            if rav1d_decode_tile_sbrow(c, t, f_shared, None).is_err() {
+                            if rav1d_decode_tile_sbrow(c, t, f_shared, Some(tile_comp)).is_err() {
                                 err.store(true, Ordering::Relaxed);
                             }
-                            crate::src::cpu::set_force_scalar(false);
                         });
                     }
                 });
                 if had_error.load(Ordering::Relaxed) {
                     return Err(EINVAL);
                 }
+            }
+
+            // Copy back each tile's column range from tile buffer → frame.
+            for col in 0..cols {
+                let tile_idx = tile_row * cols + col;
+                let ts_tiling = &f.ts[tile_idx].tiling;
+                for p in 0..3 {
+                    let (byte_len, stride, ss_ver, ss_hor) = plane_info[p];
+                    let (sb_start, sb_end) = sb_byte_ranges[p];
+                    if sb_start >= sb_end {
+                        continue;
+                    }
+                    let abs_stride = stride.unsigned_abs();
+                    let plane_h = if p == 0 {
+                        sb_pixel_h_luma
+                    } else {
+                        (sb_pixel_h_luma + ss_ver) >> ss_ver
+                    };
+                    // Tile column pixel range in pixels (accounting for chroma subsampling)
+                    let col_px_start = (ts_tiling.col_start * 4) as usize >> ss_hor;
+                    let col_px_end = (ts_tiling.col_end * 4) as usize >> ss_hor;
+                    let col_byte_start = col_px_start * pixel_size;
+                    let col_byte_end = col_px_end * pixel_size;
+                    // Pixel row range for this plane's SB row
+                    let pixel_y = if p == 0 {
+                        (by * 4) as usize
+                    } else {
+                        ((by * 4) as usize) >> ss_ver
+                    };
+                    // Copy per-row: only the tile's column bytes
+                    for row in 0..plane_h {
+                        let row_byte_offset = if stride >= 0 {
+                            (pixel_y + row) * abs_stride
+                        } else {
+                            byte_len - (pixel_y + row + 1) * abs_stride
+                        };
+                        let src_start = row_byte_offset + col_byte_start;
+                        let src_end = cmp::min(
+                            row_byte_offset + col_byte_end,
+                            row_byte_offset + abs_stride,
+                        );
+                        if src_start >= src_end || src_end > byte_len {
+                            continue;
+                        }
+                        let src = &*tile_pixel_bufs[col][p].dm().index(src_start..src_end);
+                        let mut dst = frame_data.data[p].dm().index_mut(src_start..src_end);
+                        dst.copy_from_slice(src);
+                    }
+                }
+            }
+
+            // Run backup_ipred_edge sequentially after copy-back.
+            // It reads from f.cur.data which now has the post-recon pixels.
+            for col in 0..cols {
+                tile_contexts[col].b.y = by;
+                (bd_fn.backup_ipred_edge)(f_shared, &mut tile_contexts[col]);
             }
 
             // Save temporal MVs

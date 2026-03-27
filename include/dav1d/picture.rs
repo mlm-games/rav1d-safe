@@ -350,14 +350,14 @@ impl Rav1dPictureDataComponent {
     /// Construct from parts. For c-ffi, stride is inside inner.
     /// For non-c-ffi, stride is stored separately.
     #[cfg(feature = "c-ffi")]
-    fn from_parts(inner: Rav1dPictureDataComponentInner, _stride: isize) -> Self {
+    pub(crate) fn from_parts(inner: Rav1dPictureDataComponentInner, _stride: isize) -> Self {
         Self {
             data: crate::src::disjoint_mut::dm_new(inner),
         }
     }
 
     #[cfg(not(feature = "c-ffi"))]
-    fn from_parts(inner: Rav1dPictureDataComponentInner, stride: isize) -> Self {
+    pub(crate) fn from_parts(inner: Rav1dPictureDataComponentInner, stride: isize) -> Self {
         Self {
             data: crate::src::disjoint_mut::dm_new(inner),
             stride,
