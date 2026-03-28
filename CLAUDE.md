@@ -1,4 +1,6 @@
-# rav1d-safe
+# rav1d-safe-ng
+
+Older version (v0.3.1) of rav1d-safe. The active version is at `~/work/zen/rav1d-safe/` (v0.4.1) and `~/work/zen/rav1d-rayon/` (rayon threading branch).
 
 Safe SIMD fork of rav1d — 160k lines of hand-written assembly replaced by safe Rust intrinsics.
 
