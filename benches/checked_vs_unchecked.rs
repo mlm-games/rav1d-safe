@@ -47,7 +47,11 @@ fn decode(obu: &[u8], cpu: CpuLevel) {
 }
 
 fn bench_decode(suite: &mut Suite) {
-    let mode = if managed::is_unchecked() { "unchecked" } else { "checked" };
+    let mode = if managed::is_unchecked() {
+        "unchecked"
+    } else {
+        "checked"
+    };
     eprintln!("rav1d-safe build mode: {mode}");
 
     let obu = obu_4k();
@@ -57,13 +61,9 @@ fn bench_decode(suite: &mut Suite) {
         g.throughput(Throughput::Bytes(obu.len() as u64));
         g.config().max_time(std::time::Duration::from_secs(60));
 
-        g.bench("scalar", |b| {
-            b.iter(|| decode(obu, CpuLevel::Scalar))
-        });
+        g.bench("scalar", |b| b.iter(|| decode(obu, CpuLevel::Scalar)));
 
-        g.bench("simd", |b| {
-            b.iter(|| decode(obu, CpuLevel::Native))
-        });
+        g.bench("simd", |b| b.iter(|| decode(obu, CpuLevel::Native)));
     });
 
     // Single bench for cross-build baseline comparison (checked vs unchecked)
@@ -71,9 +71,7 @@ fn bench_decode(suite: &mut Suite) {
         g.throughput(Throughput::Bytes(obu.len() as u64));
         g.config().max_time(std::time::Duration::from_secs(30));
 
-        g.bench("decode", |b| {
-            b.iter(|| decode(obu, CpuLevel::Native))
-        });
+        g.bench("decode", |b| b.iter(|| decode(obu, CpuLevel::Native)));
     });
 }
 
