@@ -928,7 +928,14 @@ pub fn rav1d_worker_task(task_thread: Arc<Rav1dTaskContextTaskThread>) {
 
                             // if not bottom sbrow of tile, this task will be re-added
                             // after it's finished
-                            if check_tile(&f, &fc.task_thread, &t, (c.fc.len() > 1) as c_int, deblock_dep) == 0 {
+                            if check_tile(
+                                &f,
+                                &fc.task_thread,
+                                &t,
+                                (c.fc.len() > 1) as c_int,
+                                deblock_dep,
+                            ) == 0
+                            {
                                 break 'found (fc, t_idx, prev_t);
                             }
                         } else if t.recon_progress != 0 {
