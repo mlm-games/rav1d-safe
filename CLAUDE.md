@@ -626,6 +626,14 @@ functions read entries on-demand via `.load(Relaxed)` — no gather allocation.
 - Loopfilter pixel data: per-row compact buffers with 2D decomposition matching filter reach
 - 37 call sites converted (33 SIMD dispatch + 4 scalar fallbacks)
 
+**Deblock progress barrier (FIXED):** The loop filter V-pass at the bottom of sbrow N
+reads/writes pixels extending up to 8 rows into sbrow N+1. Without synchronization,
+concurrent TileReconstruction for sbrow N+1 creates overlapping borrows. Fixed by adding
+a deblock progress check in `check_tile` — reconstruction of sbrow N blocks until
+DeblockRows for sbrow N-1 completes. Only active when n_tc>1 and loopfilter level_y != [0;2].
+In C dav1d this race is benign (raw pointers), but rav1d-safe's DisjointMut correctly
+detects it. Regression test: `tests/tile_threading_overlap.rs`.
+
 **Other fixes for threading:**
 - `ipred_prepare.rs`: per-pixel column reads instead of stride-wide strided_slice
 - `cdef_apply.rs`: per-row backup2lines instead of 2*stride wide guard
