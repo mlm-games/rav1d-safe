@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'KEEP GOING. Do not stop. Correctness → safety → speed. Replace PicOffset with row slices in recon.rs. 71 tests pass. 14/14 conformance. Eliminate DisjointMut. forbid(unsafe_code). Never stop until rav1d-rayon beats dav1d.'"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -81,11 +81,11 @@ pub fn run_tile_workers<P, RF, FF>(
             let recon_barrier = &recon_done_barrier;
             let filter_barrier = &filter_done_barrier;
             let sby_ref = &current_sby;
-            let recon = &recon_fn;
+            let _recon = &recon_fn;
             let boundaries = tile_col_boundaries;
             let tile_start = boundaries[tile_idx];
             let tile_end = boundaries[tile_idx + 1];
-            let tile_width = tile_end - tile_start;
+            let _tile_width = tile_end - tile_start;
 
             s.spawn(move |_| {
                 for sby in 0..num_sb_rows {
@@ -97,7 +97,7 @@ pub fn run_tile_workers<P, RF, FF>(
 
                     let row_start = sby * sb_height;
                     let row_end = (row_start + sb_height).min(height);
-                    let nrows = row_end - row_start;
+                    let _nrows = row_end - row_start;
 
                     // Create row slices for this tile's column range
                     // SAFETY NOTE: This is the one place where we need to
@@ -176,7 +176,7 @@ mod tests {
                     row.fill((sby + 1) as u8);
                 }
             },
-            |rows, sby| {
+            |rows, _sby| {
                 for row in rows.iter_mut() {
                     for px in row.iter_mut() {
                         *px *= 2;

@@ -8,8 +8,6 @@
 
 #![forbid(unsafe_code)]
 
-use crate::include::common::bitdepth::BitDepth;
-
 /// Per-row pixel slices for one tile's column range of one plane.
 ///
 /// Created by splitting the frame buffer at tile column boundaries.

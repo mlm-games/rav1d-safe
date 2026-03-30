@@ -12,8 +12,6 @@
 use crate::include::common::bitdepth::AsPrimitive;
 use crate::include::common::bitdepth::BitDepth;
 use crate::include::dav1d::headers::Rav1dFilterMode;
-use crate::src::internal::COMPINTER_LEN;
-use crate::src::internal::SCRATCH_INTER_INTRA_BUF_LEN;
 use crate::src::tables::dav1d_mc_subpel_filters;
 use crate::src::tables::dav1d_obmc_masks;
 use to_method::To;

@@ -247,10 +247,10 @@ pub(crate) fn rav1d_get_cpu_flags() -> CpuFlags {
     CpuFlags::from_bits_truncate(flags & mask)
 }
 
-/// Thread-local flag to force scalar dispatch (no SIMD).
-/// Used by rayon tile workers to avoid DisjointMut overlap from
-/// block-wide SIMD guards. When set, `summon_avx2()` returns None
-/// and all DSP dispatch falls through to per-row scalar.
+// Thread-local flag to force scalar dispatch (no SIMD).
+// Used by rayon tile workers to avoid DisjointMut overlap from
+// block-wide SIMD guards. When set, `summon_avx2()` returns None
+// and all DSP dispatch falls through to per-row scalar.
 std::thread_local! {
     static FORCE_SCALAR: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }

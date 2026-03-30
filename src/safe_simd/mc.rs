@@ -11343,7 +11343,7 @@ pub fn avg_dispatch_rows<BD: BitDepth>(
         return false;
     };
     use crate::include::common::bitdepth::BPC;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
+    let _pixel_size = std::mem::size_of::<BD::Pixel>();
     let wu = w as usize;
     let hu = h as usize;
 

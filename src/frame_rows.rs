@@ -9,7 +9,6 @@
 
 #![forbid(unsafe_code)]
 
-use crate::include::common::bitdepth::BitDepth;
 use crate::src::plane_rows::{split_into_rows, split_rows_by_tiles};
 
 /// Pre-split row slices for one plane of a frame.

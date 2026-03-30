@@ -160,7 +160,7 @@ pub fn run_pipeline_progressive<P, RF, FF>(
 {
     for sby in 0..config.num_sb_rows {
         let (row_start, row_end) = config.sb_row_range(sby);
-        let nrows = row_end - row_start;
+        let _nrows = row_end - row_start;
 
         // Get mutable rows for this SB row
         let mut rows = frame.active_rows_mut(row_start, row_end);
@@ -382,7 +382,7 @@ mod tests {
                     row.fill((sby + 1) as u8);
                 }
             },
-            |rows, sby| {
+            |rows, _sby| {
                 // Filter: double the values
                 for row in rows.iter_mut() {
                     for px in row.iter_mut() {
