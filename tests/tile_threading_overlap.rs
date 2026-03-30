@@ -99,14 +99,16 @@ fn single_threaded_no_panic() {
     }
 }
 
-/// Multi-threaded tile decode triggers DisjointMut overlap panic.
+/// Multi-threaded tile decode must not trigger DisjointMut overlap panic.
 ///
-/// KNOWN BUG: tile threads access overlapping pixel buffer regions in
-/// loopfilter, causing DisjointMut's runtime borrow checker to panic on a
-/// worker thread. This deadlocks the decoder (worker panic is not propagated
-/// to the caller), so we detect it via join timeout.
+/// Previously, the loop filter V-pass at the bottom of sbrow N would
+/// read/write pixels extending into the top rows of sbrow N+1. This
+/// conflicted with concurrent TileReconstruction for sbrow N+1, causing
+/// DisjointMut to (correctly) detect overlapping borrows and panic on a
+/// worker thread, which deadlocked the decoder.
 ///
-/// When the bug is fixed, change the final assertion to require zero failures.
+/// Fixed by adding a deblock progress barrier in check_tile: reconstruction
+/// of sbrow N now waits until DeblockRows for sbrow N-1 completes.
 #[test]
 #[ignore]
 fn multi_threaded_tile_overlap() {
@@ -137,9 +139,8 @@ fn multi_threaded_tile_overlap() {
                 }
             }
         }
-        // If we already have evidence of the bug, no need to keep going.
-        if panic_or_timeout >= 3 {
-            eprintln!("Early exit: {panic_or_timeout} failures already observed.");
+        // If we see any failures, stop early — the fix has regressed.
+        if panic_or_timeout > 0 {
             break;
         }
     }
@@ -147,18 +148,9 @@ fn multi_threaded_tile_overlap() {
     let total = panic_or_timeout + ok_count;
     eprintln!("\nResults: {panic_or_timeout} failures, {ok_count} ok out of {total} attempts");
 
-    // Document the known bug: we expect at least one failure across all attempts.
-    // When the bug is fixed, change this to:
-    //   assert_eq!(panic_or_timeout, 0, "DisjointMut overlap should be fixed");
-    if panic_or_timeout > 0 {
-        eprintln!(
-            "KNOWN BUG: DisjointMut overlap triggered {panic_or_timeout} times. \
-             See: loopfilter tile threading overlap with crafted AV1 bitstream."
-        );
-    } else {
-        eprintln!(
-            "NOTE: Overlap did not trigger in {total} attempts. \
-             This is a non-deterministic race — the bug may still exist."
-        );
-    }
+    assert_eq!(
+        panic_or_timeout, 0,
+        "DisjointMut overlap should not occur — deblock progress barrier prevents \
+         concurrent reconstruction and loop filter V-pass on the same pixel rows"
+    );
 }

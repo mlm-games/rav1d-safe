@@ -551,6 +551,7 @@ fn check_tile(
     task_thread: &Rav1dFrameContextTaskThread,
     t: &Rav1dTask,
     frame_mt: c_int,
+    deblock_progress: Option<&AtomicI32>,
 ) -> c_int {
     let tp = t.type_0 == TaskType::TileEntropy;
     let tile_idx = t.tile_idx as usize;
@@ -568,6 +569,27 @@ fn check_tile(
         }
         error = (p2 == TILE_ERROR) as c_int;
         error |= task_thread.error.fetch_or(error, Ordering::SeqCst);
+    }
+    // Prevent reconstruction of sbrow N from starting until DeblockRows for
+    // sbrow N-1 is complete. The loop filter V-pass at the bottom of sbrow N-1
+    // reads/writes pixels that extend into the top rows of sbrow N (up to 8
+    // rows past the boundary). Without this barrier, concurrent reconstruction
+    // of sbrow N would create overlapping mutable/shared borrows on the pixel
+    // buffer, which DisjointMut correctly detects as a violation.
+    //
+    // In C dav1d this race is benign (raw pointers, no borrow checker), but in
+    // rav1d-safe we must serialize to maintain safe concurrency. This only
+    // applies to reconstruction tasks (not entropy) and only when deblocking is
+    // enabled (loopfilter level_y != [0; 2]).
+    if !tp {
+        if let Some(deblock) = deblock_progress {
+            let dp = deblock.load(Ordering::SeqCst);
+            if dp < t.sby {
+                return 1;
+            }
+            error |= (dp == TILE_ERROR) as c_int;
+            task_thread.error.fetch_or(error, Ordering::SeqCst);
+        }
     }
     let frame_hdr = &***f.frame_hdr.as_ref().unwrap();
     if error == 0 && frame_mt != 0 && !frame_hdr.frame_type.is_key_or_intra() {
@@ -888,9 +910,25 @@ pub fn rav1d_worker_task(task_thread: Arc<Rav1dTaskContextTaskThread>) {
                             // haven't separated out these fields.
                             let f = fc.data.read();
 
+                            // When deblocking is enabled, pass the deblock progress
+                            // so that reconstruction of sbrow N waits until
+                            // DeblockRows for sbrow N-1 completes (the V-filter at
+                            // the bottom of sbrow N-1 extends into sbrow N's pixel
+                            // rows).
+                            let deblock_dep = if c.tc.len() > 1 {
+                                let fh = &***f.frame_hdr.as_ref().unwrap();
+                                if fh.loopfilter.level_y != [0; 2] {
+                                    Some(&fc.frame_thread_progress.deblock)
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            };
+
                             // if not bottom sbrow of tile, this task will be re-added
                             // after it's finished
-                            if check_tile(&f, &fc.task_thread, &t, (c.fc.len() > 1) as c_int) == 0 {
+                            if check_tile(&f, &fc.task_thread, &t, (c.fc.len() > 1) as c_int, deblock_dep) == 0 {
                                 break 'found (fc, t_idx, prev_t);
                             }
                         } else if t.recon_progress != 0 {
@@ -1136,7 +1174,17 @@ pub fn rav1d_worker_task(task_thread: Arc<Rav1dTaskContextTaskThread>) {
                         if (sby + 1) << f.sb_shift < ts.tiling.row_end {
                             t.sby += 1;
                             t.deps_skip = 0.into();
-                            if check_tile(&f, &fc.task_thread, &t, uses_2pass) == 0 {
+                            let deblock_dep = if c.tc.len() > 1 {
+                                let fh = &***f.frame_hdr.as_ref().unwrap();
+                                if fh.loopfilter.level_y != [0; 2] {
+                                    Some(&fc.frame_thread_progress.deblock)
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            };
+                            if check_tile(&f, &fc.task_thread, &t, uses_2pass, deblock_dep) == 0 {
                                 ts.progress[p_1 as usize].store(progress, Ordering::SeqCst);
                                 reset_task_cur_async(ttd, t.frame_idx, c.fc.len() as u32);
                                 if ttd.cond_signaled.fetch_or(1, Ordering::SeqCst) == 0 {
