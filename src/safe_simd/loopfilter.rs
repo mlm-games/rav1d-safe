@@ -1450,86 +1450,58 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 return false;
             }
 
-            // Compact buffer: decompose the reach area into a 2D rectangle and
-            // copy per-row. This avoids the wide 1D mutable guard that overlaps
-            // with concurrent tile threads doing compact_read on adjacent SB rows.
-            let (compact_w, compact_h, start_pixel, base) = if !is_v {
-                // H filter: 23 pixels wide (-7 to +15), max_iter*4 rows tall
-                let w = 7 + 16; // 23
-                let h = max_iter * 4;
-                let start = dst.offset - 7;
-                (w, h, start, 7usize)
+            // COW: single-threaded uses the original wide guard (zero-copy),
+            // multi-threaded decomposes into a 2D compact buffer with per-row guards.
+            let use_compact = crate::include::dav1d::picture::tile_threading_active();
+
+            let start_pixel = dst.offset - reach_before;
+            let total_pixels = (reach_before + reach_after).min(buf_pixel_len - start_pixel);
+
+            let (mut compact_buf, mut guard_buf);
+            let (buf, base, stride_i): (&mut [u8], usize, isize) = if use_compact {
+                let (cw, ch, cstart, cbase) = if !is_v {
+                    (7 + 16, max_iter * 4, dst.offset - 7, 7usize)
+                } else {
+                    let cw = max_iter * 4 + 16;
+                    (cw, 7 + 16, dst.offset.saturating_sub(7 * byte_stride), 7 * cw)
+                };
+                let lpf_pic = crate::src::with_offset::WithOffset {
+                    data: dst.data,
+                    offset: cstart,
+                };
+                let (cb, cs) = lpf_pic.compact_read_per_row::<BitDepth8>(cw, ch);
+                compact_buf = Some((cb, cs, lpf_pic, cw, ch));
+                guard_buf = None;
+                let entry = compact_buf.as_mut().unwrap();
+                (entry.0.as_mut_slice(), cbase, entry.1 as isize)
             } else {
-                // V filter: max_iter*4 + 16 pixels wide, 23 rows tall
-                let w = max_iter * 4 + 16;
-                let h = 7 + 16; // 23
-                let start = dst.offset.saturating_sub(7 * byte_stride);
-                (w, h, start, 7 * w)
+                compact_buf = None;
+                guard_buf = Some(dst.data.slice_mut::<BitDepth8, _>((start_pixel.., ..total_pixels)));
+                let g = guard_buf.as_mut().unwrap();
+                (&mut **g, reach_before, stride as isize)
             };
-            let lpf_pic = crate::src::with_offset::WithOffset {
-                data: dst.data,
-                offset: start_pixel,
-            };
-            let (mut compact, compact_stride) =
-                lpf_pic.compact_read_per_row::<BitDepth8>(compact_w, compact_h);
-            let buf: &mut [u8] = &mut compact;
-            let stride_i = compact_stride as isize;
 
             match (is_y, is_v) {
                 (true, false) => lpf_h_sb_y_8bpc_inner(
-                    buf,
-                    base,
-                    stride_i,
-                    mask,
-                    lvl_slice,
-                    lvl_base,
-                    lvl_byte_idx,
-                    b4_stride,
-                    lut,
-                    w,
-                    bitdepth_max,
+                    buf, base, stride_i, mask, lvl_slice, lvl_base, lvl_byte_idx,
+                    b4_stride, lut, w, bitdepth_max,
                 ),
                 (true, true) => lpf_v_sb_y_8bpc_inner(
-                    buf,
-                    base,
-                    stride_i,
-                    mask,
-                    lvl_slice,
-                    lvl_base,
-                    lvl_byte_idx,
-                    b4_stride,
-                    lut,
-                    w,
-                    bitdepth_max,
+                    buf, base, stride_i, mask, lvl_slice, lvl_base, lvl_byte_idx,
+                    b4_stride, lut, w, bitdepth_max,
                 ),
                 (false, false) => lpf_h_sb_uv_8bpc_inner(
-                    buf,
-                    base,
-                    stride_i,
-                    mask,
-                    lvl_slice,
-                    lvl_base,
-                    lvl_byte_idx,
-                    b4_stride,
-                    lut,
-                    w,
-                    bitdepth_max,
+                    buf, base, stride_i, mask, lvl_slice, lvl_base, lvl_byte_idx,
+                    b4_stride, lut, w, bitdepth_max,
                 ),
                 (false, true) => lpf_v_sb_uv_8bpc_inner(
-                    buf,
-                    base,
-                    stride_i,
-                    mask,
-                    lvl_slice,
-                    lvl_base,
-                    lvl_byte_idx,
-                    b4_stride,
-                    lut,
-                    w,
-                    bitdepth_max,
+                    buf, base, stride_i, mask, lvl_slice, lvl_base, lvl_byte_idx,
+                    b4_stride, lut, w, bitdepth_max,
                 ),
             }
-            lpf_pic.compact_write_back_per_row::<BitDepth8>(compact_w, compact_h, &compact);
+            if let Some((ref buf, _, ref lpf_pic, cw, ch)) = compact_buf {
+                lpf_pic.compact_write_back_per_row::<BitDepth8>(cw, ch, buf);
+            }
         }
         BPC::BPC16 => {
             use crate::include::common::bitdepth::BitDepth16;
@@ -1551,87 +1523,80 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 return false;
             }
 
-            // Compact buffer: decompose the reach area into a 2D rectangle and
-            // copy per-row. This avoids the wide 1D mutable guard that overlaps
-            // with concurrent tile threads doing compact_read on adjacent SB rows.
-            let (compact_w, compact_h, start_pixel, base) = if !is_v {
-                // H filter: 23 pixels wide (-7 to +15), max_iter*4 rows tall
-                let w = 7 + 16; // 23
-                let h = max_iter * 4;
-                let start = dst.offset - 7;
-                (w, h, start, 7usize)
-            } else {
-                // V filter: max_iter*4 + 16 pixels wide, 23 rows tall
-                let w = max_iter * 4 + 16;
-                let h = 7 + 16; // 23
-                let start = dst.offset.saturating_sub(7 * u16_stride);
-                (w, h, start, 7 * w)
-            };
-            let lpf_pic = crate::src::with_offset::WithOffset {
-                data: dst.data,
-                offset: start_pixel,
-            };
-            let (mut compact, compact_stride) =
-                lpf_pic.compact_read_per_row::<BitDepth16>(compact_w, compact_h);
-            let buf: &mut [u16] =
-                zerocopy::FromBytes::mut_from_bytes(&mut compact[..]).unwrap();
-            let stride_i = (compact_stride / 2) as isize; // u16 stride = byte_stride / 2
+            // COW: single-threaded uses the original wide guard (zero-copy),
+            // multi-threaded decomposes into a 2D compact buffer with per-row guards.
+            let use_compact = crate::include::dav1d::picture::tile_threading_active();
 
-            match (is_y, is_v) {
-                (true, false) => lpf_h_sb_y_16bpc_inner(
-                    buf,
-                    base,
-                    stride_i,
-                    mask,
-                    lvl_slice,
-                    lvl_base,
-                    lvl_byte_idx,
-                    b4_stride,
-                    lut,
-                    w,
-                    bitdepth_max,
-                ),
-                (true, true) => lpf_v_sb_y_16bpc_inner(
-                    buf,
-                    base,
-                    stride_i,
-                    mask,
-                    lvl_slice,
-                    lvl_base,
-                    lvl_byte_idx,
-                    b4_stride,
-                    lut,
-                    w,
-                    bitdepth_max,
-                ),
-                (false, false) => lpf_h_sb_uv_16bpc_inner(
-                    buf,
-                    base,
-                    stride_i,
-                    mask,
-                    lvl_slice,
-                    lvl_base,
-                    lvl_byte_idx,
-                    b4_stride,
-                    lut,
-                    w,
-                    bitdepth_max,
-                ),
-                (false, true) => lpf_v_sb_uv_16bpc_inner(
-                    buf,
-                    base,
-                    stride_i,
-                    mask,
-                    lvl_slice,
-                    lvl_base,
-                    lvl_byte_idx,
-                    b4_stride,
-                    lut,
-                    w,
-                    bitdepth_max,
-                ),
+            if use_compact {
+                let (compact_w, compact_h, start_pixel, base) = if !is_v {
+                    // H filter: 23 pixels wide (-7 to +15), max_iter*4 rows tall
+                    let w = 7 + 16; // 23
+                    let h = max_iter * 4;
+                    let start = dst.offset - 7;
+                    (w, h, start, 7usize)
+                } else {
+                    // V filter: max_iter*4 + 16 pixels wide, 23 rows tall
+                    let w = max_iter * 4 + 16;
+                    let h = 7 + 16; // 23
+                    let start = dst.offset.saturating_sub(7 * u16_stride);
+                    (w, h, start, 7 * w)
+                };
+                let lpf_pic = crate::src::with_offset::WithOffset {
+                    data: dst.data,
+                    offset: start_pixel,
+                };
+                let (mut compact, compact_stride) =
+                    lpf_pic.compact_read_per_row::<BitDepth16>(compact_w, compact_h);
+                let buf: &mut [u16] =
+                    zerocopy::FromBytes::mut_from_bytes(&mut compact[..]).unwrap();
+                let stride_i = (compact_stride / 2) as isize;
+
+                match (is_y, is_v) {
+                    (true, false) => lpf_h_sb_y_16bpc_inner(
+                        buf, base, stride_i, mask, lvl_slice, lvl_base, lvl_byte_idx,
+                        b4_stride, lut, w, bitdepth_max,
+                    ),
+                    (true, true) => lpf_v_sb_y_16bpc_inner(
+                        buf, base, stride_i, mask, lvl_slice, lvl_base, lvl_byte_idx,
+                        b4_stride, lut, w, bitdepth_max,
+                    ),
+                    (false, false) => lpf_h_sb_uv_16bpc_inner(
+                        buf, base, stride_i, mask, lvl_slice, lvl_base, lvl_byte_idx,
+                        b4_stride, lut, w, bitdepth_max,
+                    ),
+                    (false, true) => lpf_v_sb_uv_16bpc_inner(
+                        buf, base, stride_i, mask, lvl_slice, lvl_base, lvl_byte_idx,
+                        b4_stride, lut, w, bitdepth_max,
+                    ),
+                }
+                lpf_pic.compact_write_back_per_row::<BitDepth16>(compact_w, compact_h, &compact);
+            } else {
+                let start_pixel = dst.offset - reach_before;
+                let total_pixels = (reach_before + reach_after).min(buf_pixel_len - start_pixel);
+                let mut guard = dst.data.slice_mut::<BitDepth16, _>((start_pixel.., ..total_pixels));
+                let buf: &mut [u16] = &mut *guard;
+                let base = reach_before;
+                let stride_i = stride as isize / 2;
+
+                match (is_y, is_v) {
+                    (true, false) => lpf_h_sb_y_16bpc_inner(
+                        buf, base, stride_i, mask, lvl_slice, lvl_base, lvl_byte_idx,
+                        b4_stride, lut, w, bitdepth_max,
+                    ),
+                    (true, true) => lpf_v_sb_y_16bpc_inner(
+                        buf, base, stride_i, mask, lvl_slice, lvl_base, lvl_byte_idx,
+                        b4_stride, lut, w, bitdepth_max,
+                    ),
+                    (false, false) => lpf_h_sb_uv_16bpc_inner(
+                        buf, base, stride_i, mask, lvl_slice, lvl_base, lvl_byte_idx,
+                        b4_stride, lut, w, bitdepth_max,
+                    ),
+                    (false, true) => lpf_v_sb_uv_16bpc_inner(
+                        buf, base, stride_i, mask, lvl_slice, lvl_base, lvl_byte_idx,
+                        b4_stride, lut, w, bitdepth_max,
+                    ),
+                }
             }
-            lpf_pic.compact_write_back_per_row::<BitDepth16>(compact_w, compact_h, &compact);
         }
     }
     true
