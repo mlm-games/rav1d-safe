@@ -587,11 +587,12 @@ fn wiener_rust<BD: BitDepth>(
     let round_bits_v = 11 - (bitdepth == 12) as c_int * 2;
     let rounding_off_v = 1 << round_bits_v - 1;
     let round_offset = 1 << bitdepth + (round_bits_v - 1);
-    let (mut compact, _) = p.compact_read::<BD>(w, h);
+    let pixel_size = core::mem::size_of::<BD::Pixel>();
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(&p, w, h, |bytes, offset, stride| {
     let pixels: &mut [BD::Pixel] =
-        FromBytes::mut_from_bytes(&mut compact[..]).expect("compact pixel reinterpretation");
+        FromBytes::mut_from_bytes(&mut bytes[..]).expect("bytes pixel reinterpretation");
     for j in 0..h {
-        let row_off = j * w;
+        let row_off = (offset as isize + j as isize * stride) as usize / pixel_size;
         for i in 0..w {
             let mut sum = -round_offset;
             let z = &hor[j * REST_UNIT_STRIDE + i..(j + 7) * REST_UNIT_STRIDE];
@@ -604,7 +605,7 @@ fn wiener_rust<BD: BitDepth>(
                 iclip(sum + rounding_off_v >> round_bits_v, 0, bd.into_c()).as_();
         }
     }
-    p.compact_write_back::<BD>(w, h, &compact);
+    }); // with_pixel_guard_mut
 }
 
 /// Sum over a 3x3 area
@@ -979,18 +980,19 @@ fn sgr_5x5_rust<BD: BitDepth>(
     selfguided_filter(&mut dst, &mut tmp, w, h, 25, sgr.s0, bd);
 
     let w0 = sgr.w0 as c_int;
-    let (mut compact, _) = p.compact_read::<BD>(w, h);
+    let pixel_size = core::mem::size_of::<BD::Pixel>();
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(&p, w, h, |bytes, offset, stride| {
     let pixels: &mut [BD::Pixel] =
-        FromBytes::mut_from_bytes(&mut compact[..]).expect("compact pixel reinterpretation");
+        FromBytes::mut_from_bytes(&mut bytes[..]).expect("bytes pixel reinterpretation");
     for j in 0..h {
-        let row_off = j * w;
+        let row_off = (offset as isize + j as isize * stride) as usize / pixel_size;
         for i in 0..w {
             let v = w0 * dst[j * 384 + i].as_::<c_int>();
             pixels[row_off + i] =
                 bd.iclip_pixel(pixels[row_off + i].as_::<c_int>() + (v + (1 << 10) >> 11));
         }
     }
-    p.compact_write_back::<BD>(w, h, &compact);
+    }); // with_pixel_guard_mut
 }
 
 /// # Safety
@@ -1045,18 +1047,19 @@ fn sgr_3x3_rust<BD: BitDepth>(
     selfguided_filter(&mut dst, &mut tmp, w, h, 9, sgr.s1, bd);
 
     let w1 = sgr.w1 as c_int;
-    let (mut compact, _) = p.compact_read::<BD>(w, h);
+    let pixel_size = core::mem::size_of::<BD::Pixel>();
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(&p, w, h, |bytes, offset, stride| {
     let pixels: &mut [BD::Pixel] =
-        FromBytes::mut_from_bytes(&mut compact[..]).expect("compact pixel reinterpretation");
+        FromBytes::mut_from_bytes(&mut bytes[..]).expect("bytes pixel reinterpretation");
     for j in 0..h {
-        let row_off = j * w;
+        let row_off = (offset as isize + j as isize * stride) as usize / pixel_size;
         for i in 0..w {
             let v = w1 * dst[j * 384 + i].as_::<c_int>();
             pixels[row_off + i] =
                 bd.iclip_pixel(pixels[row_off + i].as_::<c_int>() + (v + (1 << 10) >> 11));
         }
     }
-    p.compact_write_back::<BD>(w, h, &compact);
+    }); // with_pixel_guard_mut
 }
 
 /// # Safety
@@ -1114,18 +1117,19 @@ fn sgr_mix_rust<BD: BitDepth>(
 
     let w0 = sgr.w0 as c_int;
     let w1 = sgr.w1 as c_int;
-    let (mut compact, _) = p.compact_read::<BD>(w, h);
+    let pixel_size = core::mem::size_of::<BD::Pixel>();
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(&p, w, h, |bytes, offset, stride| {
     let pixels: &mut [BD::Pixel] =
-        FromBytes::mut_from_bytes(&mut compact[..]).expect("compact pixel reinterpretation");
+        FromBytes::mut_from_bytes(&mut bytes[..]).expect("bytes pixel reinterpretation");
     for j in 0..h {
-        let row_off = j * w;
+        let row_off = (offset as isize + j as isize * stride) as usize / pixel_size;
         for i in 0..w {
             let v = w0 * dst0[j * 384 + i].as_::<c_int>() + w1 * dst1[j * 384 + i].as_::<c_int>();
             pixels[row_off + i] =
                 bd.iclip_pixel(pixels[row_off + i].as_::<c_int>() + (v + (1 << 10) >> 11));
         }
     }
-    p.compact_write_back::<BD>(w, h, &compact);
+    }); // with_pixel_guard_mut
 }
 
 #[deny(unsafe_op_in_unsafe_fn)]

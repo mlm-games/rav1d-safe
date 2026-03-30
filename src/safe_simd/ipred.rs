@@ -4913,18 +4913,12 @@ pub fn intra_pred_dispatch<BD: BitDepth>(
 
     let w = width as usize;
     let h = height as usize;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let compact_stride = w * pixel_size;
-    let byte_stride = compact_stride as isize;
     let bd_c = bd.into_c();
 
-    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
-    let (mut compact, _) = dst.compact_read::<BD>(w, h);
-    let dst_base_bytes = 0usize;
-
     // Get byte-level views (safe via zerocopy IntoBytes)
-    let dst_bytes: &mut [u8] = &mut compact[..];
     let tl_bytes: &[u8] = topleft.as_bytes();
+
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(&dst, w, h, |dst_bytes, dst_base_bytes, byte_stride| {
 
     match (BD::BPC, mode) {
         (BPC::BPC8, 0) => {
@@ -5535,6 +5529,7 @@ pub fn intra_pred_dispatch<BD: BitDepth>(
         }
         _ => return false,
     }
-    dst.compact_write_back::<BD>(w, h, &compact);
     true
+
+    }) // with_pixel_guard_mut
 }

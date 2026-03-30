@@ -16325,51 +16325,48 @@ pub fn itxfm_add_dispatch<BD: BitDepth>(
         };
         let (w, h) = txfm.to_wh();
         let bd_c = bd.into_c();
-        let pixel_size = core::mem::size_of::<BD::Pixel>();
-        let compact_stride = w * pixel_size; // byte stride in compact buffer
 
         // Reinterpret coeff as &mut [i16] (safe via zerocopy)
         let coeff_i16: &mut [i16] = zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
             .expect("coeff alignment/size mismatch for i16 reinterpretation");
 
-        // Use compact buffer pattern: per-row guards avoid stride-padding overlap
-        let (mut compact, _) = dst.compact_read::<BD>(w, h);
-
-        let result = match BD::BPC {
-            BPC::BPC8 => {
-                itxfm_dispatch_8bpc(
-                    token,
-                    tx_size,
-                    tx_type as TxfmType,
-                    &mut compact,
-                    0,
-                    compact_stride,
-                    compact_stride as isize,
-                    coeff_i16,
-                    eob,
-                    bd_c,
-                )
-            }
-            BPC::BPC16 => {
-                let dst_u16: &mut [u16] =
-                    zerocopy::FromBytes::mut_from_bytes(&mut compact[..])
-                        .expect("dst alignment/size mismatch for u16 reinterpretation");
-                itxfm_dispatch_16bpc(
-                    token,
-                    tx_size,
-                    tx_type as TxfmType,
-                    dst_u16,
-                    0,
-                    compact_stride,
-                    coeff_i16,
-                    eob,
-                    bd_c,
-                )
-            }
-        };
-
-        dst.compact_write_back::<BD>(w, h, &compact);
-        result
+        crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(
+            &dst, w, h,
+            |bytes, offset, stride| {
+                match BD::BPC {
+                    BPC::BPC8 => {
+                        itxfm_dispatch_8bpc(
+                            token,
+                            tx_size,
+                            tx_type as TxfmType,
+                            bytes,
+                            offset,
+                            stride.unsigned_abs(),
+                            stride,
+                            coeff_i16,
+                            eob,
+                            bd_c,
+                        )
+                    }
+                    BPC::BPC16 => {
+                        let dst_u16: &mut [u16] =
+                            zerocopy::FromBytes::mut_from_bytes(&mut bytes[..])
+                                .expect("dst alignment/size mismatch for u16 reinterpretation");
+                        itxfm_dispatch_16bpc(
+                            token,
+                            tx_size,
+                            tx_type as TxfmType,
+                            dst_u16,
+                            offset / 2,
+                            stride.unsigned_abs(),
+                            coeff_i16,
+                            eob,
+                            bd_c,
+                        )
+                    }
+                }
+            },
+        )
     }
 }
 

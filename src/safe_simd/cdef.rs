@@ -107,8 +107,7 @@ fn cdef_filter_block_simd_8bpc(
 
     let zero = _mm_setzero_si128();
 
-    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
-    let (mut compact, _) = dst.compact_read::<BitDepth8>(w, h);
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth8, _>(&dst, w, h, |bytes, offset, stride| {
 
     if pri_strength != 0 {
         let pri_tap = 4 - (pri_strength & 1);
@@ -190,13 +189,13 @@ fn cdef_filter_block_simd_8bpc(
                 let result = _mm_min_epi16(result, max_v);
                 let result_u8 = _mm_packus_epi16(result, zero);
 
-                let row_off = y * w;
+                let row_off = (offset as isize + y as isize * stride) as usize;
                 if w == 8 {
                     let mut out = [0u8; 16];
                     storeu_128!(&mut out, result_u8);
-                    compact[row_off..row_off + 8].copy_from_slice(&out[0..8]);
+                    bytes[row_off..row_off + 8].copy_from_slice(&out[0..8]);
                 } else {
-                    storei32!(&mut compact[row_off..row_off + 4], result_u8);
+                    storei32!(&mut bytes[row_off..row_off + 4], result_u8);
                 }
             }
         } else {
@@ -229,13 +228,13 @@ fn cdef_filter_block_simd_8bpc(
                 let result = _mm_add_epi16(px, adjusted);
                 let result_u8 = _mm_packus_epi16(result, zero);
 
-                let row_off = y * w;
+                let row_off = (offset as isize + y as isize * stride) as usize;
                 if w == 8 {
                     let mut out = [0u8; 16];
                     storeu_128!(&mut out, result_u8);
-                    compact[row_off..row_off + 8].copy_from_slice(&out[0..8]);
+                    bytes[row_off..row_off + 8].copy_from_slice(&out[0..8]);
                 } else {
-                    storei32!(&mut compact[row_off..row_off + 4], result_u8);
+                    storei32!(&mut bytes[row_off..row_off + 4], result_u8);
                 }
             }
         }
@@ -280,18 +279,18 @@ fn cdef_filter_block_simd_8bpc(
             let result = _mm_add_epi16(px, adjusted);
             let result_u8 = _mm_packus_epi16(result, zero);
 
-            let row_off = y * w;
+            let row_off = (offset as isize + y as isize * stride) as usize;
             if w == 8 {
                 let mut out = [0u8; 16];
                 storeu_128!(&mut out, result_u8);
-                compact[row_off..row_off + 8].copy_from_slice(&out[0..8]);
+                bytes[row_off..row_off + 8].copy_from_slice(&out[0..8]);
             } else {
-                storei32!(&mut compact[row_off..row_off + 4], result_u8);
+                storei32!(&mut bytes[row_off..row_off + 4], result_u8);
             }
         }
     }
 
-    dst.compact_write_back::<BitDepth8>(w, h, &compact);
+    }); // with_pixel_guard_mut
 }
 
 // ============================================================================
@@ -782,10 +781,10 @@ pub(super) fn cdef_filter_block_scalar_8bpc(
 ) {
     use crate::include::common::bitdepth::BitDepth8;
 
-    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
-    let (mut compact, _) = dst.compact_read::<BitDepth8>(w, h);
     let tmp = tmp.flex();
-    let mut p = compact.flex_mut();
+
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth8, _>(&dst, w, h, |bytes, offset, stride| {
+    let mut p = bytes.flex_mut();
 
     if pri_strength != 0 {
         let pri_tap = 4 - (pri_strength & 1);
@@ -796,7 +795,7 @@ pub(super) fn cdef_filter_block_scalar_8bpc(
 
             for y in 0..h {
                 let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-                let row_off = y * w;
+                let row_off = (offset as isize + y as isize * stride) as usize;
 
                 for x in 0..w {
                     let px = p[row_off + x] as i32;
@@ -852,7 +851,7 @@ pub(super) fn cdef_filter_block_scalar_8bpc(
         } else {
             for y in 0..h {
                 let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-                let row_off = y * w;
+                let row_off = (offset as isize + y as isize * stride) as usize;
 
                 for x in 0..w {
                     let px = p[row_off + x] as i32;
@@ -880,7 +879,7 @@ pub(super) fn cdef_filter_block_scalar_8bpc(
 
         for y in 0..h {
             let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-            let row_off = y * w;
+            let row_off = (offset as isize + y as isize * stride) as usize;
 
             for x in 0..w {
                 let px = p[row_off + x] as i32;
@@ -907,8 +906,7 @@ pub(super) fn cdef_filter_block_scalar_8bpc(
         }
     }
 
-    drop(p);
-    dst.compact_write_back::<BitDepth8>(w, h, &compact);
+    }); // with_pixel_guard_mut
 }
 
 /// Padding function for 8bpc - copies edge pixels into temporary buffer.
@@ -1459,10 +1457,9 @@ fn cdef_filter_block_simd_16bpc(
     let bd_max = _mm_set1_epi16(bitdepth_max as i16);
     let bitdepth_min_8 = ((bitdepth_max + 1) as u32).ilog2() as c_int - 8;
 
-    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
-    let (mut compact, _) = dst.compact_read::<BitDepth16>(w, h);
-    let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut compact[..])
-        .expect("compact alignment/size mismatch for u16 reinterpretation");
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth16, _>(&dst, w, h, |bytes, offset, stride| {
+    let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut bytes[..])
+        .expect("bytes alignment/size mismatch for u16 reinterpretation");
 
     if pri_strength != 0 {
         let pri_tap = 4 - (pri_strength >> bitdepth_min_8 & 1);
@@ -1544,7 +1541,7 @@ fn cdef_filter_block_simd_16bpc(
 
                 let mut out = [0u16; 8];
                 storeu_128!(&mut out, result);
-                let row_off = y * w;
+                let row_off = (offset as isize + y as isize * stride) as usize / 2;
                 p_u16[row_off..row_off + w].copy_from_slice(&out[..w]);
             }
         } else {
@@ -1581,7 +1578,7 @@ fn cdef_filter_block_simd_16bpc(
 
                 let mut out = [0u16; 8];
                 storeu_128!(&mut out, result);
-                let row_off = y * w;
+                let row_off = (offset as isize + y as isize * stride) as usize / 2;
                 p_u16[row_off..row_off + w].copy_from_slice(&out[..w]);
             }
         }
@@ -1630,12 +1627,12 @@ fn cdef_filter_block_simd_16bpc(
 
             let mut out = [0u16; 8];
             storeu_128!(&mut out, result);
-            let row_off = y * w;
+            let row_off = (offset as isize + y as isize * stride) as usize / 2;
             p_u16[row_off..row_off + w].copy_from_slice(&out[..w]);
         }
     }
 
-    dst.compact_write_back::<BitDepth16>(w, h, &compact);
+    }); // with_pixel_guard_mut
 }
 
 /// Scalar CDEF filter fallback for 16bpc.
@@ -1656,11 +1653,11 @@ pub(super) fn cdef_filter_block_scalar_16bpc(
 
     let bitdepth_min_8 = ((bitdepth_max + 1) as u32).ilog2() as c_int - 8;
 
-    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
-    let (mut compact, _) = dst.compact_read::<BitDepth16>(w, h);
-    let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut compact[..])
-        .expect("compact alignment/size mismatch for u16 reinterpretation");
     let tmp = tmp.flex();
+
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth16, _>(&dst, w, h, |bytes, offset, stride| {
+    let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut bytes[..])
+        .expect("bytes alignment/size mismatch for u16 reinterpretation");
     let mut p = p_u16.flex_mut();
 
     if pri_strength != 0 {
@@ -1672,7 +1669,7 @@ pub(super) fn cdef_filter_block_scalar_16bpc(
 
             for y in 0..h {
                 let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-                let row_off = y * w;
+                let row_off = (offset as isize + y as isize * stride) as usize / 2;
 
                 for x in 0..w {
                     let px = p[row_off + x] as i32;
@@ -1728,7 +1725,7 @@ pub(super) fn cdef_filter_block_scalar_16bpc(
         } else {
             for y in 0..h {
                 let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-                let row_off = y * w;
+                let row_off = (offset as isize + y as isize * stride) as usize / 2;
 
                 for x in 0..w {
                     let px = p[row_off + x] as i32;
@@ -1757,7 +1754,7 @@ pub(super) fn cdef_filter_block_scalar_16bpc(
 
         for y in 0..h {
             let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-            let row_off = y * w;
+            let row_off = (offset as isize + y as isize * stride) as usize / 2;
 
             for x in 0..w {
                 let px = p[row_off + x] as i32;
@@ -1785,8 +1782,7 @@ pub(super) fn cdef_filter_block_scalar_16bpc(
         }
     }
 
-    drop(p);
-    dst.compact_write_back::<BitDepth16>(w, h, &compact);
+    }); // with_pixel_guard_mut
 }
 
 /// CDEF filter for 16bpc 8x8 block
