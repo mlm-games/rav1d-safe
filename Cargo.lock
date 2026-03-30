@@ -856,7 +856,7 @@ dependencies = [
 
 [[package]]
 name = "rav1d-safe"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "aligned",
  "archmage",
@@ -1619,9 +1619,9 @@ dependencies = [
 
 [[package]]
 name = "zenbench"
-version = "0.1.0"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05f11014a1bc8a177822c7f083a4bba8e2d592dcec3d02bd874980d42881cfc7"
+checksum = "608aa467d997f62def7d8a8f206c9fc1754ec61e159423c7d374eb4db1c5b01e"
 dependencies = [
  "clap",
  "fs4",

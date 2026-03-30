@@ -213,13 +213,16 @@ jobs:
           if [ ! -d test-vectors/dav1d-test-data ]; then
             git clone --depth 1 https://code.videolan.org/videolan/dav1d-test-data.git test-vectors/dav1d-test-data
           fi
+      - name: Build threading tests
+        run: cargo test --no-default-features --features "bitdepth_8,bitdepth_16" --release --test reproduce_overlap --no-run
+        timeout-minutes: 15
       - name: Run threading tests (tile threading, checked mode)
         run: |
           cargo test --no-default-features --features "bitdepth_8,bitdepth_16" --release \
             --test reproduce_overlap -- --ignored --test-threads=1 \
             test_single_obu_tile_threading test_frame_threading_inter \
             test_frame_threading_allintra test_single_obu_frame_threading
-        timeout-minutes: 10
+        timeout-minutes: 5
 
   # ==========================================================================
   # Code coverage

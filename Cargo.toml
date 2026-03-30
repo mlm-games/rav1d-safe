@@ -5,7 +5,7 @@ exclude = ["fuzz"]
 [package]
 name = "rav1d-safe"
 authors = ["Rav1d Developers", "Prossimo", "Imazen"]
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 rust-version = "1.89"
 description = "Safe SIMD fork of rav1d - Rust AV1 decoder with archmage intrinsics"
@@ -51,11 +51,8 @@ safe_unaligned_simd = { version = "0.2.5", features = ["avx512"] }
 archmage = { version = "0.9.14", features = ["macros", "avx512", "testable_dispatch"] }
 divan = "0.1"
 md5 = "0.8.0"
+zenbench = "0.1.2"
 zenavif-parse = { version = "0.4", features = ["eager"] }
-
-# zenbench uses x86_64 TSC instructions, doesn't compile on 32-bit or non-x86
-[target.'cfg(target_arch = "x86_64")'.dev-dependencies]
-zenbench = "0.1"
 
 # tango-bench depends on libloading which doesn't support wasm32
 [target.'cfg(not(target_family = "wasm"))'.dev-dependencies]
