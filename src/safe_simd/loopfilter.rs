@@ -1450,20 +1450,36 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 return false;
             }
 
-            let start_pixel = dst.offset - reach_before;
-            let total_pixels = (reach_before + reach_after).min(buf_pixel_len - start_pixel);
-
-            let mut buf_guard = dst
-                .data
-                .slice_mut::<BitDepth8, _>((start_pixel.., ..total_pixels));
-            let buf: &mut [u8] = &mut *buf_guard;
-            let base = reach_before;
+            // Compact buffer: decompose the reach area into a 2D rectangle and
+            // copy per-row. This avoids the wide 1D mutable guard that overlaps
+            // with concurrent tile threads doing compact_read on adjacent SB rows.
+            let (compact_w, compact_h, start_pixel, base) = if !is_v {
+                // H filter: 23 pixels wide (-7 to +15), max_iter*4 rows tall
+                let w = 7 + 16; // 23
+                let h = max_iter * 4;
+                let start = dst.offset - 7;
+                (w, h, start, 7usize)
+            } else {
+                // V filter: max_iter*4 + 16 pixels wide, 23 rows tall
+                let w = max_iter * 4 + 16;
+                let h = 7 + 16; // 23
+                let start = dst.offset.saturating_sub(7 * byte_stride);
+                (w, h, start, 7 * w)
+            };
+            let lpf_pic = crate::src::with_offset::WithOffset {
+                data: dst.data,
+                offset: start_pixel,
+            };
+            let (mut compact, compact_stride) =
+                lpf_pic.compact_read::<BitDepth8>(compact_w, compact_h);
+            let buf: &mut [u8] = &mut compact;
+            let stride_i = compact_stride as isize;
 
             match (is_y, is_v) {
                 (true, false) => lpf_h_sb_y_8bpc_inner(
                     buf,
                     base,
-                    stride as isize,
+                    stride_i,
                     mask,
                     lvl_slice,
                     lvl_base,
@@ -1476,7 +1492,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 (true, true) => lpf_v_sb_y_8bpc_inner(
                     buf,
                     base,
-                    stride as isize,
+                    stride_i,
                     mask,
                     lvl_slice,
                     lvl_base,
@@ -1489,7 +1505,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 (false, false) => lpf_h_sb_uv_8bpc_inner(
                     buf,
                     base,
-                    stride as isize,
+                    stride_i,
                     mask,
                     lvl_slice,
                     lvl_base,
@@ -1502,7 +1518,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 (false, true) => lpf_v_sb_uv_8bpc_inner(
                     buf,
                     base,
-                    stride as isize,
+                    stride_i,
                     mask,
                     lvl_slice,
                     lvl_base,
@@ -1513,6 +1529,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     bitdepth_max,
                 ),
             }
+            lpf_pic.compact_write_back::<BitDepth8>(compact_w, compact_h, &compact);
         }
         BPC::BPC16 => {
             use crate::include::common::bitdepth::BitDepth16;
@@ -1534,20 +1551,37 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 return false;
             }
 
-            // Safe slice access: get a mutable guard covering the full filter reach
-            let start_pixel = dst.offset - reach_before;
-            let total_pixels = (reach_before + reach_after).min(buf_pixel_len - start_pixel);
-            let mut buf_guard = dst
-                .data
-                .slice_mut::<BitDepth16, _>((start_pixel.., ..total_pixels));
-            let buf: &mut [u16] = &mut *buf_guard;
-            let base = reach_before;
+            // Compact buffer: decompose the reach area into a 2D rectangle and
+            // copy per-row. This avoids the wide 1D mutable guard that overlaps
+            // with concurrent tile threads doing compact_read on adjacent SB rows.
+            let (compact_w, compact_h, start_pixel, base) = if !is_v {
+                // H filter: 23 pixels wide (-7 to +15), max_iter*4 rows tall
+                let w = 7 + 16; // 23
+                let h = max_iter * 4;
+                let start = dst.offset - 7;
+                (w, h, start, 7usize)
+            } else {
+                // V filter: max_iter*4 + 16 pixels wide, 23 rows tall
+                let w = max_iter * 4 + 16;
+                let h = 7 + 16; // 23
+                let start = dst.offset.saturating_sub(7 * u16_stride);
+                (w, h, start, 7 * w)
+            };
+            let lpf_pic = crate::src::with_offset::WithOffset {
+                data: dst.data,
+                offset: start_pixel,
+            };
+            let (mut compact, compact_stride) =
+                lpf_pic.compact_read::<BitDepth16>(compact_w, compact_h);
+            let buf: &mut [u16] =
+                zerocopy::FromBytes::mut_from_bytes(&mut compact[..]).unwrap();
+            let stride_i = (compact_stride / 2) as isize; // u16 stride = byte_stride / 2
 
             match (is_y, is_v) {
                 (true, false) => lpf_h_sb_y_16bpc_inner(
                     buf,
                     base,
-                    stride as isize / 2,
+                    stride_i,
                     mask,
                     lvl_slice,
                     lvl_base,
@@ -1560,7 +1594,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 (true, true) => lpf_v_sb_y_16bpc_inner(
                     buf,
                     base,
-                    stride as isize / 2,
+                    stride_i,
                     mask,
                     lvl_slice,
                     lvl_base,
@@ -1573,7 +1607,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 (false, false) => lpf_h_sb_uv_16bpc_inner(
                     buf,
                     base,
-                    stride as isize / 2,
+                    stride_i,
                     mask,
                     lvl_slice,
                     lvl_base,
@@ -1586,7 +1620,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 (false, true) => lpf_v_sb_uv_16bpc_inner(
                     buf,
                     base,
-                    stride as isize / 2,
+                    stride_i,
                     mask,
                     lvl_slice,
                     lvl_base,
@@ -1597,6 +1631,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     bitdepth_max,
                 ),
             }
+            lpf_pic.compact_write_back::<BitDepth16>(compact_w, compact_h, &compact);
         }
     }
     true
