@@ -11,7 +11,8 @@
 //! - Horizontal and vertical edge filtering
 //!
 //! This module uses safe slice-based pixel access. The dispatch function is fully safe.
-//! The level cache is `&[AtomicU8]` gathered into a `Vec<u8>` in `loopfilter_sb_dispatch`.
+//! The level cache `&[AtomicU8]` is passed directly to inner functions which read
+//! entries on demand via `Relaxed` atomic loads. No intermediate gather buffer is needed.
 //! PicOffset pixel data is converted to slices. All inner functions are fully safe.
 
 #![cfg_attr(not(feature = "unchecked"), forbid(unsafe_code))]
@@ -273,12 +274,13 @@ fn loop_filter_4_8bpc(
 // ============================================================================
 
 /// Read level value from lvl slice at the given offset.
-/// Each entry is [u8; 4]; `byte_idx` selects which byte within the entry:
+/// Each logical entry is 4 consecutive `AtomicU8`; `byte_idx` selects which byte:
 ///   0 = H Y, 1 = V Y, 2 = H/V U, 3 = H/V V
 /// Returns 0 for out-of-bounds access (= no filtering for that block).
 #[inline(always)]
-fn read_lvl(lvl: &[[u8; 4]], offset: usize, byte_idx: usize) -> u8 {
-    lvl.get(offset).map_or(0, |v| v[byte_idx])
+fn read_lvl(lvl: &[AtomicU8], offset: usize, byte_idx: usize) -> u8 {
+    let idx = offset * 4 + byte_idx;
+    lvl.get(idx).map_or(0, |v| v.load(Relaxed))
 }
 
 /// Loop filter for Y plane, horizontal edges (8bpc)
@@ -288,7 +290,7 @@ fn lpf_h_sb_y_8bpc_inner(
     mut dst_offset: usize,
     stride: isize,
     vmask: &[u32; 3],
-    lvl: &[[u8; 4]],
+    lvl: &[AtomicU8],
     lvl_base: usize,
     lvl_byte_idx: usize,
     b4_stride: isize,
@@ -358,7 +360,7 @@ fn lpf_v_sb_y_8bpc_inner(
     mut dst_offset: usize,
     stride: isize,
     vmask: &[u32; 3],
-    lvl: &[[u8; 4]],
+    lvl: &[AtomicU8],
     lvl_base: usize,
     lvl_byte_idx: usize,
     b4_stride: isize,
@@ -428,7 +430,7 @@ fn lpf_h_sb_uv_8bpc_inner(
     mut dst_offset: usize,
     stride: isize,
     vmask: &[u32; 3],
-    lvl: &[[u8; 4]],
+    lvl: &[AtomicU8],
     lvl_base: usize,
     lvl_byte_idx: usize,
     b4_stride: isize,
@@ -492,7 +494,7 @@ fn lpf_v_sb_uv_8bpc_inner(
     mut dst_offset: usize,
     stride: isize,
     vmask: &[u32; 3],
-    lvl: &[[u8; 4]],
+    lvl: &[AtomicU8],
     lvl_base: usize,
     lvl_byte_idx: usize,
     b4_stride: isize,
@@ -571,8 +573,9 @@ pub unsafe extern "C" fn lpf_h_sb_y_8bpc_avx2(
     // Determine buffer size needed: conservative upper bound
     let buf_len = compute_buf_len_u8(stride as isize, w);
     let buf = unsafe { std::slice::from_raw_parts_mut(dst_ptr as *mut u8, buf_len) };
+    let lvl_byte_len = compute_lvl_len(b4_stride as isize, w) * 4;
     let lvl =
-        unsafe { std::slice::from_raw_parts(lvl_ptr, compute_lvl_len(b4_stride as isize, w)) };
+        unsafe { std::slice::from_raw_parts(lvl_ptr as *const AtomicU8, lvl_byte_len) };
     lpf_h_sb_y_8bpc_inner(
         buf,
         0,
@@ -605,8 +608,9 @@ pub unsafe extern "C" fn lpf_v_sb_y_8bpc_avx2(
 ) {
     let buf_len = compute_buf_len_u8(stride as isize, w);
     let buf = unsafe { std::slice::from_raw_parts_mut(dst_ptr as *mut u8, buf_len) };
+    let lvl_byte_len = compute_lvl_len(b4_stride as isize, w) * 4;
     let lvl =
-        unsafe { std::slice::from_raw_parts(lvl_ptr, compute_lvl_len(b4_stride as isize, w)) };
+        unsafe { std::slice::from_raw_parts(lvl_ptr as *const AtomicU8, lvl_byte_len) };
     lpf_v_sb_y_8bpc_inner(
         buf,
         0,
@@ -639,8 +643,9 @@ pub unsafe extern "C" fn lpf_h_sb_uv_8bpc_avx2(
 ) {
     let buf_len = compute_buf_len_u8(stride as isize, w);
     let buf = unsafe { std::slice::from_raw_parts_mut(dst_ptr as *mut u8, buf_len) };
+    let lvl_byte_len = compute_lvl_len(b4_stride as isize, w) * 4;
     let lvl =
-        unsafe { std::slice::from_raw_parts(lvl_ptr, compute_lvl_len(b4_stride as isize, w)) };
+        unsafe { std::slice::from_raw_parts(lvl_ptr as *const AtomicU8, lvl_byte_len) };
     lpf_h_sb_uv_8bpc_inner(
         buf,
         0,
@@ -673,8 +678,9 @@ pub unsafe extern "C" fn lpf_v_sb_uv_8bpc_avx2(
 ) {
     let buf_len = compute_buf_len_u8(stride as isize, w);
     let buf = unsafe { std::slice::from_raw_parts_mut(dst_ptr as *mut u8, buf_len) };
+    let lvl_byte_len = compute_lvl_len(b4_stride as isize, w) * 4;
     let lvl =
-        unsafe { std::slice::from_raw_parts(lvl_ptr, compute_lvl_len(b4_stride as isize, w)) };
+        unsafe { std::slice::from_raw_parts(lvl_ptr as *const AtomicU8, lvl_byte_len) };
     lpf_v_sb_uv_8bpc_inner(
         buf,
         0,
@@ -910,7 +916,7 @@ fn lpf_h_sb_y_16bpc_inner(
     mut dst_offset: usize,
     stride_u16: isize,
     vmask: &[u32; 3],
-    lvl: &[[u8; 4]],
+    lvl: &[AtomicU8],
     lvl_base: usize,
     lvl_byte_idx: usize,
     b4_stride: isize,
@@ -980,7 +986,7 @@ fn lpf_v_sb_y_16bpc_inner(
     mut dst_offset: usize,
     stride_u16: isize,
     vmask: &[u32; 3],
-    lvl: &[[u8; 4]],
+    lvl: &[AtomicU8],
     lvl_base: usize,
     lvl_byte_idx: usize,
     b4_stride: isize,
@@ -1051,7 +1057,7 @@ fn lpf_h_sb_uv_16bpc_inner(
     mut dst_offset: usize,
     stride_u16: isize,
     vmask: &[u32; 3],
-    lvl: &[[u8; 4]],
+    lvl: &[AtomicU8],
     lvl_base: usize,
     lvl_byte_idx: usize,
     b4_stride: isize,
@@ -1115,7 +1121,7 @@ fn lpf_v_sb_uv_16bpc_inner(
     mut dst_offset: usize,
     stride_u16: isize,
     vmask: &[u32; 3],
-    lvl: &[[u8; 4]],
+    lvl: &[AtomicU8],
     lvl_base: usize,
     lvl_byte_idx: usize,
     b4_stride: isize,
@@ -1194,8 +1200,9 @@ pub unsafe extern "C" fn lpf_h_sb_y_16bpc_avx2(
 ) {
     let buf_len = compute_buf_len_u16(stride as isize, w);
     let buf = unsafe { std::slice::from_raw_parts_mut(dst_ptr as *mut u16, buf_len) };
+    let lvl_byte_len = compute_lvl_len(b4_stride as isize, w) * 4;
     let lvl =
-        unsafe { std::slice::from_raw_parts(lvl_ptr, compute_lvl_len(b4_stride as isize, w)) };
+        unsafe { std::slice::from_raw_parts(lvl_ptr as *const AtomicU8, lvl_byte_len) };
     lpf_h_sb_y_16bpc_inner(
         buf,
         0,
@@ -1228,8 +1235,9 @@ pub unsafe extern "C" fn lpf_v_sb_y_16bpc_avx2(
 ) {
     let buf_len = compute_buf_len_u16(stride as isize, w);
     let buf = unsafe { std::slice::from_raw_parts_mut(dst_ptr as *mut u16, buf_len) };
+    let lvl_byte_len = compute_lvl_len(b4_stride as isize, w) * 4;
     let lvl =
-        unsafe { std::slice::from_raw_parts(lvl_ptr, compute_lvl_len(b4_stride as isize, w)) };
+        unsafe { std::slice::from_raw_parts(lvl_ptr as *const AtomicU8, lvl_byte_len) };
     lpf_v_sb_y_16bpc_inner(
         buf,
         0,
@@ -1262,8 +1270,9 @@ pub unsafe extern "C" fn lpf_h_sb_uv_16bpc_avx2(
 ) {
     let buf_len = compute_buf_len_u16(stride as isize, w);
     let buf = unsafe { std::slice::from_raw_parts_mut(dst_ptr as *mut u16, buf_len) };
+    let lvl_byte_len = compute_lvl_len(b4_stride as isize, w) * 4;
     let lvl =
-        unsafe { std::slice::from_raw_parts(lvl_ptr, compute_lvl_len(b4_stride as isize, w)) };
+        unsafe { std::slice::from_raw_parts(lvl_ptr as *const AtomicU8, lvl_byte_len) };
     lpf_h_sb_uv_16bpc_inner(
         buf,
         0,
@@ -1296,8 +1305,9 @@ pub unsafe extern "C" fn lpf_v_sb_uv_16bpc_avx2(
 ) {
     let buf_len = compute_buf_len_u16(stride as isize, w);
     let buf = unsafe { std::slice::from_raw_parts_mut(dst_ptr as *mut u16, buf_len) };
+    let lvl_byte_len = compute_lvl_len(b4_stride as isize, w) * 4;
     let lvl =
-        unsafe { std::slice::from_raw_parts(lvl_ptr, compute_lvl_len(b4_stride as isize, w)) };
+        unsafe { std::slice::from_raw_parts(lvl_ptr as *const AtomicU8, lvl_byte_len) };
     lpf_v_sb_uv_16bpc_inner(
         buf,
         0,
@@ -1380,38 +1390,24 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
 
     assert!(lvl.offset <= lvl.data.len());
 
-    // Safe slice access for lvl data: reinterpret u8 data as &[[u8; 4]] entries
-    // Note: lvl.offset is a BYTE offset (not element offset), so we use .index()
-    // with a byte range and then cast via zerocopy, since slice_as() would
-    // incorrectly multiply the offset by sizeof([u8; 4]).
+    // Direct slice access for lvl data: read AtomicU8 values on demand.
     //
-    // Include lookback entries: when the current block's level is 0, the scalar
-    // fallback reads the PREVIOUS block's level (lvl - 4*b4_strideb bytes).
-    // We need to include those entries in the slice so the SIMD path can too.
+    // Include lookback entries: when the current block's level is 0, the inner
+    // functions read the PREVIOUS block's level (lvl_offset - b4_strideb).
+    // We include those entries by starting the slice early.
     let b4_strideb_entries = if !is_v {
         1usize
     } else {
         b4_stride.unsigned_abs() as usize
     };
     let lvl_lookback_bytes = b4_strideb_entries * 4;
-    let lvl_start = lvl.offset.saturating_sub(lvl_lookback_bytes);
-    // Round down to a 4-byte boundary for zerocopy alignment
-    let lvl_start = lvl_start & !3;
-    let lvl_remaining_bytes = lvl.data.len() - lvl_start;
-    let lvl_len = lvl_remaining_bytes / 4;
-    let lvl_byte_end = lvl_start + lvl_len * 4;
-    // Bulk-read level cache from AtomicU8 slice. Pre-allocate exact size
-    // to avoid Vec growth overhead.
-    let lvl_byte_len = (lvl_byte_end - lvl_start) & !3; // round down to [u8; 4] alignment
-    let mut lvl_buf = Vec::with_capacity(lvl_byte_len);
-    lvl_buf.extend((lvl_start..lvl_start + lvl_byte_len).map(|i| lvl.data[i].load(Relaxed)));
-    let lvl_slice: &[[u8; 4]] =
-        zerocopy::FromBytes::ref_from_bytes(&lvl_buf).unwrap();
-    // Which byte within each [u8;4] entry to read:
+    let lvl_start = lvl.offset.saturating_sub(lvl_lookback_bytes) & !3;
+    let lvl_slice = &lvl.data[lvl_start..];
+    // Which byte within each 4-byte entry to read:
     //   H Y → 0, V Y → 1, H U → 2, H V → 3
     // This is encoded in lvl.offset % 4 by the caller (lf_apply.rs adds +0/+1/+2/+3).
     let lvl_byte_idx = lvl.offset % 4;
-    // Base offset: how many [u8;4] entries from the start of lvl_slice to the
+    // Base offset: how many 4-byte entries from the start of lvl_slice to the
     // original lvl.offset's 4-byte-aligned position
     let lvl_base = (lvl.offset - lvl_byte_idx - lvl_start) / 4;
 
@@ -1604,9 +1600,8 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
 
 /// Safe dispatch for loopfilter_sb on wasm32. Returns true if handled.
 ///
-/// The inner filter functions are scalar (no SIMD intrinsics), so this dispatch
-/// just provides the AtomicU8→u8 conversion that avoids per-pixel atomic load
-/// tracking overhead. This is the same optimization as the x86_64 dispatch path.
+/// The inner filter functions are scalar (no SIMD intrinsics). The `&[AtomicU8]`
+/// level cache is passed directly to inner functions which load entries on demand.
 #[cfg(target_arch = "wasm32")]
 pub fn loopfilter_sb_dispatch<BD: BitDepth>(
     dst: PicOffset,
@@ -1624,23 +1619,15 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
 
     assert!(lvl.offset <= lvl.data.len());
 
-    // Safe slice access for lvl data: reinterpret u8 data as &[[u8; 4]] entries
+    // Direct slice access for lvl data: read AtomicU8 values on demand.
     let b4_strideb_entries = if !is_v {
         1usize
     } else {
         b4_stride.unsigned_abs() as usize
     };
     let lvl_lookback_bytes = b4_strideb_entries * 4;
-    let lvl_start = lvl.offset.saturating_sub(lvl_lookback_bytes);
-    let lvl_start = lvl_start & !3;
-    let lvl_remaining_bytes = lvl.data.len() - lvl_start;
-    let lvl_len = lvl_remaining_bytes / 4;
-    let lvl_byte_end = lvl_start + lvl_len * 4;
-    // Gather level cache entries from AtomicU8 slice with Relaxed ordering.
-    let lvl_buf: Vec<u8> = (lvl_start..lvl_byte_end)
-        .map(|i| lvl.data[i].load(Relaxed))
-        .collect();
-    let lvl_slice: &[[u8; 4]] = zerocopy::FromBytes::ref_from_bytes(&lvl_buf).unwrap();
+    let lvl_start = lvl.offset.saturating_sub(lvl_lookback_bytes) & !3;
+    let lvl_slice = &lvl.data[lvl_start..];
     let lvl_byte_idx = lvl.offset % 4;
     let lvl_base = (lvl.offset - lvl_byte_idx - lvl_start) / 4;
 
