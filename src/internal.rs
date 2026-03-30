@@ -105,6 +105,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicI32;
 use std::sync::atomic::AtomicU32;
+use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering;
 use strum::FromRepr;
 use zerocopy::FromBytes;
@@ -695,7 +696,7 @@ impl TxLpfRightEdge {
 /// loopfilter
 #[repr(C)]
 pub struct Rav1dFrameContextLf {
-    pub level: DisjointMut<Vec<u8>>,
+    pub level: Vec<AtomicU8>,
     pub mask: Vec<Av1Filter>, /* len = w*h */
     pub lr_mask: Vec<Av1Restoration>,
     pub lim_lut: Align16<Av1FilterLUT>,
@@ -720,7 +721,7 @@ impl Default for Rav1dFrameContextLf {
     fn default() -> Self {
         use crate::src::disjoint_mut::dm_new;
         Self {
-            level: dm_new(Vec::new()),
+            level: Vec::new(),
             mask: Default::default(),
             lr_mask: Default::default(),
             lim_lut: Default::default(),

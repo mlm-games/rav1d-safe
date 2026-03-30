@@ -18,6 +18,7 @@ use std::array;
 use std::cmp;
 use std::ffi::c_int;
 use std::ffi::c_uint;
+use std::sync::atomic::AtomicU8;
 
 /// The loop filter buffer stores 12 rows of pixels.
 /// A superblock block will contain at most 2 stripes.
@@ -368,7 +369,7 @@ pub(crate) fn rav1d_copy_lpf<BD: BitDepth>(
 fn filter_plane_cols_y<BD: BitDepth>(
     f: &Rav1dFrameData,
     have_left: bool,
-    lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+    lvl: WithOffset<&[AtomicU8]>,
     mask: &[[[RelaxedAtomic<u16>; 2]; 3]; 32],
     y_dst: PicOffset,
     w: usize,
@@ -408,7 +409,7 @@ fn filter_plane_cols_y<BD: BitDepth>(
 fn filter_plane_rows_y<BD: BitDepth>(
     f: &Rav1dFrameData,
     have_top: bool,
-    lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+    lvl: WithOffset<&[AtomicU8]>,
     b4_stride: usize,
     mask: &[[[RelaxedAtomic<u16>; 2]; 3]; 32],
     y_dst: PicOffset,
@@ -443,7 +444,7 @@ fn filter_plane_rows_y<BD: BitDepth>(
 fn filter_plane_cols_uv<BD: BitDepth>(
     f: &Rav1dFrameData,
     have_left: bool,
-    lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+    lvl: WithOffset<&[AtomicU8]>,
     mask: &[[[RelaxedAtomic<u16>; 2]; 2]; 32],
     u_dst: PicOffset,
     v_dst: PicOffset,
@@ -492,7 +493,7 @@ fn filter_plane_cols_uv<BD: BitDepth>(
 fn filter_plane_rows_uv<BD: BitDepth>(
     f: &Rav1dFrameData,
     have_top: bool,
-    lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+    lvl: WithOffset<&[AtomicU8]>,
     b4_stride: usize,
     mask: &[[[RelaxedAtomic<u16>; 2]; 2]; 32],
     u_dst: PicOffset,
@@ -641,7 +642,7 @@ pub(crate) fn rav1d_loopfilter_sbrow_cols<BD: BitDepth>(
     }
     let lflvl = &f.lf.mask[lflvl_offset..];
     let lvl = WithOffset {
-        data: &f.lf.level,
+        data: &f.lf.level[..],
         offset: 4 * f.b4_stride as usize * (sby * sbsz) as usize,
     };
     have_left = false;
@@ -662,7 +663,7 @@ pub(crate) fn rav1d_loopfilter_sbrow_cols<BD: BitDepth>(
         return;
     }
     let lvl = WithOffset {
-        data: &f.lf.level,
+        data: &f.lf.level[..],
         offset: 4 * f.b4_stride as usize * (sby * sbsz >> ss_ver) as usize,
     };
     have_left = false;
@@ -703,7 +704,7 @@ pub(crate) fn rav1d_loopfilter_sbrow_rows<BD: BitDepth>(
     let uv_endy4: c_uint = endy4.wrapping_add(ss_ver as c_uint) >> ss_ver;
 
     let lvl = WithOffset {
-        data: &f.lf.level,
+        data: &f.lf.level[..],
         offset: 4 * f.b4_stride as usize * (sby * sbsz) as usize,
     };
     for x in 0..f.sb128w as usize {
@@ -726,7 +727,7 @@ pub(crate) fn rav1d_loopfilter_sbrow_rows<BD: BitDepth>(
     }
 
     let lvl = WithOffset {
-        data: &f.lf.level,
+        data: &f.lf.level[..],
         offset: 4 * f.b4_stride as usize * (sby * sbsz >> ss_ver) as usize,
     };
     let [_, pu, pv] = p;

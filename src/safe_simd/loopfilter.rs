@@ -11,8 +11,8 @@
 //! - Horizontal and vertical edge filtering
 //!
 //! This module uses safe slice-based pixel access. The dispatch function is fully safe.
-//! is in `loopfilter_sb_dispatch` where raw pointers from PicOffset/DisjointMut
-//! are converted to slices. All inner functions are fully safe.
+//! The level cache is `&[AtomicU8]` gathered into a `Vec<u8>` in `loopfilter_sb_dispatch`.
+//! PicOffset pixel data is converted to slices. All inner functions are fully safe.
 
 #![cfg_attr(not(feature = "unchecked"), forbid(unsafe_code))]
 #![cfg_attr(feature = "unchecked", deny(unsafe_code))]
@@ -29,8 +29,9 @@ use crate::include::common::bitdepth::DynPixel;
 use crate::include::common::intops::iclip;
 use crate::include::dav1d::picture::PicOffset;
 use crate::src::align::Align16;
-use crate::src::disjoint_mut::DisjointMut;
 use crate::src::ffi_safe::FFISafe;
+use std::sync::atomic::AtomicU8;
+use std::sync::atomic::Ordering::Relaxed;
 use crate::src::lf_mask::Av1FilterLUT;
 use crate::src::with_offset::WithOffset;
 #[allow(non_camel_case_types)]
@@ -565,7 +566,7 @@ pub unsafe extern "C" fn lpf_h_sb_y_8bpc_avx2(
     w: c_int,
     bitdepth_max: c_int,
     _dst: *const FFISafe<PicOffset>,
-    _lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    _lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     // Determine buffer size needed: conservative upper bound
     let buf_len = compute_buf_len_u8(stride as isize, w);
@@ -600,7 +601,7 @@ pub unsafe extern "C" fn lpf_v_sb_y_8bpc_avx2(
     w: c_int,
     bitdepth_max: c_int,
     _dst: *const FFISafe<PicOffset>,
-    _lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    _lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     let buf_len = compute_buf_len_u8(stride as isize, w);
     let buf = unsafe { std::slice::from_raw_parts_mut(dst_ptr as *mut u8, buf_len) };
@@ -634,7 +635,7 @@ pub unsafe extern "C" fn lpf_h_sb_uv_8bpc_avx2(
     w: c_int,
     bitdepth_max: c_int,
     _dst: *const FFISafe<PicOffset>,
-    _lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    _lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     let buf_len = compute_buf_len_u8(stride as isize, w);
     let buf = unsafe { std::slice::from_raw_parts_mut(dst_ptr as *mut u8, buf_len) };
@@ -668,7 +669,7 @@ pub unsafe extern "C" fn lpf_v_sb_uv_8bpc_avx2(
     w: c_int,
     bitdepth_max: c_int,
     _dst: *const FFISafe<PicOffset>,
-    _lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    _lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     let buf_len = compute_buf_len_u8(stride as isize, w);
     let buf = unsafe { std::slice::from_raw_parts_mut(dst_ptr as *mut u8, buf_len) };
@@ -1189,7 +1190,7 @@ pub unsafe extern "C" fn lpf_h_sb_y_16bpc_avx2(
     w: c_int,
     bitdepth_max: c_int,
     _dst: *const FFISafe<PicOffset>,
-    _lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    _lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     let buf_len = compute_buf_len_u16(stride as isize, w);
     let buf = unsafe { std::slice::from_raw_parts_mut(dst_ptr as *mut u16, buf_len) };
@@ -1223,7 +1224,7 @@ pub unsafe extern "C" fn lpf_v_sb_y_16bpc_avx2(
     w: c_int,
     bitdepth_max: c_int,
     _dst: *const FFISafe<PicOffset>,
-    _lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    _lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     let buf_len = compute_buf_len_u16(stride as isize, w);
     let buf = unsafe { std::slice::from_raw_parts_mut(dst_ptr as *mut u16, buf_len) };
@@ -1257,7 +1258,7 @@ pub unsafe extern "C" fn lpf_h_sb_uv_16bpc_avx2(
     w: c_int,
     bitdepth_max: c_int,
     _dst: *const FFISafe<PicOffset>,
-    _lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    _lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     let buf_len = compute_buf_len_u16(stride as isize, w);
     let buf = unsafe { std::slice::from_raw_parts_mut(dst_ptr as *mut u16, buf_len) };
@@ -1291,7 +1292,7 @@ pub unsafe extern "C" fn lpf_v_sb_uv_16bpc_avx2(
     w: c_int,
     bitdepth_max: c_int,
     _dst: *const FFISafe<PicOffset>,
-    _lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    _lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     let buf_len = compute_buf_len_u16(stride as isize, w);
     let buf = unsafe { std::slice::from_raw_parts_mut(dst_ptr as *mut u16, buf_len) };
@@ -1363,7 +1364,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
     dst: PicOffset,
     stride: ptrdiff_t,
     mask: &[u32; 3],
-    lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+    lvl: WithOffset<&[AtomicU8]>,
     b4_stride: isize,
     lut: &Align16<Av1FilterLUT>,
     w: c_int,
@@ -1399,8 +1400,13 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
     let lvl_remaining_bytes = lvl.data.len() - lvl_start;
     let lvl_len = lvl_remaining_bytes / 4;
     let lvl_byte_end = lvl_start + lvl_len * 4;
-    let lvl_byte_guard = lvl.data.index(lvl_start..lvl_byte_end);
-    let lvl_slice: &[[u8; 4]] = zerocopy::FromBytes::ref_from_bytes(&*lvl_byte_guard).unwrap();
+    // Gather level cache entries from AtomicU8 slice with Relaxed ordering.
+    // The task scheduler provides the necessary synchronization between
+    // tile threads writing level cache entries and the loopfilter reading them.
+    let lvl_buf: Vec<u8> = (lvl_start..lvl_byte_end)
+        .map(|i| lvl.data[i].load(Relaxed))
+        .collect();
+    let lvl_slice: &[[u8; 4]] = zerocopy::FromBytes::ref_from_bytes(&lvl_buf).unwrap();
     // Which byte within each [u8;4] entry to read:
     //   H Y → 0, V Y → 1, H U → 2, H V → 3
     // This is encoded in lvl.offset % 4 by the caller (lf_apply.rs adds +0/+1/+2/+3).
@@ -1599,14 +1605,14 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
 /// Safe dispatch for loopfilter_sb on wasm32. Returns true if handled.
 ///
 /// The inner filter functions are scalar (no SIMD intrinsics), so this dispatch
-/// just provides the DisjointMut→slice conversion that avoids per-pixel borrow
+/// just provides the AtomicU8→u8 conversion that avoids per-pixel atomic load
 /// tracking overhead. This is the same optimization as the x86_64 dispatch path.
 #[cfg(target_arch = "wasm32")]
 pub fn loopfilter_sb_dispatch<BD: BitDepth>(
     dst: PicOffset,
     stride: ptrdiff_t,
     mask: &[u32; 3],
-    lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+    lvl: WithOffset<&[AtomicU8]>,
     b4_stride: isize,
     lut: &Align16<Av1FilterLUT>,
     w: c_int,
@@ -1630,8 +1636,11 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
     let lvl_remaining_bytes = lvl.data.len() - lvl_start;
     let lvl_len = lvl_remaining_bytes / 4;
     let lvl_byte_end = lvl_start + lvl_len * 4;
-    let lvl_byte_guard = lvl.data.index(lvl_start..lvl_byte_end);
-    let lvl_slice: &[[u8; 4]] = zerocopy::FromBytes::ref_from_bytes(&*lvl_byte_guard).unwrap();
+    // Gather level cache entries from AtomicU8 slice with Relaxed ordering.
+    let lvl_buf: Vec<u8> = (lvl_start..lvl_byte_end)
+        .map(|i| lvl.data[i].load(Relaxed))
+        .collect();
+    let lvl_slice: &[[u8; 4]] = zerocopy::FromBytes::ref_from_bytes(&lvl_buf).unwrap();
     let lvl_byte_idx = lvl.offset % 4;
     let lvl_base = (lvl.offset - lvl_byte_idx - lvl_start) / 4;
 
