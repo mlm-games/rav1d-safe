@@ -6,13 +6,14 @@ use crate::include::common::intops::iclip;
 use crate::include::dav1d::picture::PicOffset;
 use crate::src::align::Align16;
 use crate::src::cpu::CpuFlags;
-use crate::src::disjoint_mut::DisjointMut;
 use crate::src::ffi_safe::FFISafe;
 use crate::src::internal::Rav1dFrameData;
 use crate::src::lf_mask::Av1FilterLUT;
 use crate::src::strided::Strided as _;
 use crate::src::with_offset::WithOffset;
 use crate::src::wrap_fn_ptr::wrap_fn_ptr;
+use std::sync::atomic::AtomicU8;
+use std::sync::atomic::Ordering::Relaxed;
 #[allow(non_camel_case_types)]
 type ptrdiff_t = isize;
 use std::cmp;
@@ -38,7 +39,7 @@ wrap_fn_ptr!(pub unsafe extern "C" fn loopfilter_sb(
     w: c_int,
     bitdepth_max: c_int,
     _dst: *const FFISafe<PicOffset>,
-    _lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    _lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) -> ());
 
 /// Direct dispatch for loopfilter_sb - bypasses function pointer table.
@@ -49,7 +50,7 @@ wrap_fn_ptr!(pub unsafe extern "C" fn loopfilter_sb(
 fn loopfilter_sb_scalar<BD: BitDepth>(
     dst: PicOffset,
     mask: &[u32; 3],
-    lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+    lvl: WithOffset<&[AtomicU8]>,
     b4_stride: usize,
     lut: &Align16<Av1FilterLUT>,
     wh: c_int,
@@ -78,7 +79,7 @@ fn loopfilter_sb_direct<BD: BitDepth>(
     f: &Rav1dFrameData,
     dst: PicOffset,
     mask: &[u32; 3],
-    lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+    lvl: WithOffset<&[AtomicU8]>,
     w: usize,
     is_y: bool,
     is_v: bool,
@@ -196,7 +197,7 @@ impl loopfilter_sb::Fn {
         f: &Rav1dFrameData,
         dst: PicOffset,
         mask: &[u32; 3],
-        lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+        lvl: WithOffset<&[AtomicU8]>,
         w: usize,
         is_y: bool,
         is_v: bool,
@@ -208,7 +209,8 @@ impl loopfilter_sb::Fn {
                 let stride = dst.stride();
                 assert!(lvl.offset <= lvl.data.len());
                 // SAFETY: `lvl.offset` is in bounds, just checked above.
-                let lvl_ptr = unsafe { lvl.data.as_mut_ptr().add(lvl.offset) };
+                // AtomicU8 has the same size/alignment as u8.
+                let lvl_ptr = unsafe { (lvl.data.as_ptr() as *const u8).add(lvl.offset) };
                 let lvl_ptr = lvl_ptr.cast::<[u8; 4]>();
                 let b4_stride = f.b4_stride;
                 let lut = &f.lf.lim_lut;
@@ -453,7 +455,7 @@ enum YUV {
 fn loop_filter_sb128_rust<BD: BitDepth, const HV: usize, const YUV: usize>(
     mut dst: PicOffset,
     vmask: &[u32; 3],
-    mut lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+    mut lvl: WithOffset<&[AtomicU8]>,
     b4_stride: usize,
     lut: &Align16<Av1FilterLUT>,
     _wh: c_int,
@@ -482,12 +484,12 @@ fn loop_filter_sb128_rust<BD: BitDepth, const HV: usize, const YUV: usize>(
             if vm & xy == 0 {
                 break 'block;
             }
-            let l = *lvl.data.index(lvl.offset);
+            let l = lvl.data[lvl.offset].load(Relaxed);
             let l = if l != 0 {
                 l
             } else {
                 let lvl = lvl - 4 * b4_strideb;
-                *lvl.data.index(lvl.offset)
+                lvl.data[lvl.offset].load(Relaxed)
             };
             if l == 0 {
                 break 'block;
@@ -532,7 +534,7 @@ unsafe extern "C" fn loop_filter_sb128_c_erased<BD: BitDepth, const HV: usize, c
     wh: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     // SAFETY: Was passed as `FFISafe::new(_)` in `loopfilter_sb::Fn::call`.
     let dst = *unsafe { FFISafe::get(dst) };

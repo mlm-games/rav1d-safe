@@ -40,7 +40,6 @@ use crate::src::align::AlignedVec64;
 use crate::src::disjoint_mut::DisjointMut;
 use crate::src::ffi_safe::FFISafe;
 use crate::src::looprestoration::{LooprestorationParams, LrEdgeFlags, padding};
-use crate::src::strided::Strided as _;
 use crate::src::tables::dav1d_sgr_x_by_x;
 #[allow(non_camel_case_types)]
 type ptrdiff_t = isize;
@@ -161,8 +160,6 @@ fn wiener_filter7_8bpc_avx2_inner(
     let round_bits_v = 11i32;
     let rounding_off_v = 1i32 << (round_bits_v - 1);
     let round_offset = 1i32 << (8 + round_bits_v - 1); // = 1 << 18
-    let stride = p.pixel_stride::<BitDepth8>();
-
     // Load filter coefficients into AVX2 registers (broadcast to all lanes)
     let vf0 = _mm256_set1_epi32(filter[1][0] as i32);
     let vf1 = _mm256_set1_epi32(filter[1][1] as i32);
@@ -174,82 +171,79 @@ fn wiener_filter7_8bpc_avx2_inner(
     let v_round_offset = _mm256_set1_epi32(-round_offset);
     let v_rounding = _mm256_set1_epi32(rounding_off_v);
 
-    // Single guard for entire output region
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth8>(w, h);
-    for j in 0..h {
-        let row_off = p_base.wrapping_add_signed(j as isize * stride);
-        let mut i = 0usize;
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth8, _>(
+        &p,
+        w,
+        h,
+        |bytes, offset, stride| {
+            for j in 0..h {
+                let row_off = (offset as isize + j as isize * stride) as usize;
+                let mut i = 0usize;
 
-        // Process 8 pixels at a time with AVX2
-        while i + 8 <= w {
-            // Load 8 u16 values from each of the 7 rows and convert to i32
-            // We need to process low and high halves separately
-            let row0 = &hor[(j + 0) * REST_UNIT_STRIDE + i..];
-            let row1 = &hor[(j + 1) * REST_UNIT_STRIDE + i..];
-            let row2 = &hor[(j + 2) * REST_UNIT_STRIDE + i..];
-            let row3 = &hor[(j + 3) * REST_UNIT_STRIDE + i..];
-            let row4 = &hor[(j + 4) * REST_UNIT_STRIDE + i..];
-            let row5 = &hor[(j + 5) * REST_UNIT_STRIDE + i..];
-            let row6 = &hor[(j + 6) * REST_UNIT_STRIDE + i..];
+                // Process 8 pixels at a time with AVX2
+                while i + 8 <= w {
+                    let row0 = &hor[(j + 0) * REST_UNIT_STRIDE + i..];
+                    let row1 = &hor[(j + 1) * REST_UNIT_STRIDE + i..];
+                    let row2 = &hor[(j + 2) * REST_UNIT_STRIDE + i..];
+                    let row3 = &hor[(j + 3) * REST_UNIT_STRIDE + i..];
+                    let row4 = &hor[(j + 4) * REST_UNIT_STRIDE + i..];
+                    let row5 = &hor[(j + 5) * REST_UNIT_STRIDE + i..];
+                    let row6 = &hor[(j + 6) * REST_UNIT_STRIDE + i..];
 
-            // Load 8 u16 values as __m128i via safe macro
-            let r0 = loadu_128!(&row0[..8], [u16; 8]);
-            let r1 = loadu_128!(&row1[..8], [u16; 8]);
-            let r2 = loadu_128!(&row2[..8], [u16; 8]);
-            let r3 = loadu_128!(&row3[..8], [u16; 8]);
-            let r4 = loadu_128!(&row4[..8], [u16; 8]);
-            let r5 = loadu_128!(&row5[..8], [u16; 8]);
-            let r6 = loadu_128!(&row6[..8], [u16; 8]);
+                    let r0 = loadu_128!(&row0[..8], [u16; 8]);
+                    let r1 = loadu_128!(&row1[..8], [u16; 8]);
+                    let r2 = loadu_128!(&row2[..8], [u16; 8]);
+                    let r3 = loadu_128!(&row3[..8], [u16; 8]);
+                    let r4 = loadu_128!(&row4[..8], [u16; 8]);
+                    let r5 = loadu_128!(&row5[..8], [u16; 8]);
+                    let r6 = loadu_128!(&row6[..8], [u16; 8]);
 
-            // Process low 4 pixels (expand u16 to i32)
-            let r0_lo = _mm256_cvtepu16_epi32(r0);
-            let r1_lo = _mm256_cvtepu16_epi32(r1);
-            let r2_lo = _mm256_cvtepu16_epi32(r2);
-            let r3_lo = _mm256_cvtepu16_epi32(r3);
-            let r4_lo = _mm256_cvtepu16_epi32(r4);
-            let r5_lo = _mm256_cvtepu16_epi32(r5);
-            let r6_lo = _mm256_cvtepu16_epi32(r6);
+                    let r0_lo = _mm256_cvtepu16_epi32(r0);
+                    let r1_lo = _mm256_cvtepu16_epi32(r1);
+                    let r2_lo = _mm256_cvtepu16_epi32(r2);
+                    let r3_lo = _mm256_cvtepu16_epi32(r3);
+                    let r4_lo = _mm256_cvtepu16_epi32(r4);
+                    let r5_lo = _mm256_cvtepu16_epi32(r5);
+                    let r6_lo = _mm256_cvtepu16_epi32(r6);
 
-            // sum = -round_offset + sum(row[k] * filter[k])
-            let mut sum = v_round_offset;
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r0_lo, vf0));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r1_lo, vf1));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r2_lo, vf2));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r3_lo, vf3));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r4_lo, vf4));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r5_lo, vf5));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r6_lo, vf6));
+                    let mut sum = v_round_offset;
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r0_lo, vf0));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r1_lo, vf1));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r2_lo, vf2));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r3_lo, vf3));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r4_lo, vf4));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r5_lo, vf5));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r6_lo, vf6));
 
-            // Add rounding and shift
-            sum = _mm256_add_epi32(sum, v_rounding);
-            sum = _mm256_srai_epi32::<11>(sum); // round_bits_v = 11 for 8bpc
+                    sum = _mm256_add_epi32(sum, v_rounding);
+                    sum = _mm256_srai_epi32::<11>(sum);
 
-            // Clip to 0-255 and pack to bytes
-            // packus_epi32 saturates to 0-65535, then packus_epi16 saturates to 0-255
-            let sum16 = _mm256_packus_epi32(sum, sum); // i32 -> u16, gives [0-7][0-7]
-            let sum16_lo = _mm256_castsi256_si128(sum16);
-            let sum16_hi = _mm256_extracti128_si256(sum16, 1);
-            let sum16_combined = _mm_unpacklo_epi64(sum16_lo, sum16_hi);
-            let sum8 = _mm_packus_epi16(sum16_combined, sum16_combined); // u16 -> u8
+                    let sum16 = _mm256_packus_epi32(sum, sum);
+                    let sum16_lo = _mm256_castsi256_si128(sum16);
+                    let sum16_hi = _mm256_extracti128_si256(sum16, 1);
+                    let sum16_combined = _mm_unpacklo_epi64(sum16_lo, sum16_hi);
+                    let sum8 = _mm_packus_epi16(sum16_combined, sum16_combined);
 
-            // Store 8 bytes via safe partial_simd
-            let dst_arr: &mut [u8; 8] = (&mut p_guard[row_off + i..row_off + i + 8])
-                .try_into()
-                .unwrap();
-            partial_simd::mm_storel_epi64(dst_arr, sum8);
-            i += 8;
-        }
+                    let dst_arr: &mut [u8; 8] = (&mut bytes[row_off + i..row_off + i + 8])
+                        .try_into()
+                        .unwrap();
+                    partial_simd::mm_storel_epi64(dst_arr, sum8);
+                    i += 8;
+                }
 
-        // Handle remaining pixels with scalar
-        while i < w {
-            let mut sum = -round_offset;
-            for k in 0..7 {
-                sum += hor[(j + k) * REST_UNIT_STRIDE + i] as i32 * filter[1][k] as i32;
+                // Handle remaining pixels with scalar
+                while i < w {
+                    let mut sum = -round_offset;
+                    for k in 0..7 {
+                        sum += hor[(j + k) * REST_UNIT_STRIDE + i] as i32 * filter[1][k] as i32;
+                    }
+                    bytes[row_off + i] =
+                        iclip((sum + rounding_off_v) >> round_bits_v, 0, 255) as u8;
+                    i += 1;
+                }
             }
-            p_guard[row_off + i] = iclip((sum + rounding_off_v) >> round_bits_v, 0, 255) as u8;
-            i += 1;
-        }
-    }
+        },
+    ); // with_pixel_guard_mut
 }
 
 /// Wiener filter 5-tap for 8bpc using AVX2
@@ -367,8 +361,6 @@ fn wiener_filter7_8bpc_avx512_inner(
     let round_bits_v = 11i32;
     let rounding_off_v = 1i32 << (round_bits_v - 1);
     let round_offset = 1i32 << (8 + round_bits_v - 1);
-    let stride = p.pixel_stride::<BitDepth8>();
-
     let vf0 = _mm512_set1_epi32(filter[1][0] as i32);
     let vf1 = _mm512_set1_epi32(filter[1][1] as i32);
     let vf2 = _mm512_set1_epi32(filter[1][2] as i32);
@@ -380,149 +372,154 @@ fn wiener_filter7_8bpc_avx512_inner(
     let v_rounding = _mm512_set1_epi32(rounding_off_v);
     let zero_512 = _mm512_setzero_si512();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth8>(w, h);
-    for j in 0..h {
-        let row_off = p_base.wrapping_add_signed(j as isize * stride);
-        let mut i = 0usize;
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth8, _>(
+        &p,
+        w,
+        h,
+        |bytes, offset, stride| {
+            for j in 0..h {
+                let row_off = (offset as isize + j as isize * stride) as usize;
+                let mut i = 0usize;
 
-        // Process 16 pixels at a time with AVX-512
-        while i + 16 <= w {
-            // Load 16 u16 from each of 7 rows, expand to 16 i32
-            let r0 = _mm512_cvtepu16_epi32(loadu_256!(
-                &hor[(j + 0) * REST_UNIT_STRIDE + i..(j + 0) * REST_UNIT_STRIDE + i + 16],
-                [u16; 16]
-            ));
-            let r1 = _mm512_cvtepu16_epi32(loadu_256!(
-                &hor[(j + 1) * REST_UNIT_STRIDE + i..(j + 1) * REST_UNIT_STRIDE + i + 16],
-                [u16; 16]
-            ));
-            let r2 = _mm512_cvtepu16_epi32(loadu_256!(
-                &hor[(j + 2) * REST_UNIT_STRIDE + i..(j + 2) * REST_UNIT_STRIDE + i + 16],
-                [u16; 16]
-            ));
-            let r3 = _mm512_cvtepu16_epi32(loadu_256!(
-                &hor[(j + 3) * REST_UNIT_STRIDE + i..(j + 3) * REST_UNIT_STRIDE + i + 16],
-                [u16; 16]
-            ));
-            let r4 = _mm512_cvtepu16_epi32(loadu_256!(
-                &hor[(j + 4) * REST_UNIT_STRIDE + i..(j + 4) * REST_UNIT_STRIDE + i + 16],
-                [u16; 16]
-            ));
-            let r5 = _mm512_cvtepu16_epi32(loadu_256!(
-                &hor[(j + 5) * REST_UNIT_STRIDE + i..(j + 5) * REST_UNIT_STRIDE + i + 16],
-                [u16; 16]
-            ));
-            let r6 = _mm512_cvtepu16_epi32(loadu_256!(
-                &hor[(j + 6) * REST_UNIT_STRIDE + i..(j + 6) * REST_UNIT_STRIDE + i + 16],
-                [u16; 16]
-            ));
+                // Process 16 pixels at a time with AVX-512
+                while i + 16 <= w {
+                    let r0 = _mm512_cvtepu16_epi32(loadu_256!(
+                        &hor[(j + 0) * REST_UNIT_STRIDE + i..(j + 0) * REST_UNIT_STRIDE + i + 16],
+                        [u16; 16]
+                    ));
+                    let r1 = _mm512_cvtepu16_epi32(loadu_256!(
+                        &hor[(j + 1) * REST_UNIT_STRIDE + i..(j + 1) * REST_UNIT_STRIDE + i + 16],
+                        [u16; 16]
+                    ));
+                    let r2 = _mm512_cvtepu16_epi32(loadu_256!(
+                        &hor[(j + 2) * REST_UNIT_STRIDE + i..(j + 2) * REST_UNIT_STRIDE + i + 16],
+                        [u16; 16]
+                    ));
+                    let r3 = _mm512_cvtepu16_epi32(loadu_256!(
+                        &hor[(j + 3) * REST_UNIT_STRIDE + i..(j + 3) * REST_UNIT_STRIDE + i + 16],
+                        [u16; 16]
+                    ));
+                    let r4 = _mm512_cvtepu16_epi32(loadu_256!(
+                        &hor[(j + 4) * REST_UNIT_STRIDE + i..(j + 4) * REST_UNIT_STRIDE + i + 16],
+                        [u16; 16]
+                    ));
+                    let r5 = _mm512_cvtepu16_epi32(loadu_256!(
+                        &hor[(j + 5) * REST_UNIT_STRIDE + i..(j + 5) * REST_UNIT_STRIDE + i + 16],
+                        [u16; 16]
+                    ));
+                    let r6 = _mm512_cvtepu16_epi32(loadu_256!(
+                        &hor[(j + 6) * REST_UNIT_STRIDE + i..(j + 6) * REST_UNIT_STRIDE + i + 16],
+                        [u16; 16]
+                    ));
 
-            // sum = -round_offset + sum(row[k] * filter[k])
-            let mut sum = v_round_offset;
-            sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r0, vf0));
-            sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r1, vf1));
-            sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r2, vf2));
-            sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r3, vf3));
-            sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r4, vf4));
-            sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r5, vf5));
-            sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r6, vf6));
+                    let mut sum = v_round_offset;
+                    sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r0, vf0));
+                    sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r1, vf1));
+                    sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r2, vf2));
+                    sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r3, vf3));
+                    sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r4, vf4));
+                    sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r5, vf5));
+                    sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r6, vf6));
 
-            sum = _mm512_add_epi32(sum, v_rounding);
-            sum = _mm512_srai_epi32::<11>(sum);
+                    sum = _mm512_add_epi32(sum, v_rounding);
+                    sum = _mm512_srai_epi32::<11>(sum);
 
-            // Clamp to 0..255 and convert i32 → u8 directly
-            let clamped = _mm512_max_epi32(sum, zero_512);
-            let result_u8: __m128i = _mm512_cvtusepi32_epi8(clamped);
+                    let clamped = _mm512_max_epi32(sum, zero_512);
+                    let result_u8: __m128i = _mm512_cvtusepi32_epi8(clamped);
 
-            storeu_128!(
-                &mut p_guard[row_off + i..row_off + i + 16],
-                [u8; 16],
-                result_u8
-            );
-            i += 16;
-        }
+                    storeu_128!(
+                        &mut bytes[row_off + i..row_off + i + 16],
+                        [u8; 16],
+                        result_u8
+                    );
+                    i += 16;
+                }
 
-        // AVX2 tail for 8-pixel chunks
-        while i + 8 <= w {
-            let r0 = loadu_128!(
-                &hor[(j + 0) * REST_UNIT_STRIDE + i..(j + 0) * REST_UNIT_STRIDE + i + 8],
-                [u16; 8]
-            );
-            let r1 = loadu_128!(
-                &hor[(j + 1) * REST_UNIT_STRIDE + i..(j + 1) * REST_UNIT_STRIDE + i + 8],
-                [u16; 8]
-            );
-            let r2 = loadu_128!(
-                &hor[(j + 2) * REST_UNIT_STRIDE + i..(j + 2) * REST_UNIT_STRIDE + i + 8],
-                [u16; 8]
-            );
-            let r3 = loadu_128!(
-                &hor[(j + 3) * REST_UNIT_STRIDE + i..(j + 3) * REST_UNIT_STRIDE + i + 8],
-                [u16; 8]
-            );
-            let r4 = loadu_128!(
-                &hor[(j + 4) * REST_UNIT_STRIDE + i..(j + 4) * REST_UNIT_STRIDE + i + 8],
-                [u16; 8]
-            );
-            let r5 = loadu_128!(
-                &hor[(j + 5) * REST_UNIT_STRIDE + i..(j + 5) * REST_UNIT_STRIDE + i + 8],
-                [u16; 8]
-            );
-            let r6 = loadu_128!(
-                &hor[(j + 6) * REST_UNIT_STRIDE + i..(j + 6) * REST_UNIT_STRIDE + i + 8],
-                [u16; 8]
-            );
+                // AVX2 tail for 8-pixel chunks
+                while i + 8 <= w {
+                    let r0 = loadu_128!(
+                        &hor[(j + 0) * REST_UNIT_STRIDE + i..(j + 0) * REST_UNIT_STRIDE + i + 8],
+                        [u16; 8]
+                    );
+                    let r1 = loadu_128!(
+                        &hor[(j + 1) * REST_UNIT_STRIDE + i..(j + 1) * REST_UNIT_STRIDE + i + 8],
+                        [u16; 8]
+                    );
+                    let r2 = loadu_128!(
+                        &hor[(j + 2) * REST_UNIT_STRIDE + i..(j + 2) * REST_UNIT_STRIDE + i + 8],
+                        [u16; 8]
+                    );
+                    let r3 = loadu_128!(
+                        &hor[(j + 3) * REST_UNIT_STRIDE + i..(j + 3) * REST_UNIT_STRIDE + i + 8],
+                        [u16; 8]
+                    );
+                    let r4 = loadu_128!(
+                        &hor[(j + 4) * REST_UNIT_STRIDE + i..(j + 4) * REST_UNIT_STRIDE + i + 8],
+                        [u16; 8]
+                    );
+                    let r5 = loadu_128!(
+                        &hor[(j + 5) * REST_UNIT_STRIDE + i..(j + 5) * REST_UNIT_STRIDE + i + 8],
+                        [u16; 8]
+                    );
+                    let r6 = loadu_128!(
+                        &hor[(j + 6) * REST_UNIT_STRIDE + i..(j + 6) * REST_UNIT_STRIDE + i + 8],
+                        [u16; 8]
+                    );
 
-            let vf0_256 = _mm256_set1_epi32(filter[1][0] as i32);
-            let vf1_256 = _mm256_set1_epi32(filter[1][1] as i32);
-            let vf2_256 = _mm256_set1_epi32(filter[1][2] as i32);
-            let vf3_256 = _mm256_set1_epi32(filter[1][3] as i32);
-            let vf4_256 = _mm256_set1_epi32(filter[1][4] as i32);
-            let vf5_256 = _mm256_set1_epi32(filter[1][5] as i32);
-            let vf6_256 = _mm256_set1_epi32(filter[1][6] as i32);
+                    let vf0_256 = _mm256_set1_epi32(filter[1][0] as i32);
+                    let vf1_256 = _mm256_set1_epi32(filter[1][1] as i32);
+                    let vf2_256 = _mm256_set1_epi32(filter[1][2] as i32);
+                    let vf3_256 = _mm256_set1_epi32(filter[1][3] as i32);
+                    let vf4_256 = _mm256_set1_epi32(filter[1][4] as i32);
+                    let vf5_256 = _mm256_set1_epi32(filter[1][5] as i32);
+                    let vf6_256 = _mm256_set1_epi32(filter[1][6] as i32);
 
-            let r0_lo = _mm256_cvtepu16_epi32(r0);
-            let r1_lo = _mm256_cvtepu16_epi32(r1);
-            let r2_lo = _mm256_cvtepu16_epi32(r2);
-            let r3_lo = _mm256_cvtepu16_epi32(r3);
-            let r4_lo = _mm256_cvtepu16_epi32(r4);
-            let r5_lo = _mm256_cvtepu16_epi32(r5);
-            let r6_lo = _mm256_cvtepu16_epi32(r6);
+                    let r0_lo = _mm256_cvtepu16_epi32(r0);
+                    let r1_lo = _mm256_cvtepu16_epi32(r1);
+                    let r2_lo = _mm256_cvtepu16_epi32(r2);
+                    let r3_lo = _mm256_cvtepu16_epi32(r3);
+                    let r4_lo = _mm256_cvtepu16_epi32(r4);
+                    let r5_lo = _mm256_cvtepu16_epi32(r5);
+                    let r6_lo = _mm256_cvtepu16_epi32(r6);
 
-            let mut sum = _mm256_set1_epi32(-round_offset);
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r0_lo, vf0_256));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r1_lo, vf1_256));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r2_lo, vf2_256));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r3_lo, vf3_256));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r4_lo, vf4_256));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r5_lo, vf5_256));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r6_lo, vf6_256));
-            sum = _mm256_add_epi32(sum, _mm256_set1_epi32(rounding_off_v));
-            sum = _mm256_srai_epi32::<11>(sum);
+                    let mut sum = _mm256_set1_epi32(-round_offset);
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r0_lo, vf0_256));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r1_lo, vf1_256));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r2_lo, vf2_256));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r3_lo, vf3_256));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r4_lo, vf4_256));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r5_lo, vf5_256));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r6_lo, vf6_256));
+                    sum = _mm256_add_epi32(sum, _mm256_set1_epi32(rounding_off_v));
+                    sum = _mm256_srai_epi32::<11>(sum);
 
-            let sum16 = _mm256_packus_epi32(sum, sum);
-            let sum16_lo = _mm256_castsi256_si128(sum16);
-            let sum16_hi = _mm256_extracti128_si256(sum16, 1);
-            let sum16_combined = _mm_unpacklo_epi64(sum16_lo, sum16_hi);
-            let sum8 = _mm_packus_epi16(sum16_combined, sum16_combined);
+                    let sum16 = _mm256_packus_epi32(sum, sum);
+                    let sum16_lo = _mm256_castsi256_si128(sum16);
+                    let sum16_hi = _mm256_extracti128_si256(sum16, 1);
+                    let sum16_combined = _mm_unpacklo_epi64(sum16_lo, sum16_hi);
+                    let sum8 = _mm_packus_epi16(sum16_combined, sum16_combined);
 
-            let dst_arr: &mut [u8; 8] = (&mut p_guard[row_off + i..row_off + i + 8])
-                .try_into()
-                .unwrap();
-            partial_simd::mm_storel_epi64(dst_arr, sum8);
-            i += 8;
-        }
+                    let dst_arr: &mut [u8; 8] = (&mut bytes[row_off + i..row_off + i + 8])
+                        .try_into()
+                        .unwrap();
+                    partial_simd::mm_storel_epi64(dst_arr, sum8);
+                    i += 8;
+                }
 
-        // Scalar tail
-        while i < w {
-            let mut sum = -round_offset;
-            for k in 0..7 {
-                sum += hor[(j + k) * REST_UNIT_STRIDE + i] as i32 * filter[1][k] as i32;
+                // Scalar tail
+                while i < w {
+                    let mut sum = -round_offset;
+                    for k in 0..7 {
+                        sum += hor[(j + k) * REST_UNIT_STRIDE + i] as i32 * filter[1][k] as i32;
+                    }
+                    bytes[row_off + i] =
+                        iclip((sum + rounding_off_v) >> round_bits_v, 0, 255) as u8;
+                    i += 1;
+                }
             }
-            p_guard[row_off + i] = iclip((sum + rounding_off_v) >> round_bits_v, 0, 255) as u8;
-            i += 1;
-        }
-    }
+        },
+    ); // with_pixel_guard_mut
 }
 
 /// Wiener filter 5-tap for 8bpc using AVX-512 (delegates to 7-tap)
@@ -645,8 +642,6 @@ fn wiener_filter7_16bpc_avx512_inner(
     let round_bits_v = if bitdepth == 12 { 9 } else { 11 };
     let rounding_off_v = 1i32 << (round_bits_v - 1);
     let round_offset = 1i32 << (bitdepth + round_bits_v - 1);
-    let stride = p.pixel_stride::<BitDepth16>();
-
     let vf0 = _mm512_set1_epi32(filter[1][0] as i32);
     let vf1 = _mm512_set1_epi32(filter[1][1] as i32);
     let vf2 = _mm512_set1_epi32(filter[1][2] as i32);
@@ -659,82 +654,88 @@ fn wiener_filter7_16bpc_avx512_inner(
     let zero_512 = _mm512_setzero_si512();
     let max_512 = _mm512_set1_epi32(bitdepth_max);
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth16>(w, h);
-    for j in 0..h {
-        let row_off = p_base.wrapping_add_signed(j as isize * stride);
-        let mut i = 0usize;
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth16, _>(
+        &p,
+        w,
+        h,
+        |bytes, offset, stride| {
+            let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut bytes[..])
+                .expect("bytes alignment/size mismatch for u16 reinterpretation");
+            for j in 0..h {
+                let row_off = (offset as isize + j as isize * stride) as usize / 2;
+                let mut i = 0usize;
 
-        // Process 16 pixels at a time with AVX-512
-        while i + 16 <= w {
-            let r0 = loadu_512!(
-                &hor[(j + 0) * REST_UNIT_STRIDE + i..(j + 0) * REST_UNIT_STRIDE + i + 16],
-                [i32; 16]
-            );
-            let r1 = loadu_512!(
-                &hor[(j + 1) * REST_UNIT_STRIDE + i..(j + 1) * REST_UNIT_STRIDE + i + 16],
-                [i32; 16]
-            );
-            let r2 = loadu_512!(
-                &hor[(j + 2) * REST_UNIT_STRIDE + i..(j + 2) * REST_UNIT_STRIDE + i + 16],
-                [i32; 16]
-            );
-            let r3 = loadu_512!(
-                &hor[(j + 3) * REST_UNIT_STRIDE + i..(j + 3) * REST_UNIT_STRIDE + i + 16],
-                [i32; 16]
-            );
-            let r4 = loadu_512!(
-                &hor[(j + 4) * REST_UNIT_STRIDE + i..(j + 4) * REST_UNIT_STRIDE + i + 16],
-                [i32; 16]
-            );
-            let r5 = loadu_512!(
-                &hor[(j + 5) * REST_UNIT_STRIDE + i..(j + 5) * REST_UNIT_STRIDE + i + 16],
-                [i32; 16]
-            );
-            let r6 = loadu_512!(
-                &hor[(j + 6) * REST_UNIT_STRIDE + i..(j + 6) * REST_UNIT_STRIDE + i + 16],
-                [i32; 16]
-            );
+                // Process 16 pixels at a time with AVX-512
+                while i + 16 <= w {
+                    let r0 = loadu_512!(
+                        &hor[(j + 0) * REST_UNIT_STRIDE + i..(j + 0) * REST_UNIT_STRIDE + i + 16],
+                        [i32; 16]
+                    );
+                    let r1 = loadu_512!(
+                        &hor[(j + 1) * REST_UNIT_STRIDE + i..(j + 1) * REST_UNIT_STRIDE + i + 16],
+                        [i32; 16]
+                    );
+                    let r2 = loadu_512!(
+                        &hor[(j + 2) * REST_UNIT_STRIDE + i..(j + 2) * REST_UNIT_STRIDE + i + 16],
+                        [i32; 16]
+                    );
+                    let r3 = loadu_512!(
+                        &hor[(j + 3) * REST_UNIT_STRIDE + i..(j + 3) * REST_UNIT_STRIDE + i + 16],
+                        [i32; 16]
+                    );
+                    let r4 = loadu_512!(
+                        &hor[(j + 4) * REST_UNIT_STRIDE + i..(j + 4) * REST_UNIT_STRIDE + i + 16],
+                        [i32; 16]
+                    );
+                    let r5 = loadu_512!(
+                        &hor[(j + 5) * REST_UNIT_STRIDE + i..(j + 5) * REST_UNIT_STRIDE + i + 16],
+                        [i32; 16]
+                    );
+                    let r6 = loadu_512!(
+                        &hor[(j + 6) * REST_UNIT_STRIDE + i..(j + 6) * REST_UNIT_STRIDE + i + 16],
+                        [i32; 16]
+                    );
 
-            let mut sum = v_round_offset;
-            sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r0, vf0));
-            sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r1, vf1));
-            sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r2, vf2));
-            sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r3, vf3));
-            sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r4, vf4));
-            sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r5, vf5));
-            sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r6, vf6));
+                    let mut sum = v_round_offset;
+                    sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r0, vf0));
+                    sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r1, vf1));
+                    sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r2, vf2));
+                    sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r3, vf3));
+                    sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r4, vf4));
+                    sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r5, vf5));
+                    sum = _mm512_add_epi32(sum, _mm512_mullo_epi32(r6, vf6));
 
-            sum = _mm512_add_epi32(sum, v_rounding);
-            // Shift amount depends on bitdepth
-            let shifted = if bitdepth == 12 {
-                _mm512_srai_epi32::<9>(sum)
-            } else {
-                _mm512_srai_epi32::<11>(sum)
-            };
+                    sum = _mm512_add_epi32(sum, v_rounding);
+                    let shifted = if bitdepth == 12 {
+                        _mm512_srai_epi32::<9>(sum)
+                    } else {
+                        _mm512_srai_epi32::<11>(sum)
+                    };
 
-            // Clamp to [0, bitdepth_max] then pack i32→u16
-            let clamped = _mm512_min_epi32(_mm512_max_epi32(shifted, zero_512), max_512);
-            let result_u16: __m256i = _mm512_cvtusepi32_epi16(clamped);
+                    let clamped = _mm512_min_epi32(_mm512_max_epi32(shifted, zero_512), max_512);
+                    let result_u16: __m256i = _mm512_cvtusepi32_epi16(clamped);
 
-            storeu_256!(
-                &mut p_guard[row_off + i..row_off + i + 16],
-                [u16; 16],
-                result_u16
-            );
-            i += 16;
-        }
+                    storeu_256!(
+                        &mut p_u16[row_off + i..row_off + i + 16],
+                        [u16; 16],
+                        result_u16
+                    );
+                    i += 16;
+                }
 
-        // Scalar tail
-        while i < w {
-            let mut sum = -round_offset;
-            for k in 0..7 {
-                sum += hor[(j + k) * REST_UNIT_STRIDE + i] * filter[1][k] as i32;
+                // Scalar tail
+                while i < w {
+                    let mut sum = -round_offset;
+                    for k in 0..7 {
+                        sum += hor[(j + k) * REST_UNIT_STRIDE + i] * filter[1][k] as i32;
+                    }
+                    p_u16[row_off + i] =
+                        iclip((sum + rounding_off_v) >> round_bits_v, 0, bitdepth_max) as u16;
+                    i += 1;
+                }
             }
-            p_guard[row_off + i] =
-                iclip((sum + rounding_off_v) >> round_bits_v, 0, bitdepth_max) as u16;
-            i += 1;
-        }
-    }
+        },
+    ); // with_pixel_guard_mut
 }
 
 /// Wiener filter 5-tap for 16bpc using AVX-512 (delegates to 7-tap)
@@ -879,8 +880,6 @@ fn wiener_filter7_16bpc_avx2_inner(
     let round_bits_v = if bitdepth == 12 { 9 } else { 11 };
     let rounding_off_v = 1i32 << (round_bits_v - 1);
     let round_offset = 1i32 << (bitdepth + round_bits_v - 1);
-    let stride = p.pixel_stride::<BitDepth16>();
-
     let vf0 = _mm256_set1_epi32(filter[1][0] as i32);
     let vf1 = _mm256_set1_epi32(filter[1][1] as i32);
     let vf2 = _mm256_set1_epi32(filter[1][2] as i32);
@@ -893,86 +892,87 @@ fn wiener_filter7_16bpc_avx2_inner(
     let v_max = _mm256_set1_epi32(bitdepth_max);
     let v_zero = _mm256_setzero_si256();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth16>(w, h);
-    for j in 0..h {
-        let row_off = p_base.wrapping_add_signed(j as isize * stride);
-        let mut i = 0usize;
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth16, _>(
+        &p,
+        w,
+        h,
+        |bytes, offset, stride| {
+            let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut bytes[..])
+                .expect("bytes alignment/size mismatch for u16 reinterpretation");
+            for j in 0..h {
+                let row_off = (offset as isize + j as isize * stride) as usize / 2;
+                let mut i = 0usize;
 
-        // Process 8 pixels at a time with AVX2
-        while i + 8 <= w {
-            // Load 8 i32 values from each of 7 rows (hor buffer stores i32)
-            let r0 = loadu_256!(
-                &hor[(j + 0) * REST_UNIT_STRIDE + i..(j + 0) * REST_UNIT_STRIDE + i + 8],
-                [i32; 8]
-            );
-            let r1 = loadu_256!(
-                &hor[(j + 1) * REST_UNIT_STRIDE + i..(j + 1) * REST_UNIT_STRIDE + i + 8],
-                [i32; 8]
-            );
-            let r2 = loadu_256!(
-                &hor[(j + 2) * REST_UNIT_STRIDE + i..(j + 2) * REST_UNIT_STRIDE + i + 8],
-                [i32; 8]
-            );
-            let r3 = loadu_256!(
-                &hor[(j + 3) * REST_UNIT_STRIDE + i..(j + 3) * REST_UNIT_STRIDE + i + 8],
-                [i32; 8]
-            );
-            let r4 = loadu_256!(
-                &hor[(j + 4) * REST_UNIT_STRIDE + i..(j + 4) * REST_UNIT_STRIDE + i + 8],
-                [i32; 8]
-            );
-            let r5 = loadu_256!(
-                &hor[(j + 5) * REST_UNIT_STRIDE + i..(j + 5) * REST_UNIT_STRIDE + i + 8],
-                [i32; 8]
-            );
-            let r6 = loadu_256!(
-                &hor[(j + 6) * REST_UNIT_STRIDE + i..(j + 6) * REST_UNIT_STRIDE + i + 8],
-                [i32; 8]
-            );
+                // Process 8 pixels at a time with AVX2
+                while i + 8 <= w {
+                    let r0 = loadu_256!(
+                        &hor[(j + 0) * REST_UNIT_STRIDE + i..(j + 0) * REST_UNIT_STRIDE + i + 8],
+                        [i32; 8]
+                    );
+                    let r1 = loadu_256!(
+                        &hor[(j + 1) * REST_UNIT_STRIDE + i..(j + 1) * REST_UNIT_STRIDE + i + 8],
+                        [i32; 8]
+                    );
+                    let r2 = loadu_256!(
+                        &hor[(j + 2) * REST_UNIT_STRIDE + i..(j + 2) * REST_UNIT_STRIDE + i + 8],
+                        [i32; 8]
+                    );
+                    let r3 = loadu_256!(
+                        &hor[(j + 3) * REST_UNIT_STRIDE + i..(j + 3) * REST_UNIT_STRIDE + i + 8],
+                        [i32; 8]
+                    );
+                    let r4 = loadu_256!(
+                        &hor[(j + 4) * REST_UNIT_STRIDE + i..(j + 4) * REST_UNIT_STRIDE + i + 8],
+                        [i32; 8]
+                    );
+                    let r5 = loadu_256!(
+                        &hor[(j + 5) * REST_UNIT_STRIDE + i..(j + 5) * REST_UNIT_STRIDE + i + 8],
+                        [i32; 8]
+                    );
+                    let r6 = loadu_256!(
+                        &hor[(j + 6) * REST_UNIT_STRIDE + i..(j + 6) * REST_UNIT_STRIDE + i + 8],
+                        [i32; 8]
+                    );
 
-            let mut sum = v_round_offset;
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r0, vf0));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r1, vf1));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r2, vf2));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r3, vf3));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r4, vf4));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r5, vf5));
-            sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r6, vf6));
+                    let mut sum = v_round_offset;
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r0, vf0));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r1, vf1));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r2, vf2));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r3, vf3));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r4, vf4));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r5, vf5));
+                    sum = _mm256_add_epi32(sum, _mm256_mullo_epi32(r6, vf6));
 
-            sum = _mm256_add_epi32(sum, v_rounding);
-            let shifted = if bitdepth == 12 {
-                _mm256_srai_epi32::<9>(sum)
-            } else {
-                _mm256_srai_epi32::<11>(sum)
-            };
+                    sum = _mm256_add_epi32(sum, v_rounding);
+                    let shifted = if bitdepth == 12 {
+                        _mm256_srai_epi32::<9>(sum)
+                    } else {
+                        _mm256_srai_epi32::<11>(sum)
+                    };
 
-            // Clamp to [0, bitdepth_max] and pack i32→u16
-            let clamped = _mm256_min_epi32(_mm256_max_epi32(shifted, v_zero), v_max);
-            // packus: [0-3,0-3 | 4-7,4-7] → need lane fixup
-            let packed = _mm256_packus_epi32(clamped, clamped);
-            let lo = _mm256_castsi256_si128(packed);
-            let hi = _mm256_extracti128_si256(packed, 1);
-            let combined = _mm_unpacklo_epi64(lo, hi); // [0-3, 4-7] as 8 u16
+                    let clamped = _mm256_min_epi32(_mm256_max_epi32(shifted, v_zero), v_max);
+                    let packed = _mm256_packus_epi32(clamped, clamped);
+                    let lo = _mm256_castsi256_si128(packed);
+                    let hi = _mm256_extracti128_si256(packed, 1);
+                    let combined = _mm_unpacklo_epi64(lo, hi);
 
-            storeu_128!(
-                &mut p_guard[row_off + i..row_off + i + 8],
-                [u16; 8],
-                combined
-            );
-            i += 8;
-        }
+                    storeu_128!(&mut p_u16[row_off + i..row_off + i + 8], [u16; 8], combined);
+                    i += 8;
+                }
 
-        // Scalar tail
-        while i < w {
-            let mut sum = -round_offset;
-            for k in 0..7 {
-                sum += hor[(j + k) * REST_UNIT_STRIDE + i] * filter[1][k] as i32;
+                // Scalar tail
+                while i < w {
+                    let mut sum = -round_offset;
+                    for k in 0..7 {
+                        sum += hor[(j + k) * REST_UNIT_STRIDE + i] * filter[1][k] as i32;
+                    }
+                    p_u16[row_off + i] =
+                        iclip((sum + rounding_off_v) >> round_bits_v, 0, bitdepth_max) as u16;
+                    i += 1;
+                }
             }
-            p_guard[row_off + i] =
-                iclip((sum + rounding_off_v) >> round_bits_v, 0, bitdepth_max) as u16;
-            i += 1;
-        }
-    }
+        },
+    ); // with_pixel_guard_mut
 }
 
 /// Wiener filter 5-tap for 16bpc using AVX2 (delegates to 7-tap)
@@ -3459,23 +3459,28 @@ fn sgr_5x5_8bpc_avx2_inner(
     selfguided_filter_8bpc(&mut dst, &tmp, w, h, 25, sgr.s0);
 
     let w0 = sgr.w0 as i32;
-    let stride = p.pixel_stride::<BitDepth8>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth8>(w, h);
-    if let Some(token) = summon_avx2() {
-        sgr_apply_8bpc(token, &mut p_guard, p_base, stride, &dst, w, h, w0);
-    } else {
-        let dst = dst.as_slice().flex();
-        let mut p = p_guard.flex_mut();
-        for j in 0..h {
-            let row_off = p_base.wrapping_add_signed(j as isize * stride);
-            for i in 0..w {
-                let v = w0 * dst[j * MAX_RESTORATION_WIDTH + i] as i32;
-                p[row_off + i] =
-                    iclip(p[row_off + i] as i32 + ((v + (1 << 10)) >> 11), 0, 255) as u8;
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth8, _>(
+        &p,
+        w,
+        h,
+        |bytes, offset, stride| {
+            if let Some(token) = summon_avx2() {
+                sgr_apply_8bpc(token, bytes, offset, stride, &dst, w, h, w0);
+            } else {
+                let dst = dst.as_slice().flex();
+                let mut cp = bytes.flex_mut();
+                for j in 0..h {
+                    let row_off = (offset as isize + j as isize * stride) as usize;
+                    for i in 0..w {
+                        let v = w0 * dst[j * MAX_RESTORATION_WIDTH + i] as i32;
+                        cp[row_off + i] =
+                            iclip(cp[row_off + i] as i32 + ((v + (1 << 10)) >> 11), 0, 255) as u8;
+                    }
+                }
             }
-        }
-    }
+        },
+    ); // with_pixel_guard_mut
 }
 
 /// SGR 3x3 filter for 8bpc using AVX2
@@ -3508,23 +3513,28 @@ fn sgr_3x3_8bpc_avx2_inner(
     selfguided_filter_8bpc(&mut dst, &tmp, w, h, 9, sgr.s1);
 
     let w1 = sgr.w1 as i32;
-    let stride = p.pixel_stride::<BitDepth8>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth8>(w, h);
-    if let Some(token) = summon_avx2() {
-        sgr_apply_8bpc(token, &mut p_guard, p_base, stride, &dst, w, h, w1);
-    } else {
-        let dst = dst.as_slice().flex();
-        let mut p = p_guard.flex_mut();
-        for j in 0..h {
-            let row_off = p_base.wrapping_add_signed(j as isize * stride);
-            for i in 0..w {
-                let v = w1 * dst[j * MAX_RESTORATION_WIDTH + i] as i32;
-                p[row_off + i] =
-                    iclip(p[row_off + i] as i32 + ((v + (1 << 10)) >> 11), 0, 255) as u8;
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth8, _>(
+        &p,
+        w,
+        h,
+        |bytes, offset, stride| {
+            if let Some(token) = summon_avx2() {
+                sgr_apply_8bpc(token, bytes, offset, stride, &dst, w, h, w1);
+            } else {
+                let dst = dst.as_slice().flex();
+                let mut cp = bytes.flex_mut();
+                for j in 0..h {
+                    let row_off = (offset as isize + j as isize * stride) as usize;
+                    for i in 0..w {
+                        let v = w1 * dst[j * MAX_RESTORATION_WIDTH + i] as i32;
+                        cp[row_off + i] =
+                            iclip(cp[row_off + i] as i32 + ((v + (1 << 10)) >> 11), 0, 255) as u8;
+                    }
+                }
             }
-        }
-    }
+        },
+    ); // with_pixel_guard_mut
 }
 
 /// SGR mix filter for 8bpc using AVX2 (combines 5x5 and 3x3)
@@ -3565,36 +3575,30 @@ fn sgr_mix_8bpc_avx2_inner(
 
     let w0 = sgr.w0 as i32;
     let w1 = sgr.w1 as i32;
-    let stride = p.pixel_stride::<BitDepth8>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth8>(w, h);
-    if let Some(token) = summon_avx2() {
-        sgr_apply_mix_8bpc(
-            token,
-            &mut p_guard,
-            p_base,
-            stride,
-            &dst0,
-            &dst1,
-            w,
-            h,
-            w0,
-            w1,
-        );
-    } else {
-        let d0 = dst0.as_slice().flex();
-        let d1 = dst1.as_slice().flex();
-        let mut p = p_guard.flex_mut();
-        for j in 0..h {
-            let row_off = p_base.wrapping_add_signed(j as isize * stride);
-            for i in 0..w {
-                let v = w0 * d0[j * MAX_RESTORATION_WIDTH + i] as i32
-                    + w1 * d1[j * MAX_RESTORATION_WIDTH + i] as i32;
-                p[row_off + i] =
-                    iclip(p[row_off + i] as i32 + ((v + (1 << 10)) >> 11), 0, 255) as u8;
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth8, _>(
+        &p,
+        w,
+        h,
+        |bytes, offset, stride| {
+            if let Some(token) = summon_avx2() {
+                sgr_apply_mix_8bpc(token, bytes, offset, stride, &dst0, &dst1, w, h, w0, w1);
+            } else {
+                let d0 = dst0.as_slice().flex();
+                let d1 = dst1.as_slice().flex();
+                let mut cp = bytes.flex_mut();
+                for j in 0..h {
+                    let row_off = (offset as isize + j as isize * stride) as usize;
+                    for i in 0..w {
+                        let v = w0 * d0[j * MAX_RESTORATION_WIDTH + i] as i32
+                            + w1 * d1[j * MAX_RESTORATION_WIDTH + i] as i32;
+                        cp[row_off + i] =
+                            iclip(cp[row_off + i] as i32 + ((v + (1 << 10)) >> 11), 0, 255) as u8;
+                    }
+                }
             }
-        }
-    }
+        },
+    ); // with_pixel_guard_mut
 }
 
 // ============================================================================
@@ -5445,36 +5449,43 @@ fn sgr_5x5_16bpc_avx2_inner(
     selfguided_filter_16bpc(&mut dst, &tmp, w, h, 25, sgr.s0, bitdepth_max);
 
     let w0 = sgr.w0 as i32;
-    let stride = p.pixel_stride::<BitDepth16>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth16>(w, h);
-    if let Some(token) = summon_avx2() {
-        sgr_apply_16bpc(
-            token,
-            &mut p_guard,
-            p_base,
-            stride,
-            &dst,
-            w,
-            h,
-            w0,
-            bitdepth_max,
-        );
-    } else {
-        let dst = dst.as_slice().flex();
-        let mut p = p_guard.flex_mut();
-        for j in 0..h {
-            let row_off = p_base.wrapping_add_signed(j as isize * stride);
-            for i in 0..w {
-                let v = w0 * dst[j * MAX_RESTORATION_WIDTH + i];
-                p[row_off + i] = iclip(
-                    p[row_off + i] as i32 + ((v + (1 << 10)) >> 11),
-                    0,
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth16, _>(
+        &p,
+        w,
+        h,
+        |bytes, offset, stride| {
+            let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut bytes[..])
+                .expect("bytes alignment/size mismatch for u16 reinterpretation");
+            if let Some(token) = summon_avx2() {
+                sgr_apply_16bpc(
+                    token,
+                    p_u16,
+                    offset / 2,
+                    stride / 2,
+                    &dst,
+                    w,
+                    h,
+                    w0,
                     bitdepth_max,
-                ) as u16;
+                );
+            } else {
+                let dst = dst.as_slice().flex();
+                let mut cp = p_u16.flex_mut();
+                for j in 0..h {
+                    let row_off = (offset as isize + j as isize * stride) as usize / 2;
+                    for i in 0..w {
+                        let v = w0 * dst[j * MAX_RESTORATION_WIDTH + i];
+                        cp[row_off + i] = iclip(
+                            cp[row_off + i] as i32 + ((v + (1 << 10)) >> 11),
+                            0,
+                            bitdepth_max,
+                        ) as u16;
+                    }
+                }
             }
-        }
-    }
+        },
+    ); // with_pixel_guard_mut
 }
 
 /// SGR 3x3 filter for 16bpc using AVX2
@@ -5508,36 +5519,43 @@ fn sgr_3x3_16bpc_avx2_inner(
     selfguided_filter_16bpc(&mut dst, &tmp, w, h, 9, sgr.s1, bitdepth_max);
 
     let w1 = sgr.w1 as i32;
-    let stride = p.pixel_stride::<BitDepth16>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth16>(w, h);
-    if let Some(token) = summon_avx2() {
-        sgr_apply_16bpc(
-            token,
-            &mut p_guard,
-            p_base,
-            stride,
-            &dst,
-            w,
-            h,
-            w1,
-            bitdepth_max,
-        );
-    } else {
-        let dst = dst.as_slice().flex();
-        let mut p = p_guard.flex_mut();
-        for j in 0..h {
-            let row_off = p_base.wrapping_add_signed(j as isize * stride);
-            for i in 0..w {
-                let v = w1 * dst[j * MAX_RESTORATION_WIDTH + i];
-                p[row_off + i] = iclip(
-                    p[row_off + i] as i32 + ((v + (1 << 10)) >> 11),
-                    0,
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth16, _>(
+        &p,
+        w,
+        h,
+        |bytes, offset, stride| {
+            let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut bytes[..])
+                .expect("bytes alignment/size mismatch for u16 reinterpretation");
+            if let Some(token) = summon_avx2() {
+                sgr_apply_16bpc(
+                    token,
+                    p_u16,
+                    offset / 2,
+                    stride / 2,
+                    &dst,
+                    w,
+                    h,
+                    w1,
                     bitdepth_max,
-                ) as u16;
+                );
+            } else {
+                let dst = dst.as_slice().flex();
+                let mut cp = p_u16.flex_mut();
+                for j in 0..h {
+                    let row_off = (offset as isize + j as isize * stride) as usize / 2;
+                    for i in 0..w {
+                        let v = w1 * dst[j * MAX_RESTORATION_WIDTH + i];
+                        cp[row_off + i] = iclip(
+                            cp[row_off + i] as i32 + ((v + (1 << 10)) >> 11),
+                            0,
+                            bitdepth_max,
+                        ) as u16;
+                    }
+                }
             }
-        }
-    }
+        },
+    ); // with_pixel_guard_mut
 }
 
 /// SGR mix filter for 16bpc using AVX2 (combines 5x5 and 3x3)
@@ -5579,40 +5597,47 @@ fn sgr_mix_16bpc_avx2_inner(
 
     let w0 = sgr.w0 as i32;
     let w1 = sgr.w1 as i32;
-    let stride = p.pixel_stride::<BitDepth16>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth16>(w, h);
-    if let Some(token) = summon_avx2() {
-        sgr_apply_mix_16bpc(
-            token,
-            &mut p_guard,
-            p_base,
-            stride,
-            &dst0,
-            &dst1,
-            w,
-            h,
-            w0,
-            w1,
-            bitdepth_max,
-        );
-    } else {
-        let d0 = dst0.as_slice().flex();
-        let d1 = dst1.as_slice().flex();
-        let mut p = p_guard.flex_mut();
-        for j in 0..h {
-            let row_off = p_base.wrapping_add_signed(j as isize * stride);
-            for i in 0..w {
-                let v =
-                    w0 * d0[j * MAX_RESTORATION_WIDTH + i] + w1 * d1[j * MAX_RESTORATION_WIDTH + i];
-                p[row_off + i] = iclip(
-                    p[row_off + i] as i32 + ((v + (1 << 10)) >> 11),
-                    0,
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth16, _>(
+        &p,
+        w,
+        h,
+        |bytes, offset, stride| {
+            let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut bytes[..])
+                .expect("bytes alignment/size mismatch for u16 reinterpretation");
+            if let Some(token) = summon_avx2() {
+                sgr_apply_mix_16bpc(
+                    token,
+                    p_u16,
+                    offset / 2,
+                    stride / 2,
+                    &dst0,
+                    &dst1,
+                    w,
+                    h,
+                    w0,
+                    w1,
                     bitdepth_max,
-                ) as u16;
+                );
+            } else {
+                let d0 = dst0.as_slice().flex();
+                let d1 = dst1.as_slice().flex();
+                let mut cp = p_u16.flex_mut();
+                for j in 0..h {
+                    let row_off = (offset as isize + j as isize * stride) as usize / 2;
+                    for i in 0..w {
+                        let v = w0 * d0[j * MAX_RESTORATION_WIDTH + i]
+                            + w1 * d1[j * MAX_RESTORATION_WIDTH + i];
+                        cp[row_off + i] = iclip(
+                            cp[row_off + i] as i32 + ((v + (1 << 10)) >> 11),
+                            0,
+                            bitdepth_max,
+                        ) as u16;
+                    }
+                }
             }
-        }
-    }
+        },
+    ); // with_pixel_guard_mut
 }
 
 // ============================================================================

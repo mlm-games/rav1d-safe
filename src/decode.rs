@@ -179,6 +179,7 @@ use std::ffi::c_uint;
 use std::iter;
 use std::mem;
 use std::sync::atomic::AtomicI32;
+use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering;
 use strum::EnumCount;
 
@@ -4540,9 +4541,13 @@ pub(crate) fn rav1d_decode_frame_init(c: &Rav1dContext, fc: &Rav1dFrameContext) 
         .map_err(|_| ENOMEM)?;
     // over-allocate by 3 bytes since some of the SIMD implementations
     // index this from the level type and can thus over-read by up to 3 bytes.
-    f.lf.level
-        .try_resize_with(4 * num_sb128 as usize * 32 * 32 + 3, Default::default)
-        .map_err(|_| ENOMEM)?;
+    {
+        let level_len = 4 * num_sb128 as usize * 32 * 32 + 3;
+        f.lf.level
+            .try_reserve(level_len.saturating_sub(f.lf.level.len()))
+            .map_err(|_| ENOMEM)?;
+        f.lf.level.resize_with(level_len, || AtomicU8::new(0));
+    }
     if c.fc.len() > 1 {
         f.frame_thread
             .b

@@ -15,10 +15,11 @@ use crate::include::common::bitdepth::DynPixel;
 use crate::include::common::intops::iclip;
 use crate::include::dav1d::picture::PicOffset;
 use crate::src::align::Align16;
-use crate::src::disjoint_mut::DisjointMut;
 use crate::src::ffi_safe::FFISafe;
 use crate::src::lf_mask::Av1FilterLUT;
 use crate::src::with_offset::WithOffset;
+use std::sync::atomic::AtomicU8;
+use std::sync::atomic::Ordering::Relaxed;
 #[allow(non_camel_case_types)]
 type ptrdiff_t = isize;
 use std::cmp;
@@ -348,15 +349,16 @@ pub unsafe extern "C" fn lpf_h_sb_y_8bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     use crate::include::common::bitdepth::BitDepth8;
     let dst = unsafe { *FFISafe::get(dst) };
     let lvl = unsafe { *FFISafe::get(lvl) };
     let (mut dst_guard, dst_base) = dst.full_guard_mut::<BitDepth8>();
     let buf: &mut [u8] = &mut dst_guard;
-    let lvl_guard = lvl.data.slice::<_, _>((0.., ..lvl.data.len()));
-    let lvl_data: &[u8] = &lvl_guard;
+    // SAFETY: AtomicU8 has the same layout as u8; this FFI wrapper is already unsafe.
+    let lvl_data: &[u8] =
+        unsafe { std::slice::from_raw_parts(lvl.data.as_ptr().cast::<u8>(), lvl.data.len()) };
     lpf_h_sb_inner::<BitDepth8, 0>(
         buf,
         dst_base,
@@ -383,15 +385,16 @@ pub unsafe extern "C" fn lpf_v_sb_y_8bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     use crate::include::common::bitdepth::BitDepth8;
     let dst = unsafe { *FFISafe::get(dst) };
     let lvl = unsafe { *FFISafe::get(lvl) };
     let (mut dst_guard, dst_base) = dst.full_guard_mut::<BitDepth8>();
     let buf: &mut [u8] = &mut dst_guard;
-    let lvl_guard = lvl.data.slice::<_, _>((0.., ..lvl.data.len()));
-    let lvl_data: &[u8] = &lvl_guard;
+    // SAFETY: AtomicU8 has the same layout as u8; this FFI wrapper is already unsafe.
+    let lvl_data: &[u8] =
+        unsafe { std::slice::from_raw_parts(lvl.data.as_ptr().cast::<u8>(), lvl.data.len()) };
     lpf_v_sb_inner::<BitDepth8, 0>(
         buf,
         dst_base,
@@ -418,15 +421,16 @@ pub unsafe extern "C" fn lpf_h_sb_uv_8bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     use crate::include::common::bitdepth::BitDepth8;
     let dst = unsafe { *FFISafe::get(dst) };
     let lvl = unsafe { *FFISafe::get(lvl) };
     let (mut dst_guard, dst_base) = dst.full_guard_mut::<BitDepth8>();
     let buf: &mut [u8] = &mut dst_guard;
-    let lvl_guard = lvl.data.slice::<_, _>((0.., ..lvl.data.len()));
-    let lvl_data: &[u8] = &lvl_guard;
+    // SAFETY: AtomicU8 has the same layout as u8; this FFI wrapper is already unsafe.
+    let lvl_data: &[u8] =
+        unsafe { std::slice::from_raw_parts(lvl.data.as_ptr().cast::<u8>(), lvl.data.len()) };
     lpf_h_sb_inner::<BitDepth8, 1>(
         buf,
         dst_base,
@@ -453,15 +457,16 @@ pub unsafe extern "C" fn lpf_v_sb_uv_8bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     use crate::include::common::bitdepth::BitDepth8;
     let dst = unsafe { *FFISafe::get(dst) };
     let lvl = unsafe { *FFISafe::get(lvl) };
     let (mut dst_guard, dst_base) = dst.full_guard_mut::<BitDepth8>();
     let buf: &mut [u8] = &mut dst_guard;
-    let lvl_guard = lvl.data.slice::<_, _>((0.., ..lvl.data.len()));
-    let lvl_data: &[u8] = &lvl_guard;
+    // SAFETY: AtomicU8 has the same layout as u8; this FFI wrapper is already unsafe.
+    let lvl_data: &[u8] =
+        unsafe { std::slice::from_raw_parts(lvl.data.as_ptr().cast::<u8>(), lvl.data.len()) };
     lpf_v_sb_inner::<BitDepth8, 1>(
         buf,
         dst_base,
@@ -492,15 +497,16 @@ pub unsafe extern "C" fn lpf_h_sb_y_16bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     use crate::include::common::bitdepth::BitDepth16;
     let dst = unsafe { *FFISafe::get(dst) };
     let lvl = unsafe { *FFISafe::get(lvl) };
     let (mut dst_guard, dst_base) = dst.full_guard_mut::<BitDepth16>();
     let buf: &mut [u16] = &mut dst_guard;
-    let lvl_guard = lvl.data.slice::<_, _>((0.., ..lvl.data.len()));
-    let lvl_data: &[u8] = &lvl_guard;
+    // SAFETY: AtomicU8 has the same layout as u8; this FFI wrapper is already unsafe.
+    let lvl_data: &[u8] =
+        unsafe { std::slice::from_raw_parts(lvl.data.as_ptr().cast::<u8>(), lvl.data.len()) };
     lpf_h_sb_inner::<BitDepth16, 0>(
         buf,
         dst_base,
@@ -527,15 +533,16 @@ pub unsafe extern "C" fn lpf_v_sb_y_16bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     use crate::include::common::bitdepth::BitDepth16;
     let dst = unsafe { *FFISafe::get(dst) };
     let lvl = unsafe { *FFISafe::get(lvl) };
     let (mut dst_guard, dst_base) = dst.full_guard_mut::<BitDepth16>();
     let buf: &mut [u16] = &mut dst_guard;
-    let lvl_guard = lvl.data.slice::<_, _>((0.., ..lvl.data.len()));
-    let lvl_data: &[u8] = &lvl_guard;
+    // SAFETY: AtomicU8 has the same layout as u8; this FFI wrapper is already unsafe.
+    let lvl_data: &[u8] =
+        unsafe { std::slice::from_raw_parts(lvl.data.as_ptr().cast::<u8>(), lvl.data.len()) };
     lpf_v_sb_inner::<BitDepth16, 0>(
         buf,
         dst_base,
@@ -562,15 +569,16 @@ pub unsafe extern "C" fn lpf_h_sb_uv_16bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     use crate::include::common::bitdepth::BitDepth16;
     let dst = unsafe { *FFISafe::get(dst) };
     let lvl = unsafe { *FFISafe::get(lvl) };
     let (mut dst_guard, dst_base) = dst.full_guard_mut::<BitDepth16>();
     let buf: &mut [u16] = &mut dst_guard;
-    let lvl_guard = lvl.data.slice::<_, _>((0.., ..lvl.data.len()));
-    let lvl_data: &[u8] = &lvl_guard;
+    // SAFETY: AtomicU8 has the same layout as u8; this FFI wrapper is already unsafe.
+    let lvl_data: &[u8] =
+        unsafe { std::slice::from_raw_parts(lvl.data.as_ptr().cast::<u8>(), lvl.data.len()) };
     lpf_h_sb_inner::<BitDepth16, 1>(
         buf,
         dst_base,
@@ -597,15 +605,16 @@ pub unsafe extern "C" fn lpf_v_sb_uv_16bpc_neon(
     w: c_int,
     bitdepth_max: c_int,
     dst: *const FFISafe<PicOffset>,
-    lvl: *const FFISafe<WithOffset<&DisjointMut<Vec<u8>>>>,
+    lvl: *const FFISafe<WithOffset<&[AtomicU8]>>,
 ) {
     use crate::include::common::bitdepth::BitDepth16;
     let dst = unsafe { *FFISafe::get(dst) };
     let lvl = unsafe { *FFISafe::get(lvl) };
     let (mut dst_guard, dst_base) = dst.full_guard_mut::<BitDepth16>();
     let buf: &mut [u16] = &mut dst_guard;
-    let lvl_guard = lvl.data.slice::<_, _>((0.., ..lvl.data.len()));
-    let lvl_data: &[u8] = &lvl_guard;
+    // SAFETY: AtomicU8 has the same layout as u8; this FFI wrapper is already unsafe.
+    let lvl_data: &[u8] =
+        unsafe { std::slice::from_raw_parts(lvl.data.as_ptr().cast::<u8>(), lvl.data.len()) };
     lpf_v_sb_inner::<BitDepth16, 1>(
         buf,
         dst_base,
@@ -626,7 +635,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
     dst: PicOffset,
     stride: ptrdiff_t,
     mask: &[u32; 3],
-    lvl: WithOffset<&DisjointMut<Vec<u8>>>,
+    lvl: WithOffset<&[AtomicU8]>,
     b4_stride: isize,
     lut: &Align16<Av1FilterLUT>,
     w: c_int,
@@ -638,9 +647,9 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
     let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
     let buf: &mut [BD::Pixel] = &mut dst_guard;
 
-    // Get lvl data as a slice
-    let lvl_guard = lvl.data.slice_as::<_, u8>((0.., ..lvl.data.len()));
-    let lvl_data: &[u8] = &lvl_guard;
+    // Gather level cache entries from AtomicU8 slice with Relaxed ordering.
+    let lvl_buf: Vec<u8> = lvl.data.iter().map(|a| a.load(Relaxed)).collect();
+    let lvl_data: &[u8] = &lvl_buf;
     let lvl_offset = lvl.offset;
 
     // Call inner functions directly, bypassing FFI wrappers.

@@ -246,10 +246,12 @@ pub fn rav1d_prepare_intra_edges<BD: BitDepth>(
         let left = &mut topleft_out[topleft_out_offset - sz..];
         if have_left {
             let px_have = cmp::min(sz, (h - y << 2) as usize);
-            // Single guard for entire strided column instead of per-pixel guards
-            let (guard, base) = (dst - 1usize).strided_slice::<BD>(1, px_have);
+            // Per-row single-pixel reads to avoid stride-wide guard overlap
+            // with concurrent tile threads.
+            let col_pic = dst - 1usize;
             for i in 0..px_have {
-                left[sz - 1 - i] = guard[base.wrapping_add_signed(i as isize * stride)];
+                let row_pic = col_pic + (i as isize * stride);
+                left[sz - 1 - i] = row_pic.slice::<BD>(1)[0];
             }
             if px_have < sz {
                 BD::pixel_set(left, left[sz - px_have], sz - px_have);
@@ -277,11 +279,10 @@ pub fn rav1d_prepare_intra_edges<BD: BitDepth>(
             };
             if have_bottomleft {
                 let px_have = cmp::min(sz, (h - y - th << 2) as usize);
-                // Single guard for entire strided column
-                let (guard, base) =
-                    (dst + (sz as isize * stride - 1)).strided_slice::<BD>(1, px_have);
+                let col_pic = dst + (sz as isize * stride - 1);
                 for i in 0..px_have {
-                    bottom_left[sz - 1 - i] = guard[base.wrapping_add_signed(i as isize * stride)];
+                    let row_pic = col_pic + (i as isize * stride);
+                    bottom_left[sz - 1 - i] = row_pic.slice::<BD>(1)[0];
                 }
                 if px_have < sz {
                     BD::pixel_set(bottom_left, bottom_left[sz - px_have], sz - px_have);

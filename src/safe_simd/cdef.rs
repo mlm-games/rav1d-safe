@@ -94,7 +94,7 @@ fn cdef_filter_block_simd_8bpc(
     tmp: &[u16],
     tmp_offset: usize,
     dst: PicOffset,
-    stride: isize,
+    _stride: isize,
     w: usize,
     h: usize,
     dir: usize,
@@ -107,189 +107,203 @@ fn cdef_filter_block_simd_8bpc(
 
     let zero = _mm_setzero_si128();
 
-    // Single guard for entire output region
-    let (mut p_guard, p_base) = dst.strided_slice_mut::<BitDepth8>(w, h);
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth8, _>(
+        &dst,
+        w,
+        h,
+        |bytes, offset, stride| {
+            if pri_strength != 0 {
+                let pri_tap = 4 - (pri_strength & 1);
+                let pri_shift = cmp::max(0, damping - pri_strength.ilog2() as c_int);
+                let pri_thresh = _mm_set1_epi16(pri_strength as i16);
+                let pri_shift_v = _mm_cvtsi32_si128(pri_shift);
 
-    if pri_strength != 0 {
-        let pri_tap = 4 - (pri_strength & 1);
-        let pri_shift = cmp::max(0, damping - pri_strength.ilog2() as c_int);
-        let pri_thresh = _mm_set1_epi16(pri_strength as i16);
-        let pri_shift_v = _mm_cvtsi32_si128(pri_shift);
+                if sec_strength != 0 {
+                    // Both primary and secondary — full filter with min/max clamping
+                    let sec_shift = damping - sec_strength.ilog2() as c_int;
+                    let sec_thresh = _mm_set1_epi16(sec_strength as i16);
+                    let sec_shift_v = _mm_cvtsi32_si128(sec_shift);
 
-        if sec_strength != 0 {
-            // Both primary and secondary — full filter with min/max clamping
-            let sec_shift = damping - sec_strength.ilog2() as c_int;
-            let sec_thresh = _mm_set1_epi16(sec_strength as i16);
-            let sec_shift_v = _mm_cvtsi32_si128(sec_shift);
+                    for y in 0..h {
+                        let base = tmp_offset + y * TMP_STRIDE;
+                        let px = loadu_128!(&tmp[base..base + 8], [u16; 8]);
+                        let mut sum = zero;
+                        let mut min_v = px;
+                        let mut max_v = px;
 
-            for y in 0..h {
-                let base = tmp_offset + y * TMP_STRIDE;
-                let px = loadu_128!(&tmp[base..base + 8], [u16; 8]);
-                let mut sum = zero;
-                let mut min_v = px;
-                let mut max_v = px;
+                        let mut pri_tap_k = pri_tap;
+                        for k in 0..2 {
+                            let off = dav1d_cdef_directions[dir + 2][k] as isize;
+                            let p0_i = (base as isize + off) as usize;
+                            let p1_i = (base as isize - off) as usize;
+                            let p0 = loadu_128!(&tmp[p0_i..p0_i + 8], [u16; 8]);
+                            let p1 = loadu_128!(&tmp[p1_i..p1_i + 8], [u16; 8]);
 
-                let mut pri_tap_k = pri_tap;
-                for k in 0..2 {
-                    let off = dav1d_cdef_directions[dir + 2][k] as isize;
-                    let p0_i = (base as isize + off) as usize;
-                    let p1_i = (base as isize - off) as usize;
-                    let p0 = loadu_128!(&tmp[p0_i..p0_i + 8], [u16; 8]);
-                    let p1 = loadu_128!(&tmp[p1_i..p1_i + 8], [u16; 8]);
+                            let c0 =
+                                constrain_128(t, _mm_sub_epi16(p0, px), pri_thresh, pri_shift_v);
+                            let c1 =
+                                constrain_128(t, _mm_sub_epi16(p1, px), pri_thresh, pri_shift_v);
 
-                    let c0 = constrain_128(t, _mm_sub_epi16(p0, px), pri_thresh, pri_shift_v);
-                    let c1 = constrain_128(t, _mm_sub_epi16(p1, px), pri_thresh, pri_shift_v);
+                            let tap_v = _mm_set1_epi16(pri_tap_k as i16);
+                            sum = _mm_add_epi16(sum, _mm_mullo_epi16(tap_v, _mm_add_epi16(c0, c1)));
+                            pri_tap_k = pri_tap_k & 3 | 2;
 
-                    let tap_v = _mm_set1_epi16(pri_tap_k as i16);
-                    sum = _mm_add_epi16(sum, _mm_mullo_epi16(tap_v, _mm_add_epi16(c0, c1)));
-                    pri_tap_k = pri_tap_k & 3 | 2;
+                            // Use unsigned min to ignore boundary fill (0x8001 = large unsigned)
+                            min_v = _mm_min_epu16(min_v, _mm_min_epu16(p0, p1));
+                            // Use signed max to ignore boundary fill (0x8001 = -32767 signed)
+                            max_v = _mm_max_epi16(max_v, _mm_max_epi16(p0, p1));
 
-                    // Use unsigned min to ignore boundary fill (0x8001 = large unsigned)
-                    min_v = _mm_min_epu16(min_v, _mm_min_epu16(p0, p1));
-                    // Use signed max to ignore boundary fill (0x8001 = -32767 signed)
-                    max_v = _mm_max_epi16(max_v, _mm_max_epi16(p0, p1));
+                            let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
+                            let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
+                            let s0_i = (base as isize + off2) as usize;
+                            let s1_i = (base as isize - off2) as usize;
+                            let s2_i = (base as isize + off3) as usize;
+                            let s3_i = (base as isize - off3) as usize;
+                            let s0 = loadu_128!(&tmp[s0_i..s0_i + 8], [u16; 8]);
+                            let s1 = loadu_128!(&tmp[s1_i..s1_i + 8], [u16; 8]);
+                            let s2 = loadu_128!(&tmp[s2_i..s2_i + 8], [u16; 8]);
+                            let s3 = loadu_128!(&tmp[s3_i..s3_i + 8], [u16; 8]);
 
-                    let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
-                    let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
-                    let s0_i = (base as isize + off2) as usize;
-                    let s1_i = (base as isize - off2) as usize;
-                    let s2_i = (base as isize + off3) as usize;
-                    let s3_i = (base as isize - off3) as usize;
-                    let s0 = loadu_128!(&tmp[s0_i..s0_i + 8], [u16; 8]);
-                    let s1 = loadu_128!(&tmp[s1_i..s1_i + 8], [u16; 8]);
-                    let s2 = loadu_128!(&tmp[s2_i..s2_i + 8], [u16; 8]);
-                    let s3 = loadu_128!(&tmp[s3_i..s3_i + 8], [u16; 8]);
+                            let sec_tap_k = (2 - k as i32) as i16;
+                            let sec_tap_v = _mm_set1_epi16(sec_tap_k);
+                            let ds0 =
+                                constrain_128(t, _mm_sub_epi16(s0, px), sec_thresh, sec_shift_v);
+                            let ds1 =
+                                constrain_128(t, _mm_sub_epi16(s1, px), sec_thresh, sec_shift_v);
+                            let ds2 =
+                                constrain_128(t, _mm_sub_epi16(s2, px), sec_thresh, sec_shift_v);
+                            let ds3 =
+                                constrain_128(t, _mm_sub_epi16(s3, px), sec_thresh, sec_shift_v);
 
-                    let sec_tap_k = (2 - k as i32) as i16;
-                    let sec_tap_v = _mm_set1_epi16(sec_tap_k);
-                    let ds0 = constrain_128(t, _mm_sub_epi16(s0, px), sec_thresh, sec_shift_v);
-                    let ds1 = constrain_128(t, _mm_sub_epi16(s1, px), sec_thresh, sec_shift_v);
-                    let ds2 = constrain_128(t, _mm_sub_epi16(s2, px), sec_thresh, sec_shift_v);
-                    let ds3 = constrain_128(t, _mm_sub_epi16(s3, px), sec_thresh, sec_shift_v);
+                            let sec_sum =
+                                _mm_add_epi16(_mm_add_epi16(ds0, ds1), _mm_add_epi16(ds2, ds3));
+                            sum = _mm_add_epi16(sum, _mm_mullo_epi16(sec_tap_v, sec_sum));
 
-                    let sec_sum = _mm_add_epi16(_mm_add_epi16(ds0, ds1), _mm_add_epi16(ds2, ds3));
-                    sum = _mm_add_epi16(sum, _mm_mullo_epi16(sec_tap_v, sec_sum));
+                            min_v = _mm_min_epu16(
+                                min_v,
+                                _mm_min_epu16(_mm_min_epu16(s0, s1), _mm_min_epu16(s2, s3)),
+                            );
+                            max_v = _mm_max_epi16(
+                                max_v,
+                                _mm_max_epi16(_mm_max_epi16(s0, s1), _mm_max_epi16(s2, s3)),
+                            );
+                        }
 
-                    min_v = _mm_min_epu16(
-                        min_v,
-                        _mm_min_epu16(_mm_min_epu16(s0, s1), _mm_min_epu16(s2, s3)),
-                    );
-                    max_v = _mm_max_epi16(
-                        max_v,
-                        _mm_max_epi16(_mm_max_epi16(s0, s1), _mm_max_epi16(s2, s3)),
-                    );
-                }
+                        // Rounding: (sum - (sum < 0) + 8) >> 4
+                        let neg_mask = _mm_cmpgt_epi16(zero, sum);
+                        let adjusted = _mm_add_epi16(sum, neg_mask);
+                        let adjusted = _mm_add_epi16(adjusted, _mm_set1_epi16(8));
+                        let adjusted = _mm_srai_epi16::<4>(adjusted);
+                        let result = _mm_add_epi16(px, adjusted);
+                        let result = _mm_max_epi16(result, min_v);
+                        let result = _mm_min_epi16(result, max_v);
+                        let result_u8 = _mm_packus_epi16(result, zero);
 
-                // Rounding: (sum - (sum < 0) + 8) >> 4
-                let neg_mask = _mm_cmpgt_epi16(zero, sum);
-                let adjusted = _mm_add_epi16(sum, neg_mask);
-                let adjusted = _mm_add_epi16(adjusted, _mm_set1_epi16(8));
-                let adjusted = _mm_srai_epi16::<4>(adjusted);
-                let result = _mm_add_epi16(px, adjusted);
-                let result = _mm_max_epi16(result, min_v);
-                let result = _mm_min_epi16(result, max_v);
-                let result_u8 = _mm_packus_epi16(result, zero);
-
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
-                if w == 8 {
-                    let mut out = [0u8; 16];
-                    storeu_128!(&mut out, result_u8);
-                    p_guard[row_off..row_off + 8].copy_from_slice(&out[0..8]);
+                        let row_off = (offset as isize + y as isize * stride) as usize;
+                        if w == 8 {
+                            let mut out = [0u8; 16];
+                            storeu_128!(&mut out, result_u8);
+                            bytes[row_off..row_off + 8].copy_from_slice(&out[0..8]);
+                        } else {
+                            storei32!(&mut bytes[row_off..row_off + 4], result_u8);
+                        }
+                    }
                 } else {
-                    storei32!(&mut p_guard[row_off..row_off + 4], result_u8);
+                    // Primary only — no min/max clamping
+                    for y in 0..h {
+                        let base = tmp_offset + y * TMP_STRIDE;
+                        let px = loadu_128!(&tmp[base..base + 8], [u16; 8]);
+                        let mut sum = zero;
+
+                        let mut pri_tap_k = pri_tap;
+                        for k in 0..2 {
+                            let off = dav1d_cdef_directions[dir + 2][k] as isize;
+                            let p0_i = (base as isize + off) as usize;
+                            let p1_i = (base as isize - off) as usize;
+                            let p0 = loadu_128!(&tmp[p0_i..p0_i + 8], [u16; 8]);
+                            let p1 = loadu_128!(&tmp[p1_i..p1_i + 8], [u16; 8]);
+
+                            let c0 =
+                                constrain_128(t, _mm_sub_epi16(p0, px), pri_thresh, pri_shift_v);
+                            let c1 =
+                                constrain_128(t, _mm_sub_epi16(p1, px), pri_thresh, pri_shift_v);
+
+                            let tap_v = _mm_set1_epi16(pri_tap_k as i16);
+                            sum = _mm_add_epi16(sum, _mm_mullo_epi16(tap_v, _mm_add_epi16(c0, c1)));
+                            pri_tap_k = pri_tap_k & 3 | 2;
+                        }
+
+                        let neg_mask = _mm_cmpgt_epi16(zero, sum);
+                        let adjusted = _mm_add_epi16(sum, neg_mask);
+                        let adjusted = _mm_add_epi16(adjusted, _mm_set1_epi16(8));
+                        let adjusted = _mm_srai_epi16::<4>(adjusted);
+                        let result = _mm_add_epi16(px, adjusted);
+                        let result_u8 = _mm_packus_epi16(result, zero);
+
+                        let row_off = (offset as isize + y as isize * stride) as usize;
+                        if w == 8 {
+                            let mut out = [0u8; 16];
+                            storeu_128!(&mut out, result_u8);
+                            bytes[row_off..row_off + 8].copy_from_slice(&out[0..8]);
+                        } else {
+                            storei32!(&mut bytes[row_off..row_off + 4], result_u8);
+                        }
+                    }
                 }
-            }
-        } else {
-            // Primary only — no min/max clamping
-            for y in 0..h {
-                let base = tmp_offset + y * TMP_STRIDE;
-                let px = loadu_128!(&tmp[base..base + 8], [u16; 8]);
-                let mut sum = zero;
-
-                let mut pri_tap_k = pri_tap;
-                for k in 0..2 {
-                    let off = dav1d_cdef_directions[dir + 2][k] as isize;
-                    let p0_i = (base as isize + off) as usize;
-                    let p1_i = (base as isize - off) as usize;
-                    let p0 = loadu_128!(&tmp[p0_i..p0_i + 8], [u16; 8]);
-                    let p1 = loadu_128!(&tmp[p1_i..p1_i + 8], [u16; 8]);
-
-                    let c0 = constrain_128(t, _mm_sub_epi16(p0, px), pri_thresh, pri_shift_v);
-                    let c1 = constrain_128(t, _mm_sub_epi16(p1, px), pri_thresh, pri_shift_v);
-
-                    let tap_v = _mm_set1_epi16(pri_tap_k as i16);
-                    sum = _mm_add_epi16(sum, _mm_mullo_epi16(tap_v, _mm_add_epi16(c0, c1)));
-                    pri_tap_k = pri_tap_k & 3 | 2;
-                }
-
-                let neg_mask = _mm_cmpgt_epi16(zero, sum);
-                let adjusted = _mm_add_epi16(sum, neg_mask);
-                let adjusted = _mm_add_epi16(adjusted, _mm_set1_epi16(8));
-                let adjusted = _mm_srai_epi16::<4>(adjusted);
-                let result = _mm_add_epi16(px, adjusted);
-                let result_u8 = _mm_packus_epi16(result, zero);
-
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
-                if w == 8 {
-                    let mut out = [0u8; 16];
-                    storeu_128!(&mut out, result_u8);
-                    p_guard[row_off..row_off + 8].copy_from_slice(&out[0..8]);
-                } else {
-                    storei32!(&mut p_guard[row_off..row_off + 4], result_u8);
-                }
-            }
-        }
-    } else {
-        // Secondary only — no min/max clamping
-        let sec_shift = damping - sec_strength.ilog2() as c_int;
-        let sec_thresh = _mm_set1_epi16(sec_strength as i16);
-        let sec_shift_v = _mm_cvtsi32_si128(sec_shift);
-
-        for y in 0..h {
-            let base = tmp_offset + y * TMP_STRIDE;
-            let px = loadu_128!(&tmp[base..base + 8], [u16; 8]);
-            let mut sum = zero;
-
-            for k in 0..2 {
-                let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
-                let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
-                let s0_i = (base as isize + off2) as usize;
-                let s1_i = (base as isize - off2) as usize;
-                let s2_i = (base as isize + off3) as usize;
-                let s3_i = (base as isize - off3) as usize;
-                let s0 = loadu_128!(&tmp[s0_i..s0_i + 8], [u16; 8]);
-                let s1 = loadu_128!(&tmp[s1_i..s1_i + 8], [u16; 8]);
-                let s2 = loadu_128!(&tmp[s2_i..s2_i + 8], [u16; 8]);
-                let s3 = loadu_128!(&tmp[s3_i..s3_i + 8], [u16; 8]);
-
-                let sec_tap_k = (2 - k as i32) as i16;
-                let sec_tap_v = _mm_set1_epi16(sec_tap_k);
-                let ds0 = constrain_128(t, _mm_sub_epi16(s0, px), sec_thresh, sec_shift_v);
-                let ds1 = constrain_128(t, _mm_sub_epi16(s1, px), sec_thresh, sec_shift_v);
-                let ds2 = constrain_128(t, _mm_sub_epi16(s2, px), sec_thresh, sec_shift_v);
-                let ds3 = constrain_128(t, _mm_sub_epi16(s3, px), sec_thresh, sec_shift_v);
-
-                let sec_sum = _mm_add_epi16(_mm_add_epi16(ds0, ds1), _mm_add_epi16(ds2, ds3));
-                sum = _mm_add_epi16(sum, _mm_mullo_epi16(sec_tap_v, sec_sum));
-            }
-
-            let neg_mask = _mm_cmpgt_epi16(zero, sum);
-            let adjusted = _mm_add_epi16(sum, neg_mask);
-            let adjusted = _mm_add_epi16(adjusted, _mm_set1_epi16(8));
-            let adjusted = _mm_srai_epi16::<4>(adjusted);
-            let result = _mm_add_epi16(px, adjusted);
-            let result_u8 = _mm_packus_epi16(result, zero);
-
-            let row_off = p_base.wrapping_add_signed(y as isize * stride);
-            if w == 8 {
-                let mut out = [0u8; 16];
-                storeu_128!(&mut out, result_u8);
-                p_guard[row_off..row_off + 8].copy_from_slice(&out[0..8]);
             } else {
-                storei32!(&mut p_guard[row_off..row_off + 4], result_u8);
+                // Secondary only — no min/max clamping
+                let sec_shift = damping - sec_strength.ilog2() as c_int;
+                let sec_thresh = _mm_set1_epi16(sec_strength as i16);
+                let sec_shift_v = _mm_cvtsi32_si128(sec_shift);
+
+                for y in 0..h {
+                    let base = tmp_offset + y * TMP_STRIDE;
+                    let px = loadu_128!(&tmp[base..base + 8], [u16; 8]);
+                    let mut sum = zero;
+
+                    for k in 0..2 {
+                        let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
+                        let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
+                        let s0_i = (base as isize + off2) as usize;
+                        let s1_i = (base as isize - off2) as usize;
+                        let s2_i = (base as isize + off3) as usize;
+                        let s3_i = (base as isize - off3) as usize;
+                        let s0 = loadu_128!(&tmp[s0_i..s0_i + 8], [u16; 8]);
+                        let s1 = loadu_128!(&tmp[s1_i..s1_i + 8], [u16; 8]);
+                        let s2 = loadu_128!(&tmp[s2_i..s2_i + 8], [u16; 8]);
+                        let s3 = loadu_128!(&tmp[s3_i..s3_i + 8], [u16; 8]);
+
+                        let sec_tap_k = (2 - k as i32) as i16;
+                        let sec_tap_v = _mm_set1_epi16(sec_tap_k);
+                        let ds0 = constrain_128(t, _mm_sub_epi16(s0, px), sec_thresh, sec_shift_v);
+                        let ds1 = constrain_128(t, _mm_sub_epi16(s1, px), sec_thresh, sec_shift_v);
+                        let ds2 = constrain_128(t, _mm_sub_epi16(s2, px), sec_thresh, sec_shift_v);
+                        let ds3 = constrain_128(t, _mm_sub_epi16(s3, px), sec_thresh, sec_shift_v);
+
+                        let sec_sum =
+                            _mm_add_epi16(_mm_add_epi16(ds0, ds1), _mm_add_epi16(ds2, ds3));
+                        sum = _mm_add_epi16(sum, _mm_mullo_epi16(sec_tap_v, sec_sum));
+                    }
+
+                    let neg_mask = _mm_cmpgt_epi16(zero, sum);
+                    let adjusted = _mm_add_epi16(sum, neg_mask);
+                    let adjusted = _mm_add_epi16(adjusted, _mm_set1_epi16(8));
+                    let adjusted = _mm_srai_epi16::<4>(adjusted);
+                    let result = _mm_add_epi16(px, adjusted);
+                    let result_u8 = _mm_packus_epi16(result, zero);
+
+                    let row_off = (offset as isize + y as isize * stride) as usize;
+                    if w == 8 {
+                        let mut out = [0u8; 16];
+                        storeu_128!(&mut out, result_u8);
+                        bytes[row_off..row_off + 8].copy_from_slice(&out[0..8]);
+                    } else {
+                        storei32!(&mut bytes[row_off..row_off + 4], result_u8);
+                    }
+                }
             }
-        }
-    }
+        },
+    ); // with_pixel_guard_mut
 }
 
 // ============================================================================
@@ -770,7 +784,7 @@ pub(super) fn cdef_filter_block_scalar_8bpc(
     tmp: &[u16],
     tmp_offset: usize,
     dst: PicOffset,
-    stride: isize,
+    _stride: isize,
     w: usize,
     h: usize,
     dir: usize,
@@ -780,130 +794,140 @@ pub(super) fn cdef_filter_block_scalar_8bpc(
 ) {
     use crate::include::common::bitdepth::BitDepth8;
 
-    // Single guard for entire output region
-    let (mut p_guard, p_base) = dst.strided_slice_mut::<BitDepth8>(w, h);
     let tmp = tmp.flex();
-    let mut p_guard = p_guard.flex_mut();
 
-    if pri_strength != 0 {
-        let pri_tap = 4 - (pri_strength & 1);
-        let pri_shift = cmp::max(0, damping - pri_strength.ilog2() as c_int);
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth8, _>(
+        &dst,
+        w,
+        h,
+        |bytes, offset, stride| {
+            let mut p = bytes.flex_mut();
 
-        if sec_strength != 0 {
-            let sec_shift = damping - sec_strength.ilog2() as c_int;
+            if pri_strength != 0 {
+                let pri_tap = 4 - (pri_strength & 1);
+                let pri_shift = cmp::max(0, damping - pri_strength.ilog2() as c_int);
 
-            for y in 0..h {
-                let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
+                if sec_strength != 0 {
+                    let sec_shift = damping - sec_strength.ilog2() as c_int;
 
-                for x in 0..w {
-                    let px = p_guard[row_off + x] as i32;
-                    let mut sum = 0i32;
-                    let mut max = px;
-                    let mut min = px;
-                    let base = row_base + x as isize;
+                    for y in 0..h {
+                        let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
+                        let row_off = (offset as isize + y as isize * stride) as usize;
 
-                    let mut pri_tap_k = pri_tap;
-                    for k in 0..2 {
-                        let off1 = dav1d_cdef_directions[dir + 2][k] as isize;
-                        // Sign-extend: fill 0xC000u16 → -16384i16 → -16384i32
-                        let p0 = tmp[(base + off1) as usize] as i16 as i32;
-                        let p1 = tmp[(base - off1) as usize] as i16 as i32;
+                        for x in 0..w {
+                            let px = p[row_off + x] as i32;
+                            let mut sum = 0i32;
+                            let mut max = px;
+                            let mut min = px;
+                            let base = row_base + x as isize;
 
-                        sum += pri_tap_k * constrain_scalar(p0 - px, pri_strength, pri_shift);
-                        sum += pri_tap_k * constrain_scalar(p1 - px, pri_strength, pri_shift);
+                            let mut pri_tap_k = pri_tap;
+                            for k in 0..2 {
+                                let off1 = dav1d_cdef_directions[dir + 2][k] as isize;
+                                // Sign-extend: fill 0xC000u16 → -16384i16 → -16384i32
+                                let p0 = tmp[(base + off1) as usize] as i16 as i32;
+                                let p1 = tmp[(base - off1) as usize] as i16 as i32;
 
-                        pri_tap_k = pri_tap_k & 3 | 2;
+                                sum +=
+                                    pri_tap_k * constrain_scalar(p0 - px, pri_strength, pri_shift);
+                                sum +=
+                                    pri_tap_k * constrain_scalar(p1 - px, pri_strength, pri_shift);
 
-                        // Unsigned min: fill (-16384 as u32 = very large) not selected
-                        min = cmp::min(cmp::min(p0 as u32, p1 as u32), min as u32) as i32;
-                        // Signed max: fill (-16384) not selected
-                        max = cmp::max(cmp::max(p0, p1), max);
+                                pri_tap_k = pri_tap_k & 3 | 2;
 
-                        let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
-                        let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
-                        let s0 = tmp[(base + off2) as usize] as i16 as i32;
-                        let s1 = tmp[(base - off2) as usize] as i16 as i32;
-                        let s2 = tmp[(base + off3) as usize] as i16 as i32;
-                        let s3 = tmp[(base - off3) as usize] as i16 as i32;
+                                // Unsigned min: fill (-16384 as u32 = very large) not selected
+                                min = cmp::min(cmp::min(p0 as u32, p1 as u32), min as u32) as i32;
+                                // Signed max: fill (-16384) not selected
+                                max = cmp::max(cmp::max(p0, p1), max);
 
-                        let sec_tap = 2 - k as i32;
-                        sum += sec_tap * constrain_scalar(s0 - px, sec_strength, sec_shift);
-                        sum += sec_tap * constrain_scalar(s1 - px, sec_strength, sec_shift);
-                        sum += sec_tap * constrain_scalar(s2 - px, sec_strength, sec_shift);
-                        sum += sec_tap * constrain_scalar(s3 - px, sec_strength, sec_shift);
+                                let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
+                                let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
+                                let s0 = tmp[(base + off2) as usize] as i16 as i32;
+                                let s1 = tmp[(base - off2) as usize] as i16 as i32;
+                                let s2 = tmp[(base + off3) as usize] as i16 as i32;
+                                let s3 = tmp[(base - off3) as usize] as i16 as i32;
 
-                        min = cmp::min(
-                            cmp::min(
-                                cmp::min(s0 as u32, s1 as u32),
-                                cmp::min(s2 as u32, s3 as u32),
-                            ),
-                            min as u32,
-                        ) as i32;
-                        max = cmp::max(cmp::max(cmp::max(cmp::max(s0, s1), s2), s3), max);
+                                let sec_tap = 2 - k as i32;
+                                sum += sec_tap * constrain_scalar(s0 - px, sec_strength, sec_shift);
+                                sum += sec_tap * constrain_scalar(s1 - px, sec_strength, sec_shift);
+                                sum += sec_tap * constrain_scalar(s2 - px, sec_strength, sec_shift);
+                                sum += sec_tap * constrain_scalar(s3 - px, sec_strength, sec_shift);
+
+                                min = cmp::min(
+                                    cmp::min(
+                                        cmp::min(s0 as u32, s1 as u32),
+                                        cmp::min(s2 as u32, s3 as u32),
+                                    ),
+                                    min as u32,
+                                ) as i32;
+                                max = cmp::max(cmp::max(cmp::max(cmp::max(s0, s1), s2), s3), max);
+                            }
+
+                            p[row_off + x] =
+                                iclip(px + (sum - (sum < 0) as i32 + 8 >> 4), min, max) as u8;
+                        }
                     }
+                } else {
+                    for y in 0..h {
+                        let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
+                        let row_off = (offset as isize + y as isize * stride) as usize;
 
-                    p_guard[row_off + x] =
-                        iclip(px + (sum - (sum < 0) as i32 + 8 >> 4), min, max) as u8;
-                }
-            }
-        } else {
-            for y in 0..h {
-                let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
+                        for x in 0..w {
+                            let px = p[row_off + x] as i32;
+                            let mut sum = 0i32;
+                            let base = row_base + x as isize;
 
-                for x in 0..w {
-                    let px = p_guard[row_off + x] as i32;
-                    let mut sum = 0i32;
-                    let base = row_base + x as isize;
+                            let mut pri_tap_k = pri_tap;
+                            for k in 0..2 {
+                                let off = dav1d_cdef_directions[dir + 2][k] as isize;
+                                let p0 = tmp[(base + off) as usize] as i32;
+                                let p1 = tmp[(base - off) as usize] as i32;
 
-                    let mut pri_tap_k = pri_tap;
-                    for k in 0..2 {
-                        let off = dav1d_cdef_directions[dir + 2][k] as isize;
-                        let p0 = tmp[(base + off) as usize] as i32;
-                        let p1 = tmp[(base - off) as usize] as i32;
+                                sum +=
+                                    pri_tap_k * constrain_scalar(p0 - px, pri_strength, pri_shift);
+                                sum +=
+                                    pri_tap_k * constrain_scalar(p1 - px, pri_strength, pri_shift);
 
-                        sum += pri_tap_k * constrain_scalar(p0 - px, pri_strength, pri_shift);
-                        sum += pri_tap_k * constrain_scalar(p1 - px, pri_strength, pri_shift);
+                                pri_tap_k = pri_tap_k & 3 | 2;
+                            }
 
-                        pri_tap_k = pri_tap_k & 3 | 2;
+                            p[row_off + x] = (px + (sum - (sum < 0) as i32 + 8 >> 4)) as u8;
+                        }
                     }
+                }
+            } else {
+                let sec_shift = damping - sec_strength.ilog2() as c_int;
 
-                    p_guard[row_off + x] = (px + (sum - (sum < 0) as i32 + 8 >> 4)) as u8;
+                for y in 0..h {
+                    let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
+                    let row_off = (offset as isize + y as isize * stride) as usize;
+
+                    for x in 0..w {
+                        let px = p[row_off + x] as i32;
+                        let mut sum = 0i32;
+                        let base = row_base + x as isize;
+
+                        for k in 0..2 {
+                            let off1 = dav1d_cdef_directions[dir + 4][k] as isize;
+                            let off2 = dav1d_cdef_directions[dir + 0][k] as isize;
+                            let s0 = tmp[(base + off1) as usize] as i32;
+                            let s1 = tmp[(base - off1) as usize] as i32;
+                            let s2 = tmp[(base + off2) as usize] as i32;
+                            let s3 = tmp[(base - off2) as usize] as i32;
+
+                            let sec_tap = 2 - k as i32;
+                            sum += sec_tap * constrain_scalar(s0 - px, sec_strength, sec_shift);
+                            sum += sec_tap * constrain_scalar(s1 - px, sec_strength, sec_shift);
+                            sum += sec_tap * constrain_scalar(s2 - px, sec_strength, sec_shift);
+                            sum += sec_tap * constrain_scalar(s3 - px, sec_strength, sec_shift);
+                        }
+
+                        p[row_off + x] = (px + (sum - (sum < 0) as i32 + 8 >> 4)) as u8;
+                    }
                 }
             }
-        }
-    } else {
-        let sec_shift = damping - sec_strength.ilog2() as c_int;
-
-        for y in 0..h {
-            let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-            let row_off = p_base.wrapping_add_signed(y as isize * stride);
-
-            for x in 0..w {
-                let px = p_guard[row_off + x] as i32;
-                let mut sum = 0i32;
-                let base = row_base + x as isize;
-
-                for k in 0..2 {
-                    let off1 = dav1d_cdef_directions[dir + 4][k] as isize;
-                    let off2 = dav1d_cdef_directions[dir + 0][k] as isize;
-                    let s0 = tmp[(base + off1) as usize] as i32;
-                    let s1 = tmp[(base - off1) as usize] as i32;
-                    let s2 = tmp[(base + off2) as usize] as i32;
-                    let s3 = tmp[(base - off2) as usize] as i32;
-
-                    let sec_tap = 2 - k as i32;
-                    sum += sec_tap * constrain_scalar(s0 - px, sec_strength, sec_shift);
-                    sum += sec_tap * constrain_scalar(s1 - px, sec_strength, sec_shift);
-                    sum += sec_tap * constrain_scalar(s2 - px, sec_strength, sec_shift);
-                    sum += sec_tap * constrain_scalar(s3 - px, sec_strength, sec_shift);
-                }
-
-                p_guard[row_off + x] = (px + (sum - (sum < 0) as i32 + 8 >> 4)) as u8;
-            }
-        }
-    }
+        },
+    ); // with_pixel_guard_mut
 }
 
 /// Padding function for 8bpc - copies edge pixels into temporary buffer.
@@ -1438,7 +1462,7 @@ fn cdef_filter_block_simd_16bpc(
     tmp: &[u16],
     tmp_offset: usize,
     dst: PicOffset,
-    stride: isize,
+    _stride: isize,
     w: usize,
     h: usize,
     dir: usize,
@@ -1454,179 +1478,196 @@ fn cdef_filter_block_simd_16bpc(
     let bd_max = _mm_set1_epi16(bitdepth_max as i16);
     let bitdepth_min_8 = ((bitdepth_max + 1) as u32).ilog2() as c_int - 8;
 
-    // Single guard for entire output region
-    let (mut p_guard, p_base) = dst.strided_slice_mut::<BitDepth16>(w, h);
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth16, _>(
+        &dst,
+        w,
+        h,
+        |bytes, offset, stride| {
+            let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut bytes[..])
+                .expect("bytes alignment/size mismatch for u16 reinterpretation");
 
-    if pri_strength != 0 {
-        let pri_tap = 4 - (pri_strength >> bitdepth_min_8 & 1);
-        let pri_shift = cmp::max(0, damping - pri_strength.ilog2() as c_int);
-        let pri_thresh = _mm_set1_epi16(pri_strength as i16);
-        let pri_shift_v = _mm_cvtsi32_si128(pri_shift);
+            if pri_strength != 0 {
+                let pri_tap = 4 - (pri_strength >> bitdepth_min_8 & 1);
+                let pri_shift = cmp::max(0, damping - pri_strength.ilog2() as c_int);
+                let pri_thresh = _mm_set1_epi16(pri_strength as i16);
+                let pri_shift_v = _mm_cvtsi32_si128(pri_shift);
 
-        if sec_strength != 0 {
-            let sec_shift = damping - sec_strength.ilog2() as c_int;
-            let sec_thresh = _mm_set1_epi16(sec_strength as i16);
-            let sec_shift_v = _mm_cvtsi32_si128(sec_shift);
+                if sec_strength != 0 {
+                    let sec_shift = damping - sec_strength.ilog2() as c_int;
+                    let sec_thresh = _mm_set1_epi16(sec_strength as i16);
+                    let sec_shift_v = _mm_cvtsi32_si128(sec_shift);
 
-            for y in 0..h {
-                let base = tmp_offset + y * TMP_STRIDE;
-                let px = loadu_128!(&tmp[base..base + 8], [u16; 8]);
-                let mut sum = zero;
-                let mut min_v = px;
-                let mut max_v = px;
+                    for y in 0..h {
+                        let base = tmp_offset + y * TMP_STRIDE;
+                        let px = loadu_128!(&tmp[base..base + 8], [u16; 8]);
+                        let mut sum = zero;
+                        let mut min_v = px;
+                        let mut max_v = px;
 
-                let mut pri_tap_k = pri_tap;
-                for k in 0..2 {
-                    let off = dav1d_cdef_directions[dir + 2][k] as isize;
-                    let p0_i = (base as isize + off) as usize;
-                    let p1_i = (base as isize - off) as usize;
-                    let p0 = loadu_128!(&tmp[p0_i..p0_i + 8], [u16; 8]);
-                    let p1 = loadu_128!(&tmp[p1_i..p1_i + 8], [u16; 8]);
+                        let mut pri_tap_k = pri_tap;
+                        for k in 0..2 {
+                            let off = dav1d_cdef_directions[dir + 2][k] as isize;
+                            let p0_i = (base as isize + off) as usize;
+                            let p1_i = (base as isize - off) as usize;
+                            let p0 = loadu_128!(&tmp[p0_i..p0_i + 8], [u16; 8]);
+                            let p1 = loadu_128!(&tmp[p1_i..p1_i + 8], [u16; 8]);
 
-                    let c0 = constrain_128(t, _mm_sub_epi16(p0, px), pri_thresh, pri_shift_v);
-                    let c1 = constrain_128(t, _mm_sub_epi16(p1, px), pri_thresh, pri_shift_v);
+                            let c0 =
+                                constrain_128(t, _mm_sub_epi16(p0, px), pri_thresh, pri_shift_v);
+                            let c1 =
+                                constrain_128(t, _mm_sub_epi16(p1, px), pri_thresh, pri_shift_v);
 
-                    let tap_v = _mm_set1_epi16(pri_tap_k as i16);
-                    sum = _mm_add_epi16(sum, _mm_mullo_epi16(tap_v, _mm_add_epi16(c0, c1)));
-                    pri_tap_k = pri_tap_k & 3 | 2;
+                            let tap_v = _mm_set1_epi16(pri_tap_k as i16);
+                            sum = _mm_add_epi16(sum, _mm_mullo_epi16(tap_v, _mm_add_epi16(c0, c1)));
+                            pri_tap_k = pri_tap_k & 3 | 2;
 
-                    // Use unsigned min to ignore boundary fill (0x8001 = large unsigned)
-                    min_v = _mm_min_epu16(min_v, _mm_min_epu16(p0, p1));
-                    // Use signed max to ignore boundary fill (0x8001 = -32767 signed)
-                    max_v = _mm_max_epi16(max_v, _mm_max_epi16(p0, p1));
+                            // Use unsigned min to ignore boundary fill (0x8001 = large unsigned)
+                            min_v = _mm_min_epu16(min_v, _mm_min_epu16(p0, p1));
+                            // Use signed max to ignore boundary fill (0x8001 = -32767 signed)
+                            max_v = _mm_max_epi16(max_v, _mm_max_epi16(p0, p1));
 
-                    let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
-                    let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
-                    let s0_i = (base as isize + off2) as usize;
-                    let s1_i = (base as isize - off2) as usize;
-                    let s2_i = (base as isize + off3) as usize;
-                    let s3_i = (base as isize - off3) as usize;
-                    let s0 = loadu_128!(&tmp[s0_i..s0_i + 8], [u16; 8]);
-                    let s1 = loadu_128!(&tmp[s1_i..s1_i + 8], [u16; 8]);
-                    let s2 = loadu_128!(&tmp[s2_i..s2_i + 8], [u16; 8]);
-                    let s3 = loadu_128!(&tmp[s3_i..s3_i + 8], [u16; 8]);
+                            let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
+                            let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
+                            let s0_i = (base as isize + off2) as usize;
+                            let s1_i = (base as isize - off2) as usize;
+                            let s2_i = (base as isize + off3) as usize;
+                            let s3_i = (base as isize - off3) as usize;
+                            let s0 = loadu_128!(&tmp[s0_i..s0_i + 8], [u16; 8]);
+                            let s1 = loadu_128!(&tmp[s1_i..s1_i + 8], [u16; 8]);
+                            let s2 = loadu_128!(&tmp[s2_i..s2_i + 8], [u16; 8]);
+                            let s3 = loadu_128!(&tmp[s3_i..s3_i + 8], [u16; 8]);
 
-                    let sec_tap_k = (2 - k as i32) as i16;
-                    let sec_tap_v = _mm_set1_epi16(sec_tap_k);
-                    let ds0 = constrain_128(t, _mm_sub_epi16(s0, px), sec_thresh, sec_shift_v);
-                    let ds1 = constrain_128(t, _mm_sub_epi16(s1, px), sec_thresh, sec_shift_v);
-                    let ds2 = constrain_128(t, _mm_sub_epi16(s2, px), sec_thresh, sec_shift_v);
-                    let ds3 = constrain_128(t, _mm_sub_epi16(s3, px), sec_thresh, sec_shift_v);
+                            let sec_tap_k = (2 - k as i32) as i16;
+                            let sec_tap_v = _mm_set1_epi16(sec_tap_k);
+                            let ds0 =
+                                constrain_128(t, _mm_sub_epi16(s0, px), sec_thresh, sec_shift_v);
+                            let ds1 =
+                                constrain_128(t, _mm_sub_epi16(s1, px), sec_thresh, sec_shift_v);
+                            let ds2 =
+                                constrain_128(t, _mm_sub_epi16(s2, px), sec_thresh, sec_shift_v);
+                            let ds3 =
+                                constrain_128(t, _mm_sub_epi16(s3, px), sec_thresh, sec_shift_v);
 
-                    let sec_sum = _mm_add_epi16(_mm_add_epi16(ds0, ds1), _mm_add_epi16(ds2, ds3));
-                    sum = _mm_add_epi16(sum, _mm_mullo_epi16(sec_tap_v, sec_sum));
+                            let sec_sum =
+                                _mm_add_epi16(_mm_add_epi16(ds0, ds1), _mm_add_epi16(ds2, ds3));
+                            sum = _mm_add_epi16(sum, _mm_mullo_epi16(sec_tap_v, sec_sum));
 
-                    min_v = _mm_min_epu16(
-                        min_v,
-                        _mm_min_epu16(_mm_min_epu16(s0, s1), _mm_min_epu16(s2, s3)),
-                    );
-                    max_v = _mm_max_epi16(
-                        max_v,
-                        _mm_max_epi16(_mm_max_epi16(s0, s1), _mm_max_epi16(s2, s3)),
-                    );
+                            min_v = _mm_min_epu16(
+                                min_v,
+                                _mm_min_epu16(_mm_min_epu16(s0, s1), _mm_min_epu16(s2, s3)),
+                            );
+                            max_v = _mm_max_epi16(
+                                max_v,
+                                _mm_max_epi16(_mm_max_epi16(s0, s1), _mm_max_epi16(s2, s3)),
+                            );
+                        }
+
+                        // Rounding: (sum - (sum < 0) + 8) >> 4
+                        let neg_mask = _mm_cmpgt_epi16(zero, sum);
+                        let adjusted = _mm_add_epi16(sum, neg_mask);
+                        let adjusted = _mm_add_epi16(adjusted, _mm_set1_epi16(8));
+                        let adjusted = _mm_srai_epi16::<4>(adjusted);
+                        let result = _mm_add_epi16(px, adjusted);
+                        let result = _mm_max_epi16(result, min_v);
+                        let result = _mm_min_epi16(result, max_v);
+
+                        let mut out = [0u16; 8];
+                        storeu_128!(&mut out, result);
+                        let row_off = (offset as isize + y as isize * stride) as usize / 2;
+                        p_u16[row_off..row_off + w].copy_from_slice(&out[..w]);
+                    }
+                } else {
+                    // Primary only
+                    for y in 0..h {
+                        let base = tmp_offset + y * TMP_STRIDE;
+                        let px = loadu_128!(&tmp[base..base + 8], [u16; 8]);
+                        let mut sum = zero;
+
+                        let mut pri_tap_k = pri_tap;
+                        for k in 0..2 {
+                            let off = dav1d_cdef_directions[dir + 2][k] as isize;
+                            let p0_i = (base as isize + off) as usize;
+                            let p1_i = (base as isize - off) as usize;
+                            let p0 = loadu_128!(&tmp[p0_i..p0_i + 8], [u16; 8]);
+                            let p1 = loadu_128!(&tmp[p1_i..p1_i + 8], [u16; 8]);
+
+                            let c0 =
+                                constrain_128(t, _mm_sub_epi16(p0, px), pri_thresh, pri_shift_v);
+                            let c1 =
+                                constrain_128(t, _mm_sub_epi16(p1, px), pri_thresh, pri_shift_v);
+
+                            let tap_v = _mm_set1_epi16(pri_tap_k as i16);
+                            sum = _mm_add_epi16(sum, _mm_mullo_epi16(tap_v, _mm_add_epi16(c0, c1)));
+                            pri_tap_k = pri_tap_k & 3 | 2;
+                        }
+
+                        let neg_mask = _mm_cmpgt_epi16(zero, sum);
+                        let adjusted = _mm_add_epi16(sum, neg_mask);
+                        let adjusted = _mm_add_epi16(adjusted, _mm_set1_epi16(8));
+                        let adjusted = _mm_srai_epi16::<4>(adjusted);
+                        let result = _mm_add_epi16(px, adjusted);
+                        // Clamp to [0, bitdepth_max]
+                        let result = _mm_max_epi16(result, zero);
+                        let result = _mm_min_epi16(result, bd_max);
+
+                        let mut out = [0u16; 8];
+                        storeu_128!(&mut out, result);
+                        let row_off = (offset as isize + y as isize * stride) as usize / 2;
+                        p_u16[row_off..row_off + w].copy_from_slice(&out[..w]);
+                    }
                 }
+            } else {
+                // Secondary only
+                let sec_shift = damping - sec_strength.ilog2() as c_int;
+                let sec_thresh = _mm_set1_epi16(sec_strength as i16);
+                let sec_shift_v = _mm_cvtsi32_si128(sec_shift);
 
-                // Rounding: (sum - (sum < 0) + 8) >> 4
-                let neg_mask = _mm_cmpgt_epi16(zero, sum);
-                let adjusted = _mm_add_epi16(sum, neg_mask);
-                let adjusted = _mm_add_epi16(adjusted, _mm_set1_epi16(8));
-                let adjusted = _mm_srai_epi16::<4>(adjusted);
-                let result = _mm_add_epi16(px, adjusted);
-                let result = _mm_max_epi16(result, min_v);
-                let result = _mm_min_epi16(result, max_v);
+                for y in 0..h {
+                    let base = tmp_offset + y * TMP_STRIDE;
+                    let px = loadu_128!(&tmp[base..base + 8], [u16; 8]);
+                    let mut sum = zero;
 
-                let mut out = [0u16; 8];
-                storeu_128!(&mut out, result);
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
-                p_guard[row_off..row_off + w].copy_from_slice(&out[..w]);
-            }
-        } else {
-            // Primary only
-            for y in 0..h {
-                let base = tmp_offset + y * TMP_STRIDE;
-                let px = loadu_128!(&tmp[base..base + 8], [u16; 8]);
-                let mut sum = zero;
+                    for k in 0..2 {
+                        let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
+                        let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
+                        let s0_i = (base as isize + off2) as usize;
+                        let s1_i = (base as isize - off2) as usize;
+                        let s2_i = (base as isize + off3) as usize;
+                        let s3_i = (base as isize - off3) as usize;
+                        let s0 = loadu_128!(&tmp[s0_i..s0_i + 8], [u16; 8]);
+                        let s1 = loadu_128!(&tmp[s1_i..s1_i + 8], [u16; 8]);
+                        let s2 = loadu_128!(&tmp[s2_i..s2_i + 8], [u16; 8]);
+                        let s3 = loadu_128!(&tmp[s3_i..s3_i + 8], [u16; 8]);
 
-                let mut pri_tap_k = pri_tap;
-                for k in 0..2 {
-                    let off = dav1d_cdef_directions[dir + 2][k] as isize;
-                    let p0_i = (base as isize + off) as usize;
-                    let p1_i = (base as isize - off) as usize;
-                    let p0 = loadu_128!(&tmp[p0_i..p0_i + 8], [u16; 8]);
-                    let p1 = loadu_128!(&tmp[p1_i..p1_i + 8], [u16; 8]);
+                        let sec_tap_k = (2 - k as i32) as i16;
+                        let sec_tap_v = _mm_set1_epi16(sec_tap_k);
+                        let ds0 = constrain_128(t, _mm_sub_epi16(s0, px), sec_thresh, sec_shift_v);
+                        let ds1 = constrain_128(t, _mm_sub_epi16(s1, px), sec_thresh, sec_shift_v);
+                        let ds2 = constrain_128(t, _mm_sub_epi16(s2, px), sec_thresh, sec_shift_v);
+                        let ds3 = constrain_128(t, _mm_sub_epi16(s3, px), sec_thresh, sec_shift_v);
 
-                    let c0 = constrain_128(t, _mm_sub_epi16(p0, px), pri_thresh, pri_shift_v);
-                    let c1 = constrain_128(t, _mm_sub_epi16(p1, px), pri_thresh, pri_shift_v);
+                        let sec_sum =
+                            _mm_add_epi16(_mm_add_epi16(ds0, ds1), _mm_add_epi16(ds2, ds3));
+                        sum = _mm_add_epi16(sum, _mm_mullo_epi16(sec_tap_v, sec_sum));
+                    }
 
-                    let tap_v = _mm_set1_epi16(pri_tap_k as i16);
-                    sum = _mm_add_epi16(sum, _mm_mullo_epi16(tap_v, _mm_add_epi16(c0, c1)));
-                    pri_tap_k = pri_tap_k & 3 | 2;
+                    let neg_mask = _mm_cmpgt_epi16(zero, sum);
+                    let adjusted = _mm_add_epi16(sum, neg_mask);
+                    let adjusted = _mm_add_epi16(adjusted, _mm_set1_epi16(8));
+                    let adjusted = _mm_srai_epi16::<4>(adjusted);
+                    let result = _mm_add_epi16(px, adjusted);
+                    // Clamp to [0, bitdepth_max]
+                    let result = _mm_max_epi16(result, zero);
+                    let result = _mm_min_epi16(result, bd_max);
+
+                    let mut out = [0u16; 8];
+                    storeu_128!(&mut out, result);
+                    let row_off = (offset as isize + y as isize * stride) as usize / 2;
+                    p_u16[row_off..row_off + w].copy_from_slice(&out[..w]);
                 }
-
-                let neg_mask = _mm_cmpgt_epi16(zero, sum);
-                let adjusted = _mm_add_epi16(sum, neg_mask);
-                let adjusted = _mm_add_epi16(adjusted, _mm_set1_epi16(8));
-                let adjusted = _mm_srai_epi16::<4>(adjusted);
-                let result = _mm_add_epi16(px, adjusted);
-                // Clamp to [0, bitdepth_max]
-                let result = _mm_max_epi16(result, zero);
-                let result = _mm_min_epi16(result, bd_max);
-
-                let mut out = [0u16; 8];
-                storeu_128!(&mut out, result);
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
-                p_guard[row_off..row_off + w].copy_from_slice(&out[..w]);
             }
-        }
-    } else {
-        // Secondary only
-        let sec_shift = damping - sec_strength.ilog2() as c_int;
-        let sec_thresh = _mm_set1_epi16(sec_strength as i16);
-        let sec_shift_v = _mm_cvtsi32_si128(sec_shift);
-
-        for y in 0..h {
-            let base = tmp_offset + y * TMP_STRIDE;
-            let px = loadu_128!(&tmp[base..base + 8], [u16; 8]);
-            let mut sum = zero;
-
-            for k in 0..2 {
-                let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
-                let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
-                let s0_i = (base as isize + off2) as usize;
-                let s1_i = (base as isize - off2) as usize;
-                let s2_i = (base as isize + off3) as usize;
-                let s3_i = (base as isize - off3) as usize;
-                let s0 = loadu_128!(&tmp[s0_i..s0_i + 8], [u16; 8]);
-                let s1 = loadu_128!(&tmp[s1_i..s1_i + 8], [u16; 8]);
-                let s2 = loadu_128!(&tmp[s2_i..s2_i + 8], [u16; 8]);
-                let s3 = loadu_128!(&tmp[s3_i..s3_i + 8], [u16; 8]);
-
-                let sec_tap_k = (2 - k as i32) as i16;
-                let sec_tap_v = _mm_set1_epi16(sec_tap_k);
-                let ds0 = constrain_128(t, _mm_sub_epi16(s0, px), sec_thresh, sec_shift_v);
-                let ds1 = constrain_128(t, _mm_sub_epi16(s1, px), sec_thresh, sec_shift_v);
-                let ds2 = constrain_128(t, _mm_sub_epi16(s2, px), sec_thresh, sec_shift_v);
-                let ds3 = constrain_128(t, _mm_sub_epi16(s3, px), sec_thresh, sec_shift_v);
-
-                let sec_sum = _mm_add_epi16(_mm_add_epi16(ds0, ds1), _mm_add_epi16(ds2, ds3));
-                sum = _mm_add_epi16(sum, _mm_mullo_epi16(sec_tap_v, sec_sum));
-            }
-
-            let neg_mask = _mm_cmpgt_epi16(zero, sum);
-            let adjusted = _mm_add_epi16(sum, neg_mask);
-            let adjusted = _mm_add_epi16(adjusted, _mm_set1_epi16(8));
-            let adjusted = _mm_srai_epi16::<4>(adjusted);
-            let result = _mm_add_epi16(px, adjusted);
-            // Clamp to [0, bitdepth_max]
-            let result = _mm_max_epi16(result, zero);
-            let result = _mm_min_epi16(result, bd_max);
-
-            let mut out = [0u16; 8];
-            storeu_128!(&mut out, result);
-            let row_off = p_base.wrapping_add_signed(y as isize * stride);
-            p_guard[row_off..row_off + w].copy_from_slice(&out[..w]);
-        }
-    }
+        },
+    ); // with_pixel_guard_mut
 }
 
 /// Scalar CDEF filter fallback for 16bpc.
@@ -1634,7 +1675,7 @@ pub(super) fn cdef_filter_block_scalar_16bpc(
     tmp: &[u16],
     tmp_offset: usize,
     dst: PicOffset,
-    stride: isize,
+    _stride: isize,
     w: usize,
     h: usize,
     dir: usize,
@@ -1647,132 +1688,144 @@ pub(super) fn cdef_filter_block_scalar_16bpc(
 
     let bitdepth_min_8 = ((bitdepth_max + 1) as u32).ilog2() as c_int - 8;
 
-    // Single guard for entire output region
-    let (mut p_guard, p_base) = dst.strided_slice_mut::<BitDepth16>(w, h);
     let tmp = tmp.flex();
-    let mut p_guard = p_guard.flex_mut();
 
-    if pri_strength != 0 {
-        let pri_tap = 4 - (pri_strength >> bitdepth_min_8 & 1);
-        let pri_shift = cmp::max(0, damping - pri_strength.ilog2() as c_int);
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BitDepth16, _>(
+        &dst,
+        w,
+        h,
+        |bytes, offset, stride| {
+            let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut bytes[..])
+                .expect("bytes alignment/size mismatch for u16 reinterpretation");
+            let mut p = p_u16.flex_mut();
 
-        if sec_strength != 0 {
-            let sec_shift = damping - sec_strength.ilog2() as c_int;
+            if pri_strength != 0 {
+                let pri_tap = 4 - (pri_strength >> bitdepth_min_8 & 1);
+                let pri_shift = cmp::max(0, damping - pri_strength.ilog2() as c_int);
 
-            for y in 0..h {
-                let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
+                if sec_strength != 0 {
+                    let sec_shift = damping - sec_strength.ilog2() as c_int;
 
-                for x in 0..w {
-                    let px = p_guard[row_off + x] as i32;
-                    let mut sum = 0i32;
-                    let mut max = px;
-                    let mut min = px;
-                    let base = row_base + x as isize;
+                    for y in 0..h {
+                        let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
+                        let row_off = (offset as isize + y as isize * stride) as usize / 2;
 
-                    let mut pri_tap_k = pri_tap;
-                    for k in 0..2 {
-                        let off1 = dav1d_cdef_directions[dir + 2][k] as isize;
-                        // Sign-extend: fill 0xC000u16 → -16384i16 → -16384i32
-                        let p0 = tmp[(base + off1) as usize] as i16 as i32;
-                        let p1 = tmp[(base - off1) as usize] as i16 as i32;
+                        for x in 0..w {
+                            let px = p[row_off + x] as i32;
+                            let mut sum = 0i32;
+                            let mut max = px;
+                            let mut min = px;
+                            let base = row_base + x as isize;
 
-                        sum += pri_tap_k * constrain_scalar(p0 - px, pri_strength, pri_shift);
-                        sum += pri_tap_k * constrain_scalar(p1 - px, pri_strength, pri_shift);
+                            let mut pri_tap_k = pri_tap;
+                            for k in 0..2 {
+                                let off1 = dav1d_cdef_directions[dir + 2][k] as isize;
+                                // Sign-extend: fill 0xC000u16 → -16384i16 → -16384i32
+                                let p0 = tmp[(base + off1) as usize] as i16 as i32;
+                                let p1 = tmp[(base - off1) as usize] as i16 as i32;
 
-                        pri_tap_k = pri_tap_k & 3 | 2;
+                                sum +=
+                                    pri_tap_k * constrain_scalar(p0 - px, pri_strength, pri_shift);
+                                sum +=
+                                    pri_tap_k * constrain_scalar(p1 - px, pri_strength, pri_shift);
 
-                        // Unsigned min: fill (-16384 as u32 = very large) not selected
-                        min = cmp::min(cmp::min(p0 as u32, p1 as u32), min as u32) as i32;
-                        // Signed max: fill (-16384) not selected
-                        max = cmp::max(cmp::max(p0, p1), max);
+                                pri_tap_k = pri_tap_k & 3 | 2;
 
-                        let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
-                        let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
-                        let s0 = tmp[(base + off2) as usize] as i16 as i32;
-                        let s1 = tmp[(base - off2) as usize] as i16 as i32;
-                        let s2 = tmp[(base + off3) as usize] as i16 as i32;
-                        let s3 = tmp[(base - off3) as usize] as i16 as i32;
+                                // Unsigned min: fill (-16384 as u32 = very large) not selected
+                                min = cmp::min(cmp::min(p0 as u32, p1 as u32), min as u32) as i32;
+                                // Signed max: fill (-16384) not selected
+                                max = cmp::max(cmp::max(p0, p1), max);
 
-                        let sec_tap = 2 - k as i32;
-                        sum += sec_tap * constrain_scalar(s0 - px, sec_strength, sec_shift);
-                        sum += sec_tap * constrain_scalar(s1 - px, sec_strength, sec_shift);
-                        sum += sec_tap * constrain_scalar(s2 - px, sec_strength, sec_shift);
-                        sum += sec_tap * constrain_scalar(s3 - px, sec_strength, sec_shift);
+                                let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
+                                let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
+                                let s0 = tmp[(base + off2) as usize] as i16 as i32;
+                                let s1 = tmp[(base - off2) as usize] as i16 as i32;
+                                let s2 = tmp[(base + off3) as usize] as i16 as i32;
+                                let s3 = tmp[(base - off3) as usize] as i16 as i32;
 
-                        min = cmp::min(
-                            cmp::min(
-                                cmp::min(s0 as u32, s1 as u32),
-                                cmp::min(s2 as u32, s3 as u32),
-                            ),
-                            min as u32,
-                        ) as i32;
-                        max = cmp::max(cmp::max(cmp::max(cmp::max(s0, s1), s2), s3), max);
+                                let sec_tap = 2 - k as i32;
+                                sum += sec_tap * constrain_scalar(s0 - px, sec_strength, sec_shift);
+                                sum += sec_tap * constrain_scalar(s1 - px, sec_strength, sec_shift);
+                                sum += sec_tap * constrain_scalar(s2 - px, sec_strength, sec_shift);
+                                sum += sec_tap * constrain_scalar(s3 - px, sec_strength, sec_shift);
+
+                                min = cmp::min(
+                                    cmp::min(
+                                        cmp::min(s0 as u32, s1 as u32),
+                                        cmp::min(s2 as u32, s3 as u32),
+                                    ),
+                                    min as u32,
+                                ) as i32;
+                                max = cmp::max(cmp::max(cmp::max(cmp::max(s0, s1), s2), s3), max);
+                            }
+
+                            p[row_off + x] =
+                                iclip(px + (sum - (sum < 0) as i32 + 8 >> 4), min, max) as u16;
+                        }
                     }
+                } else {
+                    for y in 0..h {
+                        let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
+                        let row_off = (offset as isize + y as isize * stride) as usize / 2;
 
-                    p_guard[row_off + x] =
-                        iclip(px + (sum - (sum < 0) as i32 + 8 >> 4), min, max) as u16;
-                }
-            }
-        } else {
-            for y in 0..h {
-                let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
+                        for x in 0..w {
+                            let px = p[row_off + x] as i32;
+                            let mut sum = 0i32;
+                            let base = row_base + x as isize;
 
-                for x in 0..w {
-                    let px = p_guard[row_off + x] as i32;
-                    let mut sum = 0i32;
-                    let base = row_base + x as isize;
+                            let mut pri_tap_k = pri_tap;
+                            for k in 0..2 {
+                                let off = dav1d_cdef_directions[dir + 2][k] as isize;
+                                let p0 = tmp[(base + off) as usize] as i32;
+                                let p1 = tmp[(base - off) as usize] as i32;
 
-                    let mut pri_tap_k = pri_tap;
-                    for k in 0..2 {
-                        let off = dav1d_cdef_directions[dir + 2][k] as isize;
-                        let p0 = tmp[(base + off) as usize] as i32;
-                        let p1 = tmp[(base - off) as usize] as i32;
+                                sum +=
+                                    pri_tap_k * constrain_scalar(p0 - px, pri_strength, pri_shift);
+                                sum +=
+                                    pri_tap_k * constrain_scalar(p1 - px, pri_strength, pri_shift);
 
-                        sum += pri_tap_k * constrain_scalar(p0 - px, pri_strength, pri_shift);
-                        sum += pri_tap_k * constrain_scalar(p1 - px, pri_strength, pri_shift);
+                                pri_tap_k = pri_tap_k & 3 | 2;
+                            }
 
-                        pri_tap_k = pri_tap_k & 3 | 2;
+                            let result = px + (sum - (sum < 0) as i32 + 8 >> 4);
+                            p[row_off + x] = iclip(result, 0, bitdepth_max) as u16;
+                        }
                     }
+                }
+            } else {
+                let sec_shift = damping - sec_strength.ilog2() as c_int;
 
-                    let result = px + (sum - (sum < 0) as i32 + 8 >> 4);
-                    p_guard[row_off + x] = iclip(result, 0, bitdepth_max) as u16;
+                for y in 0..h {
+                    let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
+                    let row_off = (offset as isize + y as isize * stride) as usize / 2;
+
+                    for x in 0..w {
+                        let px = p[row_off + x] as i32;
+                        let mut sum = 0i32;
+                        let base = row_base + x as isize;
+
+                        for k in 0..2 {
+                            let off1 = dav1d_cdef_directions[dir + 4][k] as isize;
+                            let off2 = dav1d_cdef_directions[dir + 0][k] as isize;
+                            let s0 = tmp[(base + off1) as usize] as i32;
+                            let s1 = tmp[(base - off1) as usize] as i32;
+                            let s2 = tmp[(base + off2) as usize] as i32;
+                            let s3 = tmp[(base - off2) as usize] as i32;
+
+                            let sec_tap = 2 - k as i32;
+                            sum += sec_tap * constrain_scalar(s0 - px, sec_strength, sec_shift);
+                            sum += sec_tap * constrain_scalar(s1 - px, sec_strength, sec_shift);
+                            sum += sec_tap * constrain_scalar(s2 - px, sec_strength, sec_shift);
+                            sum += sec_tap * constrain_scalar(s3 - px, sec_strength, sec_shift);
+                        }
+
+                        let result = px + (sum - (sum < 0) as i32 + 8 >> 4);
+                        p[row_off + x] = iclip(result, 0, bitdepth_max) as u16;
+                    }
                 }
             }
-        }
-    } else {
-        let sec_shift = damping - sec_strength.ilog2() as c_int;
-
-        for y in 0..h {
-            let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-            let row_off = p_base.wrapping_add_signed(y as isize * stride);
-
-            for x in 0..w {
-                let px = p_guard[row_off + x] as i32;
-                let mut sum = 0i32;
-                let base = row_base + x as isize;
-
-                for k in 0..2 {
-                    let off1 = dav1d_cdef_directions[dir + 4][k] as isize;
-                    let off2 = dav1d_cdef_directions[dir + 0][k] as isize;
-                    let s0 = tmp[(base + off1) as usize] as i32;
-                    let s1 = tmp[(base - off1) as usize] as i32;
-                    let s2 = tmp[(base + off2) as usize] as i32;
-                    let s3 = tmp[(base - off2) as usize] as i32;
-
-                    let sec_tap = 2 - k as i32;
-                    sum += sec_tap * constrain_scalar(s0 - px, sec_strength, sec_shift);
-                    sum += sec_tap * constrain_scalar(s1 - px, sec_strength, sec_shift);
-                    sum += sec_tap * constrain_scalar(s2 - px, sec_strength, sec_shift);
-                    sum += sec_tap * constrain_scalar(s3 - px, sec_strength, sec_shift);
-                }
-
-                let result = px + (sum - (sum < 0) as i32 + 8 >> 4);
-                p_guard[row_off + x] = iclip(result, 0, bitdepth_max) as u16;
-            }
-        }
-    }
+        },
+    ); // with_pixel_guard_mut
 }
 
 /// CDEF filter for 16bpc 8x8 block

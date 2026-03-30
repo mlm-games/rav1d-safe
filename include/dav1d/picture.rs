@@ -1,6 +1,52 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Global flag: true when tile threading is active (n_tc > 1).
+/// When true, compact_read/compact_write_back use per-row guards to avoid
+/// stride-padding overlap. When false, they use a single fast guard.
+static TILE_THREADING: AtomicBool = AtomicBool::new(false);
+
+/// Set whether tile threading is active. Called from decoder initialization.
+pub fn set_tile_threading(active: bool) {
+    TILE_THREADING.store(active, Ordering::Relaxed);
+}
+
+/// Check if tile threading is active.
+pub fn tile_threading_active() -> bool {
+    TILE_THREADING.load(Ordering::Relaxed)
+}
+
 use crate::include::common::bitdepth::BitDepth;
+
+/// Execute a closure with mutable byte access to a w×h pixel block.
+///
+/// In single-threaded mode: zero-copy via `narrow_guard_mut`.
+/// In multi-threaded mode: copies to/from a compact buffer with per-row guards.
+///
+/// The closure receives `(bytes, offset, stride)` — a mutable byte slice,
+/// the byte offset to the first pixel, and the byte stride between rows.
+pub fn with_pixel_guard_mut<BD: BitDepth, R>(
+    pic: &crate::src::with_offset::WithOffset<&Rav1dPictureDataComponent>,
+    w: usize,
+    h: usize,
+    f: impl FnOnce(&mut [u8], usize, isize) -> R,
+) -> R {
+    use crate::src::strided::Strided as _;
+    let pixel_size = core::mem::size_of::<BD::Pixel>();
+    if tile_threading_active() {
+        let (mut buf, byte_stride) = pic.compact_read_per_row::<BD>(w, h);
+        let result = f(&mut buf, 0, byte_stride as isize);
+        pic.compact_write_back_per_row::<BD>(w, h, &buf);
+        result
+    } else {
+        let (mut guard, base) = pic.narrow_guard_mut::<BD>(w, h);
+        let bytes = guard.as_mut_bytes();
+        let offset = base * pixel_size;
+        let stride = pic.stride();
+        f(bytes, offset, stride)
+    }
+}
 #[cfg(feature = "c-ffi")]
 use crate::include::common::validate::validate_input;
 #[cfg(feature = "c-ffi")]
@@ -658,6 +704,128 @@ impl<'a> Rav1dPictureDataComponentOffset<'a> {
             let start = self.offset + 1 - total;
             let guard = self.data.slice::<BD, _>((start.., ..total));
             (guard, total - 1)
+        }
+    }
+
+    /// Read a w×h pixel block into a compact Vec using per-row DisjointMut guards.
+    ///
+    /// When tile threading is active ([`set_tile_threading`]), each row guard covers
+    /// exactly `w` pixels, avoiding stride-padding overlap between concurrent tiles.
+    /// When single-threaded, uses one guard for the whole block (fast path).
+    ///
+    /// Returns `(buffer, byte_stride)` where `byte_stride` is `w * pixel_size` when
+    /// threading (compact layout) or the original stride when single-threaded.
+    #[cfg_attr(debug_assertions, track_caller)]
+    pub fn compact_read<BD: BitDepth>(&self, w: usize, h: usize) -> (Vec<u8>, usize) {
+        if tile_threading_active() {
+            self.compact_read_per_row::<BD>(w, h)
+        } else {
+            self.compact_read_fast::<BD>(w, h)
+        }
+    }
+
+    /// Fast path: single guard for the whole block, returns original stride layout.
+    #[cfg_attr(debug_assertions, track_caller)]
+    fn compact_read_fast<BD: BitDepth>(&self, w: usize, h: usize) -> (Vec<u8>, usize) {
+        use crate::src::strided::Strided as _;
+        use zerocopy::IntoBytes;
+        let pixel_size = core::mem::size_of::<BD::Pixel>();
+        let pxstride = self.data.pixel_stride::<BD>();
+        let abs_stride = pxstride.unsigned_abs();
+        let total = if h == 0 || w == 0 {
+            0
+        } else {
+            (h - 1) * abs_stride + w
+        };
+        let start = if pxstride >= 0 {
+            self.offset
+        } else {
+            self.offset + 1 - total
+        };
+        let guard = self.data.slice::<BD, _>((start.., ..total));
+        let byte_stride = abs_stride * pixel_size;
+        (guard.as_bytes().to_vec(), byte_stride)
+    }
+
+    /// Per-row path: each row guard covers exactly `w` pixels.
+    /// Always returns compact stride = w * pixel_size.
+    /// Used by the loopfilter (needs compact layout for 2D decomposition)
+    /// and by tile threading (needs per-row guards to avoid stride overlap).
+    #[cfg_attr(debug_assertions, track_caller)]
+    pub fn compact_read_per_row<BD: BitDepth>(&self, w: usize, h: usize) -> (Vec<u8>, usize) {
+        use crate::src::strided::Strided as _;
+        use zerocopy::IntoBytes;
+        let pixel_size = core::mem::size_of::<BD::Pixel>();
+        let byte_stride = w * pixel_size;
+        let pxstride = self.data.pixel_stride::<BD>();
+        let abs_stride = pxstride.unsigned_abs();
+        let mut buf = vec![0u8; h * byte_stride];
+        for row in 0..h {
+            let row_off = if pxstride >= 0 {
+                self.offset + row * abs_stride
+            } else {
+                self.offset - row * abs_stride
+            };
+            let guard = self.data.slice::<BD, _>((row_off.., ..w));
+            buf[row * byte_stride..][..byte_stride]
+                .copy_from_slice(&guard.as_bytes()[..byte_stride]);
+        }
+        (buf, byte_stride)
+    }
+
+    /// Write a compact buffer back to a w×h pixel block.
+    ///
+    /// Matches the layout produced by [`compact_read`].
+    #[cfg_attr(debug_assertions, track_caller)]
+    pub fn compact_write_back<BD: BitDepth>(&self, w: usize, h: usize, buf: &[u8]) {
+        if tile_threading_active() {
+            self.compact_write_back_per_row::<BD>(w, h, buf);
+        } else {
+            self.compact_write_back_fast::<BD>(w, h, buf);
+        }
+    }
+
+    /// Fast path write-back: single guard, original stride layout.
+    #[cfg_attr(debug_assertions, track_caller)]
+    fn compact_write_back_fast<BD: BitDepth>(&self, w: usize, h: usize, buf: &[u8]) {
+        use crate::src::strided::Strided as _;
+        use zerocopy::IntoBytes;
+        let pxstride = self.data.pixel_stride::<BD>();
+        let abs_stride = pxstride.unsigned_abs();
+        let total = if h == 0 || w == 0 {
+            0
+        } else {
+            (h - 1) * abs_stride + w
+        };
+        let start = if pxstride >= 0 {
+            self.offset
+        } else {
+            self.offset + 1 - total
+        };
+        let mut guard = self.data.slice_mut::<BD, _>((start.., ..total));
+        let dst = guard.as_mut_bytes();
+        let len = buf.len().min(dst.len());
+        dst[..len].copy_from_slice(&buf[..len]);
+    }
+
+    /// Per-row write-back: compact stride = w * pixel_size.
+    #[cfg_attr(debug_assertions, track_caller)]
+    pub fn compact_write_back_per_row<BD: BitDepth>(&self, w: usize, h: usize, buf: &[u8]) {
+        use crate::src::strided::Strided as _;
+        use zerocopy::IntoBytes;
+        let pixel_size = core::mem::size_of::<BD::Pixel>();
+        let byte_stride = w * pixel_size;
+        let pxstride = self.data.pixel_stride::<BD>();
+        let abs_stride = pxstride.unsigned_abs();
+        for row in 0..h {
+            let row_off = if pxstride >= 0 {
+                self.offset + row * abs_stride
+            } else {
+                self.offset - row * abs_stride
+            };
+            let mut guard = self.data.slice_mut::<BD, _>((row_off.., ..w));
+            guard.as_mut_bytes()[..byte_stride]
+                .copy_from_slice(&buf[row * byte_stride..][..byte_stride]);
         }
     }
 

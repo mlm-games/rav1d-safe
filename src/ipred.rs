@@ -1604,26 +1604,32 @@ fn cfl_ac_rust<BD: BitDepth>(
     // Source spans (height-h_pad)<<ss_ver rows, (width-w_pad)<<ss_hor cols.
     let active_h = height - h_pad;
     let active_w = width - w_pad;
-    let src_rows = active_h << ss_ver as usize;
     let src_cols = active_w << ss_hor as usize;
-    let (src_guard, src_base) = y_src.strided_slice::<BD>(src_cols, src_rows);
     let row_stride = y_pxstride << ss_ver;
 
     for y in 0..active_h {
-        let row_off = y as isize * row_stride;
         let aci = y * width;
+        // Per-row reads to avoid stride-wide guard overlap with tile threads.
+        let row_pic = y_src + (y as isize * row_stride);
+        let row_guard = row_pic.slice::<BD>(src_cols);
+        let row_below_guard;
+        let row_below: Option<&[BD::Pixel]> = if is_ss_ver {
+            let below_pic = row_pic + y_pxstride;
+            row_below_guard = below_pic.slice::<BD>(src_cols);
+            Some(&*row_below_guard)
+        } else {
+            None
+        };
         for x in 0..active_w {
-            let sx = (x << ss_hor) as isize;
-            let base_idx = src_base.wrapping_add_signed(row_off + sx);
-            let mut ac_sum = src_guard[base_idx].as_::<i32>();
+            let sx = x << ss_hor;
+            let mut ac_sum = row_guard[sx].as_::<i32>();
             if is_ss_hor {
-                ac_sum += src_guard[base_idx + 1].as_::<i32>();
+                ac_sum += row_guard[sx + 1].as_::<i32>();
             }
-            if is_ss_ver {
-                let below = src_base.wrapping_add_signed(row_off + y_pxstride + sx);
-                ac_sum += src_guard[below].as_::<i32>();
+            if let Some(below) = row_below {
+                ac_sum += below[sx].as_::<i32>();
                 if is_ss_hor {
-                    ac_sum += src_guard[below + 1].as_::<i32>();
+                    ac_sum += below[sx + 1].as_::<i32>();
                 }
             }
             ac[aci + x] = (ac_sum << 1 + !is_ss_ver as u8 + !is_ss_hor as u8) as i16;

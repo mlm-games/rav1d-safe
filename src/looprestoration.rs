@@ -445,12 +445,13 @@ pub(crate) fn padding<BD: BitDepth>(
     let len = unit_w - have_left_3;
     if stripe_h > 0 {
         let p_inner = p + have_left_3;
-        let (src_guard, src_base) = p_inner.strided_slice::<BD>(len, stripe_h);
+        // Per-row reads to avoid stride-wide guard overlap with tile threads.
         for j in 0..stripe_h {
-            let src_off = src_base.wrapping_add_signed(j as isize * stride);
+            let row_pic = p_inner + (j as isize * stride);
+            let row_guard = row_pic.slice::<BD>(len);
             BD::pixel_copy(
                 &mut dst_tl[j * REST_UNIT_STRIDE + have_left_3..],
-                &src_guard[src_off..],
+                &row_guard,
                 len,
             );
         }
@@ -587,22 +588,30 @@ fn wiener_rust<BD: BitDepth>(
     let round_bits_v = 11 - (bitdepth == 12) as c_int * 2;
     let rounding_off_v = 1 << round_bits_v - 1;
     let round_offset = 1 << bitdepth + (round_bits_v - 1);
-    let stride = p.pixel_stride::<BD>();
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BD>(w, h);
-    for j in 0..h {
-        let row_off = p_base.wrapping_add_signed(j as isize * stride);
-        for i in 0..w {
-            let mut sum = -round_offset;
-            let z = &hor[j * REST_UNIT_STRIDE + i..(j + 7) * REST_UNIT_STRIDE];
+    let pixel_size = core::mem::size_of::<BD::Pixel>();
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(
+        &p,
+        w,
+        h,
+        |bytes, offset, stride| {
+            let pixels: &mut [BD::Pixel] =
+                FromBytes::mut_from_bytes(&mut bytes[..]).expect("bytes pixel reinterpretation");
+            for j in 0..h {
+                let row_off = (offset as isize + j as isize * stride) as usize / pixel_size;
+                for i in 0..w {
+                    let mut sum = -round_offset;
+                    let z = &hor[j * REST_UNIT_STRIDE + i..(j + 7) * REST_UNIT_STRIDE];
 
-            for k in 0..7 {
-                sum += z[k * REST_UNIT_STRIDE] as c_int * filter[1][k] as c_int;
+                    for k in 0..7 {
+                        sum += z[k * REST_UNIT_STRIDE] as c_int * filter[1][k] as c_int;
+                    }
+
+                    pixels[row_off + i] =
+                        iclip(sum + rounding_off_v >> round_bits_v, 0, bd.into_c()).as_();
+                }
             }
-
-            p_guard[row_off + i] =
-                iclip(sum + rounding_off_v >> round_bits_v, 0, bd.into_c()).as_();
-        }
-    }
+        },
+    ); // with_pixel_guard_mut
 }
 
 /// Sum over a 3x3 area
@@ -977,16 +986,24 @@ fn sgr_5x5_rust<BD: BitDepth>(
     selfguided_filter(&mut dst, &mut tmp, w, h, 25, sgr.s0, bd);
 
     let w0 = sgr.w0 as c_int;
-    let stride = p.pixel_stride::<BD>();
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BD>(w, h);
-    for j in 0..h {
-        let row_off = p_base.wrapping_add_signed(j as isize * stride);
-        for i in 0..w {
-            let v = w0 * dst[j * 384 + i].as_::<c_int>();
-            p_guard[row_off + i] =
-                bd.iclip_pixel(p_guard[row_off + i].as_::<c_int>() + (v + (1 << 10) >> 11));
-        }
-    }
+    let pixel_size = core::mem::size_of::<BD::Pixel>();
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(
+        &p,
+        w,
+        h,
+        |bytes, offset, stride| {
+            let pixels: &mut [BD::Pixel] =
+                FromBytes::mut_from_bytes(&mut bytes[..]).expect("bytes pixel reinterpretation");
+            for j in 0..h {
+                let row_off = (offset as isize + j as isize * stride) as usize / pixel_size;
+                for i in 0..w {
+                    let v = w0 * dst[j * 384 + i].as_::<c_int>();
+                    pixels[row_off + i] =
+                        bd.iclip_pixel(pixels[row_off + i].as_::<c_int>() + (v + (1 << 10) >> 11));
+                }
+            }
+        },
+    ); // with_pixel_guard_mut
 }
 
 /// # Safety
@@ -1041,16 +1058,24 @@ fn sgr_3x3_rust<BD: BitDepth>(
     selfguided_filter(&mut dst, &mut tmp, w, h, 9, sgr.s1, bd);
 
     let w1 = sgr.w1 as c_int;
-    let stride = p.pixel_stride::<BD>();
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BD>(w, h);
-    for j in 0..h {
-        let row_off = p_base.wrapping_add_signed(j as isize * stride);
-        for i in 0..w {
-            let v = w1 * dst[j * 384 + i].as_::<c_int>();
-            p_guard[row_off + i] =
-                bd.iclip_pixel(p_guard[row_off + i].as_::<c_int>() + (v + (1 << 10) >> 11));
-        }
-    }
+    let pixel_size = core::mem::size_of::<BD::Pixel>();
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(
+        &p,
+        w,
+        h,
+        |bytes, offset, stride| {
+            let pixels: &mut [BD::Pixel] =
+                FromBytes::mut_from_bytes(&mut bytes[..]).expect("bytes pixel reinterpretation");
+            for j in 0..h {
+                let row_off = (offset as isize + j as isize * stride) as usize / pixel_size;
+                for i in 0..w {
+                    let v = w1 * dst[j * 384 + i].as_::<c_int>();
+                    pixels[row_off + i] =
+                        bd.iclip_pixel(pixels[row_off + i].as_::<c_int>() + (v + (1 << 10) >> 11));
+                }
+            }
+        },
+    ); // with_pixel_guard_mut
 }
 
 /// # Safety
@@ -1108,16 +1133,25 @@ fn sgr_mix_rust<BD: BitDepth>(
 
     let w0 = sgr.w0 as c_int;
     let w1 = sgr.w1 as c_int;
-    let stride = p.pixel_stride::<BD>();
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BD>(w, h);
-    for j in 0..h {
-        let row_off = p_base.wrapping_add_signed(j as isize * stride);
-        for i in 0..w {
-            let v = w0 * dst0[j * 384 + i].as_::<c_int>() + w1 * dst1[j * 384 + i].as_::<c_int>();
-            p_guard[row_off + i] =
-                bd.iclip_pixel(p_guard[row_off + i].as_::<c_int>() + (v + (1 << 10) >> 11));
-        }
-    }
+    let pixel_size = core::mem::size_of::<BD::Pixel>();
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(
+        &p,
+        w,
+        h,
+        |bytes, offset, stride| {
+            let pixels: &mut [BD::Pixel] =
+                FromBytes::mut_from_bytes(&mut bytes[..]).expect("bytes pixel reinterpretation");
+            for j in 0..h {
+                let row_off = (offset as isize + j as isize * stride) as usize / pixel_size;
+                for i in 0..w {
+                    let v = w0 * dst0[j * 384 + i].as_::<c_int>()
+                        + w1 * dst1[j * 384 + i].as_::<c_int>();
+                    pixels[row_off + i] =
+                        bd.iclip_pixel(pixels[row_off + i].as_::<c_int>() + (v + (1 << 10) >> 11));
+                }
+            }
+        },
+    ); // with_pixel_guard_mut
 }
 
 #[deny(unsafe_op_in_unsafe_fn)]

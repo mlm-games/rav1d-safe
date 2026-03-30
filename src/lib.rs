@@ -110,30 +110,16 @@ fn get_num_threads(s: &Rav1dSettings) -> NumThreads {
     } else {
         rav1d_num_logical_processors().get().clamp(1, 256)
     };
+    #[allow(unused_variables)]
     let n_fc = if s.max_frame_delay != 0 {
         cmp::min(s.max_frame_delay as usize, n_tc)
     } else {
         cmp::min((n_tc as f64).sqrt().ceil() as usize, 8)
     };
-    // Without `unchecked`, DisjointMut runtime overlap checking is active.
-    // Multithreaded decode triggers overlaps on picture plane stride gaps
-    // (narrow guards cover (h-1)*stride+w bytes which include padding between
-    // rows) and on the loopfilter level cache. Clamp to single-threaded.
-    //
-    // Scalar-only threading would work (per-row guards avoid stride gaps)
-    // but requires per-decoder CPU level control (currently global).
+    // Tile threading (n_fc=1) works under forbid(unsafe_code).
+    // Frame threading (n_fc>1) still requires unchecked.
     #[cfg(not(feature = "unchecked"))]
-    let n_tc = if n_tc > 1 {
-        #[cfg(debug_assertions)]
-        eprintln!(
-            "rav1d: threads={} requested but `unchecked` feature not enabled; \
-             falling back to single-threaded. Enable `unchecked` for multithreading.",
-            n_tc
-        );
-        1
-    } else {
-        n_tc
-    };
+    let n_fc = 1;
     NumThreads { n_fc, n_tc }
 }
 
@@ -181,6 +167,9 @@ pub(crate) fn rav1d_open(
     }
 
     let NumThreads { n_tc, n_fc } = get_num_threads(s);
+
+    // Tell compact buffer guards whether to use per-row (threading) or single (fast) path.
+    crate::include::dav1d::picture::set_tile_threading(n_tc > 1);
 
     let ttd = TaskThreadData {
         cur: (n_fc as u32).into(),

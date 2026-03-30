@@ -11356,13 +11356,15 @@ pub fn avg_dispatch<BD: BitDepth>(
     let Some(_token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
-    use zerocopy::IntoBytes;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
-    avg_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, bd)
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(
+        &dst,
+        w as usize,
+        h as usize,
+        |dst_bytes, dst_offset, dst_stride| {
+            avg_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, bd);
+        },
+    );
+    true
 }
 
 /// Inner avg dispatch — operates on pre-acquired byte slice.
@@ -11450,15 +11452,17 @@ pub fn w_avg_dispatch<BD: BitDepth>(
     let Some(_token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
-    use zerocopy::IntoBytes;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
-    w_avg_dispatch_inner::<BD>(
-        dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, weight, bd,
-    )
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(
+        &dst,
+        w as usize,
+        h as usize,
+        |dst_bytes, dst_offset, dst_stride| {
+            w_avg_dispatch_inner::<BD>(
+                dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, weight, bd,
+            );
+        },
+    );
+    true
 }
 
 /// Inner w_avg dispatch — operates on pre-acquired byte slice.
@@ -11550,15 +11554,17 @@ pub fn mask_dispatch<BD: BitDepth>(
     let Some(_token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
-    use zerocopy::IntoBytes;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
-    mask_dispatch_inner::<BD>(
-        dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, mask, bd,
-    )
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(
+        &dst,
+        w as usize,
+        h as usize,
+        |dst_bytes, dst_offset, dst_stride| {
+            mask_dispatch_inner::<BD>(
+                dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, mask, bd,
+            );
+        },
+    );
+    true
 }
 
 /// Inner mask dispatch — operates on pre-acquired byte slice.
@@ -11650,13 +11656,16 @@ pub fn blend_dispatch<BD: BitDepth>(
         return false;
     };
     use zerocopy::IntoBytes;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
     let tmp_bytes = tmp.as_bytes();
-    blend_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp_bytes, w, h, mask)
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(
+        &dst,
+        w as usize,
+        h as usize,
+        |dst_bytes, dst_offset, dst_stride| {
+            blend_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp_bytes, w, h, mask);
+        },
+    );
+    true
 }
 
 /// Inner blend dispatch — operates on pre-acquired byte slice.
@@ -11710,13 +11719,18 @@ pub fn blend_dir_dispatch<BD: BitDepth>(
         return false;
     };
     use zerocopy::IntoBytes;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
     let tmp_bytes = tmp.as_bytes();
-    blend_dir_dispatch_inner::<BD>(is_h, dst_bytes, dst_offset, dst_stride, tmp_bytes, w, h)
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(
+        &dst,
+        w as usize,
+        h as usize,
+        |dst_bytes, dst_offset, dst_stride| {
+            blend_dir_dispatch_inner::<BD>(
+                is_h, dst_bytes, dst_offset, dst_stride, tmp_bytes, w, h,
+            );
+        },
+    );
+    true
 }
 
 /// Inner blend_dir dispatch — operates on pre-acquired byte slice.
@@ -11787,15 +11801,17 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
     let Some(_token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
-    use zerocopy::IntoBytes;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
-    w_mask_dispatch_inner::<BD>(
-        layout, dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, mask, sign, bd,
-    )
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(
+        &dst,
+        w as usize,
+        h as usize,
+        |dst_bytes, dst_offset, dst_stride| {
+            w_mask_dispatch_inner::<BD>(
+                layout, dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, mask, sign, bd,
+            );
+        },
+    );
+    true
 }
 
 /// Inner w_mask dispatch — operates on pre-acquired byte slice.
@@ -12095,15 +12111,17 @@ pub fn mc_put_dispatch<BD: BitDepth>(
         return false;
     }
 
-    use zerocopy::IntoBytes;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
-    mc_put_dispatch_inner::<BD>(
-        filter, dst_bytes, dst_offset, dst_stride, src, w, h, mx, my, bd,
-    )
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(
+        &dst,
+        w as usize,
+        h as usize,
+        |dst_bytes, dst_offset, dst_stride| {
+            mc_put_dispatch_inner::<BD>(
+                filter, dst_bytes, dst_offset, dst_stride, src, w, h, mx, my, bd,
+            );
+        },
+    );
+    true
 }
 
 /// Inner mc_put dispatch — operates on pre-acquired dst byte slice.
@@ -12815,45 +12833,47 @@ pub fn warp8x8_dispatch<BD: BitDepth>(
         return false;
     }
 
-    let dst_stride = dst.stride();
     let src_stride = src.stride();
     let pixel_size = std::mem::size_of::<BD::Pixel>();
 
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(8, 8);
-    let dst_bytes = &mut dst_guard.as_mut_bytes()[dst_base * pixel_size..];
     let (src_guard, src_base) = src.full_guard::<BD>();
     let src_bytes = src_guard.as_bytes();
 
-    match BD::BPC {
-        BPC::BPC8 => {
-            warp_affine_8x8_8bpc_avx2(
-                token,
-                dst_bytes,
-                dst_stride,
-                src_bytes,
-                src_base * pixel_size,
-                src_stride,
-                abcd,
-                mx,
-                my,
-            );
-        }
-        BPC::BPC16 => {
-            warp_affine_8x8_16bpc_avx2(
-                token,
-                dst_bytes,
-                dst_stride,
-                src_bytes,
-                src_base * pixel_size,
-                src_stride,
-                abcd,
-                mx,
-                my,
-                bd.get_intermediate_bits(),
-                bd.bitdepth_max().as_::<i32>(),
-            );
-        }
-    }
+    crate::include::dav1d::picture::with_pixel_guard_mut::<BD, _>(
+        &dst,
+        8,
+        8,
+        |dst_bytes, dst_offset, dst_stride| match BD::BPC {
+            BPC::BPC8 => {
+                warp_affine_8x8_8bpc_avx2(
+                    token,
+                    &mut dst_bytes[dst_offset..],
+                    dst_stride,
+                    src_bytes,
+                    src_base * pixel_size,
+                    src_stride,
+                    abcd,
+                    mx,
+                    my,
+                );
+            }
+            BPC::BPC16 => {
+                warp_affine_8x8_16bpc_avx2(
+                    token,
+                    &mut dst_bytes[dst_offset..],
+                    dst_stride,
+                    src_bytes,
+                    src_base * pixel_size,
+                    src_stride,
+                    abcd,
+                    mx,
+                    my,
+                    bd.get_intermediate_bits(),
+                    bd.bitdepth_max().as_::<i32>(),
+                );
+            }
+        },
+    );
     true
 }
 

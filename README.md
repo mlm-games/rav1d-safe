@@ -87,15 +87,15 @@ let decoder = Decoder::with_settings(Settings {
 })?;
 ```
 
-With `threads >= 2` or `threads == 0`, the decoder uses frame threading. `decode()` may return `None` for complete frames because processing is asynchronous — call it repeatedly or use `flush()` to drain.
+With `threads >= 2` or `threads == 0`, the decoder uses tile threading to parallelize decode within each frame. `decode()` may return `None` for complete frames because processing is asynchronous — call it repeatedly or use `flush()` to drain.
 
-**Multithreading requires the `unchecked` feature:**
+**Tile threading works under `forbid(unsafe_code)` without the `unchecked` feature.** No special feature flags needed:
 
 ```toml
-rav1d-safe = { version = "0.4", features = ["bitdepth_8", "bitdepth_16", "unchecked"] }
+rav1d-safe = { version = "0.5", features = ["bitdepth_8", "bitdepth_16"] }
 ```
 
-Without `unchecked`, the decoder silently falls back to single-threaded mode. With 2 threads, expect ~2x speedup on photo decode (4K: 255ms → 128ms).
+With 2 threads, expect ~2x speedup on photo decode. Frame threading (`max_frame_delay > 1`) still requires the `unchecked` feature.
 
 ### HDR Metadata
 

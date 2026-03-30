@@ -45,16 +45,22 @@ fn backup2lines<BD: BitDepth>(
     src: [PicOffset; 3],
     layout: Rav1dPixelLayout,
 ) {
+    // Copy 2 rows per-row to avoid stride-wide guards overlapping with
+    // concurrent tile threads' mutable guards.
     let y_stride = src[0].pixel_stride::<BD>();
-    let y_len = 2 * y_stride.unsigned_abs();
+    let abs_stride = y_stride.unsigned_abs();
     let y_strides = if y_stride < 0 { 1 } else { 0 };
     let y_src = src[0] + (6 + y_strides) * y_stride;
     let y_dst_offset = dst_off[0].wrapping_add_signed(y_strides * y_stride);
-    BD::pixel_copy(
-        &mut dst_buf.mut_slice_as((y_dst_offset.., ..y_len)),
-        &y_src.slice::<BD>(y_len),
-        y_len,
-    );
+    for row in 0..2 {
+        let src_row = y_src + (row as isize * y_stride);
+        let dst_row_off = y_dst_offset.wrapping_add_signed(row as isize * y_stride);
+        BD::pixel_copy(
+            &mut dst_buf.mut_slice_as((dst_row_off.., ..abs_stride)),
+            &src_row.slice::<BD>(abs_stride),
+            abs_stride,
+        );
+    }
 
     if layout == Rav1dPixelLayout::I400 {
         return;
@@ -62,7 +68,7 @@ fn backup2lines<BD: BitDepth>(
 
     for pl in 1..3 {
         let uv_stride = src[pl].pixel_stride::<BD>();
-        let uv_len = 2 * uv_stride.unsigned_abs();
+        let uv_abs_stride = uv_stride.unsigned_abs();
         let uv_strides = if uv_stride < 0 { 1 } else { 0 };
         let uv_src_strides = match layout {
             Rav1dPixelLayout::I420 => 2,
@@ -70,11 +76,15 @@ fn backup2lines<BD: BitDepth>(
         };
         let uv_src = src[pl] + (uv_src_strides + uv_strides) * uv_stride;
         let uv_dst_offset = dst_off[pl].wrapping_add_signed(uv_strides * uv_stride);
-        BD::pixel_copy(
-            &mut dst_buf.mut_slice_as((uv_dst_offset.., ..uv_len)),
-            &uv_src.slice::<BD>(uv_len),
-            uv_len,
-        );
+        for row in 0..2 {
+            let src_row = uv_src + (row as isize * uv_stride);
+            let dst_row_off = uv_dst_offset.wrapping_add_signed(row as isize * uv_stride);
+            BD::pixel_copy(
+                &mut dst_buf.mut_slice_as((dst_row_off.., ..uv_abs_stride)),
+                &src_row.slice::<BD>(uv_abs_stride),
+                uv_abs_stride,
+            );
+        }
     }
 }
 
