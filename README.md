@@ -9,7 +9,7 @@ A safe Rust AV1 decoder. Forked from [rav1d](https://github.com/memorysafety/rav
 Add to your `Cargo.toml`:
 ```toml
 [dependencies]
-rav1d-safe = "0.3"
+rav1d-safe = "0.5"
 ```
 
 Decode an AV1 bitstream:
@@ -164,16 +164,16 @@ msac uses branchless scalar for adapt4/adapt8 and a serial loop with early exit 
 
 ## Performance
 
-All benchmarks: x86_64 (Zen 4, AVX2), single-threaded, Rust 1.93, fat LTO. Run with `just profile` (500 iterations for IVF, 20 iterations for AVIF).
+All benchmarks: x86_64 (Zen 4, AVX2), single-threaded, Rust 1.93+, fat LTO. Run with `just profile` (500 iterations for IVF, 20 iterations for AVIF).
 
 ### Real photographs (AVIF decode, single image)
 
 Single still images at web-typical quality (YUV420, q60). Source: Google-native 8K photo, downscaled with ImageMagick. These numbers reflect real-world AVIF decode performance where SIMD kernels dominate.
 
-| Resolution | ASM | Partial ASM | Safe (checked) | Safe (unchecked) | Safe vs ASM |
-|------------|-----|-------------|----------------|------------------|-------------|
-| 4K (3840x2561) | 114 ms | 175 ms | 225 ms | 229 ms | 2.0x |
-| 8K (8192x5464) | 512 ms | 725 ms | 999 ms | 976 ms | 1.9-2.0x |
+| Resolution | ASM | Safe (checked) | Safe (unchecked) | Safe vs ASM |
+|------------|-----|----------------|------------------|-------------|
+| 4K (3840x2561) | 122 ms | 246 ms | 234 ms | 2.0x |
+| 8K (8192x5464) | 724 ms | 1319 ms | 1289 ms | 1.8x |
 
 ### Small test vectors (IVF, multi-frame decode)
 
@@ -181,10 +181,9 @@ dav1d-test-data allintra 352x288 (39 frames). Entropy-heavy bitstream where the 
 
 | Build | ms/iter | ms/frame | vs ASM |
 |-------|---------|----------|--------|
-| ASM | 92.6 | 2.37 | 1.0x |
-| Partial ASM | 131.3 | 3.37 | 1.42x |
-| Safe (checked) | 155.6 | 3.99 | 1.68x |
-| Safe (unchecked) | 151.8 | 3.89 | 1.64x |
+| ASM | 107.3 | 2.75 | 1.0x |
+| Safe (checked) | 173.1 | 4.44 | 1.61x |
+| Safe (unchecked) | 164.1 | 4.21 | 1.53x |
 
 ### Where the gap comes from
 
@@ -193,7 +192,7 @@ The safe build is ~2x slower on real images and ~1.7x on entropy-heavy vectors. 
 - **Entropy decoder (msac)**: ~35% of decode time. Serial dependency chain — the core symbol decode loop can't be parallelized. The `partial_asm` feature uses hand-tuned ASM for msac and loopfilter, bringing real photo decodes down to 1.4-1.5x vs full ASM.
 - **Calling conventions**: The ASM kernels use custom register allocation across function boundaries. Rust's ABI reloads registers at each call site.
 - **Scaled MC**: Falls back to scalar Rust (~2% of inter-frame content). The ASM version uses per-pixel variable-step register scheduling that doesn't map cleanly to safe intrinsics.
-- **Bounds checking**: The `unchecked` feature removes runtime bounds checks and DisjointMut borrow tracking. This saves ~2-3% on real photos, confirming the tracking overhead is modest.
+- **Bounds checking**: The `unchecked` feature skips DisjointMut borrow tracking. This saves ~5% on photos, confirming the tracking overhead is modest.
 
 ### Reproduce locally
 
@@ -240,12 +239,12 @@ cargo test --release
 |---------|---------|-------------|
 | `bitdepth_8` | on | 8-bit pixel support |
 | `bitdepth_16` | on | 10/12-bit pixel support |
-| `unchecked` | off | Skip bounds checks in SIMD hot paths; enables SSE2 msac on x86_64 |
+| `unchecked` | off | Skip DisjointMut borrow tracking; enables frame threading and SSE2 msac on x86_64 |
 | `partial_asm` | off | ASM for entropy decoding (msac) and loopfilter only; safe SIMD everything else. Implies `unchecked` |
 | `c-ffi` | off | C API entry points (`dav1d_*` symbols). Implies `unchecked` |
 | `asm` | off | Full hand-written assembly. Implies `c-ffi` |
 
-Safety chain: `default` (`forbid(unsafe_code)`) -> `unchecked` -> `c-ffi` -> `asm`. Each level relaxes the safety constraint.
+Safety chain: `default` (`forbid(unsafe_code)`, tile threading) -> `unchecked` (frame threading) -> `c-ffi` -> `asm`. Each level relaxes the safety constraint.
 
 ### Cross-Compilation
 

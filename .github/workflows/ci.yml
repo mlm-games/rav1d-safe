@@ -32,6 +32,11 @@ jobs:
             features: "bitdepth_8,bitdepth_16"
             label: safe-simd
 
+          # Native ARM (NEON) — tests safe SIMD on real hardware
+          - os: ubuntu-24.04-arm
+            features: "bitdepth_8,bitdepth_16"
+            label: safe-simd-arm64
+
           # ASM builds (original hand-written assembly, x86_64 only)
           - os: ubuntu-latest
             features: "asm,bitdepth_8,bitdepth_16"
@@ -173,6 +178,44 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Run unit permutation tests
         run: cargo test --no-default-features --features "bitdepth_8,bitdepth_16" --release --lib -- --test-threads=1 token_permutation
+
+  # ==========================================================================
+  # Conformance: MD5 parity across all CPU tiers and bit depths
+  # ==========================================================================
+  conformance:
+    name: Conformance (decode permutations)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Download test vectors
+        run: |
+          if [ ! -d test-vectors/dav1d-test-data ]; then
+            git clone --depth 1 https://code.videolan.org/videolan/dav1d-test-data.git test-vectors/dav1d-test-data
+          fi
+      - name: Run conformance (all vectors × all CPU tiers)
+        run: cargo test --no-default-features --features "bitdepth_8,bitdepth_16" --release --test decode_permutations -- --test-threads=1
+        timeout-minutes: 30
+
+  # ==========================================================================
+  # Threading: tile threading under forbid(unsafe_code)
+  # ==========================================================================
+  threading:
+    name: Tile Threading
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Download test vectors
+        run: |
+          if [ ! -d test-vectors/dav1d-test-data ]; then
+            git clone --depth 1 https://code.videolan.org/videolan/dav1d-test-data.git test-vectors/dav1d-test-data
+          fi
+      - name: Run threading tests (tile threading, checked mode)
+        run: cargo test --no-default-features --features "bitdepth_8,bitdepth_16" --release --test reproduce_overlap -- --ignored --test-threads=1
+        timeout-minutes: 10
 
   # ==========================================================================
   # Code coverage
