@@ -94,7 +94,7 @@ fn cdef_filter_block_simd_8bpc(
     tmp: &[u16],
     tmp_offset: usize,
     dst: PicOffset,
-    stride: isize,
+    _stride: isize,
     w: usize,
     h: usize,
     dir: usize,
@@ -107,8 +107,8 @@ fn cdef_filter_block_simd_8bpc(
 
     let zero = _mm_setzero_si128();
 
-    // Single guard for entire output region
-    let (mut p_guard, p_base) = dst.strided_slice_mut::<BitDepth8>(w, h);
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    let (mut compact, _) = dst.compact_read::<BitDepth8>(w, h);
 
     if pri_strength != 0 {
         let pri_tap = 4 - (pri_strength & 1);
@@ -190,13 +190,13 @@ fn cdef_filter_block_simd_8bpc(
                 let result = _mm_min_epi16(result, max_v);
                 let result_u8 = _mm_packus_epi16(result, zero);
 
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
+                let row_off = y * w;
                 if w == 8 {
                     let mut out = [0u8; 16];
                     storeu_128!(&mut out, result_u8);
-                    p_guard[row_off..row_off + 8].copy_from_slice(&out[0..8]);
+                    compact[row_off..row_off + 8].copy_from_slice(&out[0..8]);
                 } else {
-                    storei32!(&mut p_guard[row_off..row_off + 4], result_u8);
+                    storei32!(&mut compact[row_off..row_off + 4], result_u8);
                 }
             }
         } else {
@@ -229,13 +229,13 @@ fn cdef_filter_block_simd_8bpc(
                 let result = _mm_add_epi16(px, adjusted);
                 let result_u8 = _mm_packus_epi16(result, zero);
 
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
+                let row_off = y * w;
                 if w == 8 {
                     let mut out = [0u8; 16];
                     storeu_128!(&mut out, result_u8);
-                    p_guard[row_off..row_off + 8].copy_from_slice(&out[0..8]);
+                    compact[row_off..row_off + 8].copy_from_slice(&out[0..8]);
                 } else {
-                    storei32!(&mut p_guard[row_off..row_off + 4], result_u8);
+                    storei32!(&mut compact[row_off..row_off + 4], result_u8);
                 }
             }
         }
@@ -280,16 +280,18 @@ fn cdef_filter_block_simd_8bpc(
             let result = _mm_add_epi16(px, adjusted);
             let result_u8 = _mm_packus_epi16(result, zero);
 
-            let row_off = p_base.wrapping_add_signed(y as isize * stride);
+            let row_off = y * w;
             if w == 8 {
                 let mut out = [0u8; 16];
                 storeu_128!(&mut out, result_u8);
-                p_guard[row_off..row_off + 8].copy_from_slice(&out[0..8]);
+                compact[row_off..row_off + 8].copy_from_slice(&out[0..8]);
             } else {
-                storei32!(&mut p_guard[row_off..row_off + 4], result_u8);
+                storei32!(&mut compact[row_off..row_off + 4], result_u8);
             }
         }
     }
+
+    dst.compact_write_back::<BitDepth8>(w, h, &compact);
 }
 
 // ============================================================================
@@ -770,7 +772,7 @@ pub(super) fn cdef_filter_block_scalar_8bpc(
     tmp: &[u16],
     tmp_offset: usize,
     dst: PicOffset,
-    stride: isize,
+    _stride: isize,
     w: usize,
     h: usize,
     dir: usize,
@@ -780,10 +782,10 @@ pub(super) fn cdef_filter_block_scalar_8bpc(
 ) {
     use crate::include::common::bitdepth::BitDepth8;
 
-    // Single guard for entire output region
-    let (mut p_guard, p_base) = dst.strided_slice_mut::<BitDepth8>(w, h);
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    let (mut compact, _) = dst.compact_read::<BitDepth8>(w, h);
     let tmp = tmp.flex();
-    let mut p_guard = p_guard.flex_mut();
+    let mut p = compact.flex_mut();
 
     if pri_strength != 0 {
         let pri_tap = 4 - (pri_strength & 1);
@@ -794,10 +796,10 @@ pub(super) fn cdef_filter_block_scalar_8bpc(
 
             for y in 0..h {
                 let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
+                let row_off = y * w;
 
                 for x in 0..w {
-                    let px = p_guard[row_off + x] as i32;
+                    let px = p[row_off + x] as i32;
                     let mut sum = 0i32;
                     let mut max = px;
                     let mut min = px;
@@ -843,17 +845,17 @@ pub(super) fn cdef_filter_block_scalar_8bpc(
                         max = cmp::max(cmp::max(cmp::max(cmp::max(s0, s1), s2), s3), max);
                     }
 
-                    p_guard[row_off + x] =
+                    p[row_off + x] =
                         iclip(px + (sum - (sum < 0) as i32 + 8 >> 4), min, max) as u8;
                 }
             }
         } else {
             for y in 0..h {
                 let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
+                let row_off = y * w;
 
                 for x in 0..w {
-                    let px = p_guard[row_off + x] as i32;
+                    let px = p[row_off + x] as i32;
                     let mut sum = 0i32;
                     let base = row_base + x as isize;
 
@@ -869,7 +871,7 @@ pub(super) fn cdef_filter_block_scalar_8bpc(
                         pri_tap_k = pri_tap_k & 3 | 2;
                     }
 
-                    p_guard[row_off + x] = (px + (sum - (sum < 0) as i32 + 8 >> 4)) as u8;
+                    p[row_off + x] = (px + (sum - (sum < 0) as i32 + 8 >> 4)) as u8;
                 }
             }
         }
@@ -878,10 +880,10 @@ pub(super) fn cdef_filter_block_scalar_8bpc(
 
         for y in 0..h {
             let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-            let row_off = p_base.wrapping_add_signed(y as isize * stride);
+            let row_off = y * w;
 
             for x in 0..w {
-                let px = p_guard[row_off + x] as i32;
+                let px = p[row_off + x] as i32;
                 let mut sum = 0i32;
                 let base = row_base + x as isize;
 
@@ -900,10 +902,13 @@ pub(super) fn cdef_filter_block_scalar_8bpc(
                     sum += sec_tap * constrain_scalar(s3 - px, sec_strength, sec_shift);
                 }
 
-                p_guard[row_off + x] = (px + (sum - (sum < 0) as i32 + 8 >> 4)) as u8;
+                p[row_off + x] = (px + (sum - (sum < 0) as i32 + 8 >> 4)) as u8;
             }
         }
     }
+
+    drop(p);
+    dst.compact_write_back::<BitDepth8>(w, h, &compact);
 }
 
 /// Padding function for 8bpc - copies edge pixels into temporary buffer.
@@ -1438,7 +1443,7 @@ fn cdef_filter_block_simd_16bpc(
     tmp: &[u16],
     tmp_offset: usize,
     dst: PicOffset,
-    stride: isize,
+    _stride: isize,
     w: usize,
     h: usize,
     dir: usize,
@@ -1454,8 +1459,10 @@ fn cdef_filter_block_simd_16bpc(
     let bd_max = _mm_set1_epi16(bitdepth_max as i16);
     let bitdepth_min_8 = ((bitdepth_max + 1) as u32).ilog2() as c_int - 8;
 
-    // Single guard for entire output region
-    let (mut p_guard, p_base) = dst.strided_slice_mut::<BitDepth16>(w, h);
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    let (mut compact, _) = dst.compact_read::<BitDepth16>(w, h);
+    let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut compact[..])
+        .expect("compact alignment/size mismatch for u16 reinterpretation");
 
     if pri_strength != 0 {
         let pri_tap = 4 - (pri_strength >> bitdepth_min_8 & 1);
@@ -1537,8 +1544,8 @@ fn cdef_filter_block_simd_16bpc(
 
                 let mut out = [0u16; 8];
                 storeu_128!(&mut out, result);
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
-                p_guard[row_off..row_off + w].copy_from_slice(&out[..w]);
+                let row_off = y * w;
+                p_u16[row_off..row_off + w].copy_from_slice(&out[..w]);
             }
         } else {
             // Primary only
@@ -1574,8 +1581,8 @@ fn cdef_filter_block_simd_16bpc(
 
                 let mut out = [0u16; 8];
                 storeu_128!(&mut out, result);
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
-                p_guard[row_off..row_off + w].copy_from_slice(&out[..w]);
+                let row_off = y * w;
+                p_u16[row_off..row_off + w].copy_from_slice(&out[..w]);
             }
         }
     } else {
@@ -1623,10 +1630,12 @@ fn cdef_filter_block_simd_16bpc(
 
             let mut out = [0u16; 8];
             storeu_128!(&mut out, result);
-            let row_off = p_base.wrapping_add_signed(y as isize * stride);
-            p_guard[row_off..row_off + w].copy_from_slice(&out[..w]);
+            let row_off = y * w;
+            p_u16[row_off..row_off + w].copy_from_slice(&out[..w]);
         }
     }
+
+    dst.compact_write_back::<BitDepth16>(w, h, &compact);
 }
 
 /// Scalar CDEF filter fallback for 16bpc.
@@ -1634,7 +1643,7 @@ pub(super) fn cdef_filter_block_scalar_16bpc(
     tmp: &[u16],
     tmp_offset: usize,
     dst: PicOffset,
-    stride: isize,
+    _stride: isize,
     w: usize,
     h: usize,
     dir: usize,
@@ -1647,10 +1656,12 @@ pub(super) fn cdef_filter_block_scalar_16bpc(
 
     let bitdepth_min_8 = ((bitdepth_max + 1) as u32).ilog2() as c_int - 8;
 
-    // Single guard for entire output region
-    let (mut p_guard, p_base) = dst.strided_slice_mut::<BitDepth16>(w, h);
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    let (mut compact, _) = dst.compact_read::<BitDepth16>(w, h);
+    let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut compact[..])
+        .expect("compact alignment/size mismatch for u16 reinterpretation");
     let tmp = tmp.flex();
-    let mut p_guard = p_guard.flex_mut();
+    let mut p = p_u16.flex_mut();
 
     if pri_strength != 0 {
         let pri_tap = 4 - (pri_strength >> bitdepth_min_8 & 1);
@@ -1661,10 +1672,10 @@ pub(super) fn cdef_filter_block_scalar_16bpc(
 
             for y in 0..h {
                 let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
+                let row_off = y * w;
 
                 for x in 0..w {
-                    let px = p_guard[row_off + x] as i32;
+                    let px = p[row_off + x] as i32;
                     let mut sum = 0i32;
                     let mut max = px;
                     let mut min = px;
@@ -1710,17 +1721,17 @@ pub(super) fn cdef_filter_block_scalar_16bpc(
                         max = cmp::max(cmp::max(cmp::max(cmp::max(s0, s1), s2), s3), max);
                     }
 
-                    p_guard[row_off + x] =
+                    p[row_off + x] =
                         iclip(px + (sum - (sum < 0) as i32 + 8 >> 4), min, max) as u16;
                 }
             }
         } else {
             for y in 0..h {
                 let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-                let row_off = p_base.wrapping_add_signed(y as isize * stride);
+                let row_off = y * w;
 
                 for x in 0..w {
-                    let px = p_guard[row_off + x] as i32;
+                    let px = p[row_off + x] as i32;
                     let mut sum = 0i32;
                     let base = row_base + x as isize;
 
@@ -1737,7 +1748,7 @@ pub(super) fn cdef_filter_block_scalar_16bpc(
                     }
 
                     let result = px + (sum - (sum < 0) as i32 + 8 >> 4);
-                    p_guard[row_off + x] = iclip(result, 0, bitdepth_max) as u16;
+                    p[row_off + x] = iclip(result, 0, bitdepth_max) as u16;
                 }
             }
         }
@@ -1746,10 +1757,10 @@ pub(super) fn cdef_filter_block_scalar_16bpc(
 
         for y in 0..h {
             let row_base = (tmp_offset + y * TMP_STRIDE) as isize;
-            let row_off = p_base.wrapping_add_signed(y as isize * stride);
+            let row_off = y * w;
 
             for x in 0..w {
-                let px = p_guard[row_off + x] as i32;
+                let px = p[row_off + x] as i32;
                 let mut sum = 0i32;
                 let base = row_base + x as isize;
 
@@ -1769,10 +1780,13 @@ pub(super) fn cdef_filter_block_scalar_16bpc(
                 }
 
                 let result = px + (sum - (sum < 0) as i32 + 8 >> 4);
-                p_guard[row_off + x] = iclip(result, 0, bitdepth_max) as u16;
+                p[row_off + x] = iclip(result, 0, bitdepth_max) as u16;
             }
         }
     }
+
+    drop(p);
+    dst.compact_write_back::<BitDepth16>(w, h, &compact);
 }
 
 /// CDEF filter for 16bpc 8x8 block

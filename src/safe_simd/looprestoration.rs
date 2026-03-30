@@ -40,7 +40,6 @@ use crate::src::align::AlignedVec64;
 use crate::src::disjoint_mut::DisjointMut;
 use crate::src::ffi_safe::FFISafe;
 use crate::src::looprestoration::{LooprestorationParams, LrEdgeFlags, padding};
-use crate::src::strided::Strided as _;
 use crate::src::tables::dav1d_sgr_x_by_x;
 #[allow(non_camel_case_types)]
 type ptrdiff_t = isize;
@@ -161,8 +160,6 @@ fn wiener_filter7_8bpc_avx2_inner(
     let round_bits_v = 11i32;
     let rounding_off_v = 1i32 << (round_bits_v - 1);
     let round_offset = 1i32 << (8 + round_bits_v - 1); // = 1 << 18
-    let stride = p.pixel_stride::<BitDepth8>();
-
     // Load filter coefficients into AVX2 registers (broadcast to all lanes)
     let vf0 = _mm256_set1_epi32(filter[1][0] as i32);
     let vf1 = _mm256_set1_epi32(filter[1][1] as i32);
@@ -174,10 +171,10 @@ fn wiener_filter7_8bpc_avx2_inner(
     let v_round_offset = _mm256_set1_epi32(-round_offset);
     let v_rounding = _mm256_set1_epi32(rounding_off_v);
 
-    // Single guard for entire output region
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth8>(w, h);
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    let (mut compact, _) = p.compact_read::<BitDepth8>(w, h);
     for j in 0..h {
-        let row_off = p_base.wrapping_add_signed(j as isize * stride);
+        let row_off = j * w;
         let mut i = 0usize;
 
         // Process 8 pixels at a time with AVX2
@@ -233,7 +230,7 @@ fn wiener_filter7_8bpc_avx2_inner(
             let sum8 = _mm_packus_epi16(sum16_combined, sum16_combined); // u16 -> u8
 
             // Store 8 bytes via safe partial_simd
-            let dst_arr: &mut [u8; 8] = (&mut p_guard[row_off + i..row_off + i + 8])
+            let dst_arr: &mut [u8; 8] = (&mut compact[row_off + i..row_off + i + 8])
                 .try_into()
                 .unwrap();
             partial_simd::mm_storel_epi64(dst_arr, sum8);
@@ -246,10 +243,12 @@ fn wiener_filter7_8bpc_avx2_inner(
             for k in 0..7 {
                 sum += hor[(j + k) * REST_UNIT_STRIDE + i] as i32 * filter[1][k] as i32;
             }
-            p_guard[row_off + i] = iclip((sum + rounding_off_v) >> round_bits_v, 0, 255) as u8;
+            compact[row_off + i] = iclip((sum + rounding_off_v) >> round_bits_v, 0, 255) as u8;
             i += 1;
         }
     }
+
+    p.compact_write_back::<BitDepth8>(w, h, &compact);
 }
 
 /// Wiener filter 5-tap for 8bpc using AVX2
@@ -367,8 +366,6 @@ fn wiener_filter7_8bpc_avx512_inner(
     let round_bits_v = 11i32;
     let rounding_off_v = 1i32 << (round_bits_v - 1);
     let round_offset = 1i32 << (8 + round_bits_v - 1);
-    let stride = p.pixel_stride::<BitDepth8>();
-
     let vf0 = _mm512_set1_epi32(filter[1][0] as i32);
     let vf1 = _mm512_set1_epi32(filter[1][1] as i32);
     let vf2 = _mm512_set1_epi32(filter[1][2] as i32);
@@ -380,9 +377,10 @@ fn wiener_filter7_8bpc_avx512_inner(
     let v_rounding = _mm512_set1_epi32(rounding_off_v);
     let zero_512 = _mm512_setzero_si512();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth8>(w, h);
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    let (mut compact, _) = p.compact_read::<BitDepth8>(w, h);
     for j in 0..h {
-        let row_off = p_base.wrapping_add_signed(j as isize * stride);
+        let row_off = j * w;
         let mut i = 0usize;
 
         // Process 16 pixels at a time with AVX-512
@@ -435,7 +433,7 @@ fn wiener_filter7_8bpc_avx512_inner(
             let result_u8: __m128i = _mm512_cvtusepi32_epi8(clamped);
 
             storeu_128!(
-                &mut p_guard[row_off + i..row_off + i + 16],
+                &mut compact[row_off + i..row_off + i + 16],
                 [u8; 16],
                 result_u8
             );
@@ -506,7 +504,7 @@ fn wiener_filter7_8bpc_avx512_inner(
             let sum16_combined = _mm_unpacklo_epi64(sum16_lo, sum16_hi);
             let sum8 = _mm_packus_epi16(sum16_combined, sum16_combined);
 
-            let dst_arr: &mut [u8; 8] = (&mut p_guard[row_off + i..row_off + i + 8])
+            let dst_arr: &mut [u8; 8] = (&mut compact[row_off + i..row_off + i + 8])
                 .try_into()
                 .unwrap();
             partial_simd::mm_storel_epi64(dst_arr, sum8);
@@ -519,10 +517,12 @@ fn wiener_filter7_8bpc_avx512_inner(
             for k in 0..7 {
                 sum += hor[(j + k) * REST_UNIT_STRIDE + i] as i32 * filter[1][k] as i32;
             }
-            p_guard[row_off + i] = iclip((sum + rounding_off_v) >> round_bits_v, 0, 255) as u8;
+            compact[row_off + i] = iclip((sum + rounding_off_v) >> round_bits_v, 0, 255) as u8;
             i += 1;
         }
     }
+
+    p.compact_write_back::<BitDepth8>(w, h, &compact);
 }
 
 /// Wiener filter 5-tap for 8bpc using AVX-512 (delegates to 7-tap)
@@ -645,8 +645,6 @@ fn wiener_filter7_16bpc_avx512_inner(
     let round_bits_v = if bitdepth == 12 { 9 } else { 11 };
     let rounding_off_v = 1i32 << (round_bits_v - 1);
     let round_offset = 1i32 << (bitdepth + round_bits_v - 1);
-    let stride = p.pixel_stride::<BitDepth16>();
-
     let vf0 = _mm512_set1_epi32(filter[1][0] as i32);
     let vf1 = _mm512_set1_epi32(filter[1][1] as i32);
     let vf2 = _mm512_set1_epi32(filter[1][2] as i32);
@@ -659,9 +657,12 @@ fn wiener_filter7_16bpc_avx512_inner(
     let zero_512 = _mm512_setzero_si512();
     let max_512 = _mm512_set1_epi32(bitdepth_max);
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth16>(w, h);
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    let (mut compact, _) = p.compact_read::<BitDepth16>(w, h);
+    let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut compact[..])
+        .expect("compact alignment/size mismatch for u16 reinterpretation");
     for j in 0..h {
-        let row_off = p_base.wrapping_add_signed(j as isize * stride);
+        let row_off = j * w;
         let mut i = 0usize;
 
         // Process 16 pixels at a time with AVX-512
@@ -717,7 +718,7 @@ fn wiener_filter7_16bpc_avx512_inner(
             let result_u16: __m256i = _mm512_cvtusepi32_epi16(clamped);
 
             storeu_256!(
-                &mut p_guard[row_off + i..row_off + i + 16],
+                &mut p_u16[row_off + i..row_off + i + 16],
                 [u16; 16],
                 result_u16
             );
@@ -730,11 +731,13 @@ fn wiener_filter7_16bpc_avx512_inner(
             for k in 0..7 {
                 sum += hor[(j + k) * REST_UNIT_STRIDE + i] * filter[1][k] as i32;
             }
-            p_guard[row_off + i] =
+            p_u16[row_off + i] =
                 iclip((sum + rounding_off_v) >> round_bits_v, 0, bitdepth_max) as u16;
             i += 1;
         }
     }
+
+    p.compact_write_back::<BitDepth16>(w, h, &compact);
 }
 
 /// Wiener filter 5-tap for 16bpc using AVX-512 (delegates to 7-tap)
@@ -879,8 +882,6 @@ fn wiener_filter7_16bpc_avx2_inner(
     let round_bits_v = if bitdepth == 12 { 9 } else { 11 };
     let rounding_off_v = 1i32 << (round_bits_v - 1);
     let round_offset = 1i32 << (bitdepth + round_bits_v - 1);
-    let stride = p.pixel_stride::<BitDepth16>();
-
     let vf0 = _mm256_set1_epi32(filter[1][0] as i32);
     let vf1 = _mm256_set1_epi32(filter[1][1] as i32);
     let vf2 = _mm256_set1_epi32(filter[1][2] as i32);
@@ -893,9 +894,12 @@ fn wiener_filter7_16bpc_avx2_inner(
     let v_max = _mm256_set1_epi32(bitdepth_max);
     let v_zero = _mm256_setzero_si256();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth16>(w, h);
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    let (mut compact, _) = p.compact_read::<BitDepth16>(w, h);
+    let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut compact[..])
+        .expect("compact alignment/size mismatch for u16 reinterpretation");
     for j in 0..h {
-        let row_off = p_base.wrapping_add_signed(j as isize * stride);
+        let row_off = j * w;
         let mut i = 0usize;
 
         // Process 8 pixels at a time with AVX2
@@ -955,7 +959,7 @@ fn wiener_filter7_16bpc_avx2_inner(
             let combined = _mm_unpacklo_epi64(lo, hi); // [0-3, 4-7] as 8 u16
 
             storeu_128!(
-                &mut p_guard[row_off + i..row_off + i + 8],
+                &mut p_u16[row_off + i..row_off + i + 8],
                 [u16; 8],
                 combined
             );
@@ -968,11 +972,13 @@ fn wiener_filter7_16bpc_avx2_inner(
             for k in 0..7 {
                 sum += hor[(j + k) * REST_UNIT_STRIDE + i] * filter[1][k] as i32;
             }
-            p_guard[row_off + i] =
+            p_u16[row_off + i] =
                 iclip((sum + rounding_off_v) >> round_bits_v, 0, bitdepth_max) as u16;
             i += 1;
         }
     }
+
+    p.compact_write_back::<BitDepth16>(w, h, &compact);
 }
 
 /// Wiener filter 5-tap for 16bpc using AVX2 (delegates to 7-tap)
@@ -3459,23 +3465,24 @@ fn sgr_5x5_8bpc_avx2_inner(
     selfguided_filter_8bpc(&mut dst, &tmp, w, h, 25, sgr.s0);
 
     let w0 = sgr.w0 as i32;
-    let stride = p.pixel_stride::<BitDepth8>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth8>(w, h);
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    let (mut compact, _) = p.compact_read::<BitDepth8>(w, h);
     if let Some(token) = summon_avx2() {
-        sgr_apply_8bpc(token, &mut p_guard, p_base, stride, &dst, w, h, w0);
+        sgr_apply_8bpc(token, &mut compact, 0, w as isize, &dst, w, h, w0);
     } else {
         let dst = dst.as_slice().flex();
-        let mut p = p_guard.flex_mut();
+        let mut cp = compact.flex_mut();
         for j in 0..h {
-            let row_off = p_base.wrapping_add_signed(j as isize * stride);
+            let row_off = j * w;
             for i in 0..w {
                 let v = w0 * dst[j * MAX_RESTORATION_WIDTH + i] as i32;
-                p[row_off + i] =
-                    iclip(p[row_off + i] as i32 + ((v + (1 << 10)) >> 11), 0, 255) as u8;
+                cp[row_off + i] =
+                    iclip(cp[row_off + i] as i32 + ((v + (1 << 10)) >> 11), 0, 255) as u8;
             }
         }
     }
+    p.compact_write_back::<BitDepth8>(w, h, &compact);
 }
 
 /// SGR 3x3 filter for 8bpc using AVX2
@@ -3508,23 +3515,24 @@ fn sgr_3x3_8bpc_avx2_inner(
     selfguided_filter_8bpc(&mut dst, &tmp, w, h, 9, sgr.s1);
 
     let w1 = sgr.w1 as i32;
-    let stride = p.pixel_stride::<BitDepth8>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth8>(w, h);
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    let (mut compact, _) = p.compact_read::<BitDepth8>(w, h);
     if let Some(token) = summon_avx2() {
-        sgr_apply_8bpc(token, &mut p_guard, p_base, stride, &dst, w, h, w1);
+        sgr_apply_8bpc(token, &mut compact, 0, w as isize, &dst, w, h, w1);
     } else {
         let dst = dst.as_slice().flex();
-        let mut p = p_guard.flex_mut();
+        let mut cp = compact.flex_mut();
         for j in 0..h {
-            let row_off = p_base.wrapping_add_signed(j as isize * stride);
+            let row_off = j * w;
             for i in 0..w {
                 let v = w1 * dst[j * MAX_RESTORATION_WIDTH + i] as i32;
-                p[row_off + i] =
-                    iclip(p[row_off + i] as i32 + ((v + (1 << 10)) >> 11), 0, 255) as u8;
+                cp[row_off + i] =
+                    iclip(cp[row_off + i] as i32 + ((v + (1 << 10)) >> 11), 0, 255) as u8;
             }
         }
     }
+    p.compact_write_back::<BitDepth8>(w, h, &compact);
 }
 
 /// SGR mix filter for 8bpc using AVX2 (combines 5x5 and 3x3)
@@ -3565,15 +3573,15 @@ fn sgr_mix_8bpc_avx2_inner(
 
     let w0 = sgr.w0 as i32;
     let w1 = sgr.w1 as i32;
-    let stride = p.pixel_stride::<BitDepth8>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth8>(w, h);
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    let (mut compact, _) = p.compact_read::<BitDepth8>(w, h);
     if let Some(token) = summon_avx2() {
         sgr_apply_mix_8bpc(
             token,
-            &mut p_guard,
-            p_base,
-            stride,
+            &mut compact,
+            0,
+            w as isize,
             &dst0,
             &dst1,
             w,
@@ -3584,17 +3592,18 @@ fn sgr_mix_8bpc_avx2_inner(
     } else {
         let d0 = dst0.as_slice().flex();
         let d1 = dst1.as_slice().flex();
-        let mut p = p_guard.flex_mut();
+        let mut cp = compact.flex_mut();
         for j in 0..h {
-            let row_off = p_base.wrapping_add_signed(j as isize * stride);
+            let row_off = j * w;
             for i in 0..w {
                 let v = w0 * d0[j * MAX_RESTORATION_WIDTH + i] as i32
                     + w1 * d1[j * MAX_RESTORATION_WIDTH + i] as i32;
-                p[row_off + i] =
-                    iclip(p[row_off + i] as i32 + ((v + (1 << 10)) >> 11), 0, 255) as u8;
+                cp[row_off + i] =
+                    iclip(cp[row_off + i] as i32 + ((v + (1 << 10)) >> 11), 0, 255) as u8;
             }
         }
     }
+    p.compact_write_back::<BitDepth8>(w, h, &compact);
 }
 
 // ============================================================================
@@ -5445,15 +5454,17 @@ fn sgr_5x5_16bpc_avx2_inner(
     selfguided_filter_16bpc(&mut dst, &tmp, w, h, 25, sgr.s0, bitdepth_max);
 
     let w0 = sgr.w0 as i32;
-    let stride = p.pixel_stride::<BitDepth16>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth16>(w, h);
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    let (mut compact, _) = p.compact_read::<BitDepth16>(w, h);
+    let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut compact[..])
+        .expect("compact alignment/size mismatch for u16 reinterpretation");
     if let Some(token) = summon_avx2() {
         sgr_apply_16bpc(
             token,
-            &mut p_guard,
-            p_base,
-            stride,
+            p_u16,
+            0,
+            w as isize,
             &dst,
             w,
             h,
@@ -5462,19 +5473,20 @@ fn sgr_5x5_16bpc_avx2_inner(
         );
     } else {
         let dst = dst.as_slice().flex();
-        let mut p = p_guard.flex_mut();
+        let mut cp = p_u16.flex_mut();
         for j in 0..h {
-            let row_off = p_base.wrapping_add_signed(j as isize * stride);
+            let row_off = j * w;
             for i in 0..w {
                 let v = w0 * dst[j * MAX_RESTORATION_WIDTH + i];
-                p[row_off + i] = iclip(
-                    p[row_off + i] as i32 + ((v + (1 << 10)) >> 11),
+                cp[row_off + i] = iclip(
+                    cp[row_off + i] as i32 + ((v + (1 << 10)) >> 11),
                     0,
                     bitdepth_max,
                 ) as u16;
             }
         }
     }
+    p.compact_write_back::<BitDepth16>(w, h, &compact);
 }
 
 /// SGR 3x3 filter for 16bpc using AVX2
@@ -5508,15 +5520,17 @@ fn sgr_3x3_16bpc_avx2_inner(
     selfguided_filter_16bpc(&mut dst, &tmp, w, h, 9, sgr.s1, bitdepth_max);
 
     let w1 = sgr.w1 as i32;
-    let stride = p.pixel_stride::<BitDepth16>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth16>(w, h);
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    let (mut compact, _) = p.compact_read::<BitDepth16>(w, h);
+    let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut compact[..])
+        .expect("compact alignment/size mismatch for u16 reinterpretation");
     if let Some(token) = summon_avx2() {
         sgr_apply_16bpc(
             token,
-            &mut p_guard,
-            p_base,
-            stride,
+            p_u16,
+            0,
+            w as isize,
             &dst,
             w,
             h,
@@ -5525,19 +5539,20 @@ fn sgr_3x3_16bpc_avx2_inner(
         );
     } else {
         let dst = dst.as_slice().flex();
-        let mut p = p_guard.flex_mut();
+        let mut cp = p_u16.flex_mut();
         for j in 0..h {
-            let row_off = p_base.wrapping_add_signed(j as isize * stride);
+            let row_off = j * w;
             for i in 0..w {
                 let v = w1 * dst[j * MAX_RESTORATION_WIDTH + i];
-                p[row_off + i] = iclip(
-                    p[row_off + i] as i32 + ((v + (1 << 10)) >> 11),
+                cp[row_off + i] = iclip(
+                    cp[row_off + i] as i32 + ((v + (1 << 10)) >> 11),
                     0,
                     bitdepth_max,
                 ) as u16;
             }
         }
     }
+    p.compact_write_back::<BitDepth16>(w, h, &compact);
 }
 
 /// SGR mix filter for 16bpc using AVX2 (combines 5x5 and 3x3)
@@ -5579,15 +5594,17 @@ fn sgr_mix_16bpc_avx2_inner(
 
     let w0 = sgr.w0 as i32;
     let w1 = sgr.w1 as i32;
-    let stride = p.pixel_stride::<BitDepth16>();
 
-    let (mut p_guard, p_base) = p.strided_slice_mut::<BitDepth16>(w, h);
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    let (mut compact, _) = p.compact_read::<BitDepth16>(w, h);
+    let p_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(&mut compact[..])
+        .expect("compact alignment/size mismatch for u16 reinterpretation");
     if let Some(token) = summon_avx2() {
         sgr_apply_mix_16bpc(
             token,
-            &mut p_guard,
-            p_base,
-            stride,
+            p_u16,
+            0,
+            w as isize,
             &dst0,
             &dst1,
             w,
@@ -5599,20 +5616,21 @@ fn sgr_mix_16bpc_avx2_inner(
     } else {
         let d0 = dst0.as_slice().flex();
         let d1 = dst1.as_slice().flex();
-        let mut p = p_guard.flex_mut();
+        let mut cp = p_u16.flex_mut();
         for j in 0..h {
-            let row_off = p_base.wrapping_add_signed(j as isize * stride);
+            let row_off = j * w;
             for i in 0..w {
                 let v =
                     w0 * d0[j * MAX_RESTORATION_WIDTH + i] + w1 * d1[j * MAX_RESTORATION_WIDTH + i];
-                p[row_off + i] = iclip(
-                    p[row_off + i] as i32 + ((v + (1 << 10)) >> 11),
+                cp[row_off + i] = iclip(
+                    cp[row_off + i] as i32 + ((v + (1 << 10)) >> 11),
                     0,
                     bitdepth_max,
                 ) as u16;
             }
         }
     }
+    p.compact_write_back::<BitDepth16>(w, h, &compact);
 }
 
 // ============================================================================

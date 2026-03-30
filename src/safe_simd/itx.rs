@@ -16305,7 +16305,6 @@ pub fn itxfm_add_dispatch<BD: BitDepth>(
     eob: i32,
     bd: BD,
 ) -> bool {
-    use crate::src::strided::Strided as _;
     use zerocopy::IntoBytes;
 
     #[cfg(not(target_arch = "x86_64"))]
@@ -16325,49 +16324,52 @@ pub fn itxfm_add_dispatch<BD: BitDepth>(
             None => return false,
         };
         let (w, h) = txfm.to_wh();
-        let byte_stride_i = dst.stride(); // isize, in bytes
-        let byte_stride_u = byte_stride_i.unsigned_abs();
         let bd_c = bd.into_c();
+        let pixel_size = core::mem::size_of::<BD::Pixel>();
+        let compact_stride = w * pixel_size; // byte stride in compact buffer
 
         // Reinterpret coeff as &mut [i16] (safe via zerocopy)
         let coeff_i16: &mut [i16] = zerocopy::FromBytes::mut_from_bytes(coeff.as_mut_bytes())
             .expect("coeff alignment/size mismatch for i16 reinterpretation");
 
-        match BD::BPC {
+        // Use compact buffer pattern: per-row guards avoid stride-padding overlap
+        let (mut compact, _) = dst.compact_read::<BD>(w, h);
+
+        let result = match BD::BPC {
             BPC::BPC8 => {
-                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
-                let dst_u8: &mut [u8] = guard.as_mut_bytes();
                 itxfm_dispatch_8bpc(
                     token,
                     tx_size,
                     tx_type as TxfmType,
-                    dst_u8,
-                    base,
-                    byte_stride_u,
-                    byte_stride_i,
+                    &mut compact,
+                    0,
+                    compact_stride,
+                    compact_stride as isize,
                     coeff_i16,
                     eob,
                     bd_c,
                 )
             }
             BPC::BPC16 => {
-                let (mut guard, base) = dst.strided_slice_mut::<BD>(w, h);
-                let dst_bytes: &mut [u8] = guard.as_mut_bytes();
-                let dst_u16: &mut [u16] = zerocopy::FromBytes::mut_from_bytes(dst_bytes)
-                    .expect("dst alignment/size mismatch for u16 reinterpretation");
+                let dst_u16: &mut [u16] =
+                    zerocopy::FromBytes::mut_from_bytes(&mut compact[..])
+                        .expect("dst alignment/size mismatch for u16 reinterpretation");
                 itxfm_dispatch_16bpc(
                     token,
                     tx_size,
                     tx_type as TxfmType,
                     dst_u16,
-                    base,
-                    byte_stride_u,
+                    0,
+                    compact_stride,
                     coeff_i16,
                     eob,
                     bd_c,
                 )
             }
-        }
+        };
+
+        dst.compact_write_back::<BD>(w, h, &compact);
+        result
     }
 }
 

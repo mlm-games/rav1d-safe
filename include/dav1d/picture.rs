@@ -661,6 +661,61 @@ impl<'a> Rav1dPictureDataComponentOffset<'a> {
         }
     }
 
+    /// Read a w×h pixel block into a compact Vec using per-row DisjointMut guards.
+    ///
+    /// Each row guard covers exactly `w` pixels, so two tiles at different columns
+    /// within the same row produce disjoint 1D ranges. This avoids the stride-padding
+    /// overlap that `narrow_guard_mut` has with multi-row blocks.
+    ///
+    /// Returns `(buffer, byte_stride)` where `byte_stride = w * pixel_size` (always
+    /// positive). The buffer has rows in logical order: row 0 at offset 0, row 1 at
+    /// `byte_stride`, etc., regardless of the original stride sign.
+    #[cfg_attr(debug_assertions, track_caller)]
+    pub fn compact_read<BD: BitDepth>(&self, w: usize, h: usize) -> (Vec<u8>, usize) {
+        use crate::src::strided::Strided as _;
+        use zerocopy::IntoBytes;
+        let pixel_size = core::mem::size_of::<BD::Pixel>();
+        let byte_stride = w * pixel_size;
+        let pxstride = self.data.pixel_stride::<BD>();
+        let abs_stride = pxstride.unsigned_abs();
+        let mut buf = vec![0u8; h * byte_stride];
+        for row in 0..h {
+            let row_off = if pxstride >= 0 {
+                self.offset + row * abs_stride
+            } else {
+                self.offset - row * abs_stride
+            };
+            let guard = self.data.slice::<BD, _>((row_off.., ..w));
+            buf[row * byte_stride..][..byte_stride]
+                .copy_from_slice(&guard.as_bytes()[..byte_stride]);
+        }
+        (buf, byte_stride)
+    }
+
+    /// Write a compact buffer back to a w×h pixel block using per-row mutable guards.
+    ///
+    /// This is the writeback half of the compact buffer pattern. Call after running
+    /// SIMD on the compact buffer returned by [`compact_read`].
+    #[cfg_attr(debug_assertions, track_caller)]
+    pub fn compact_write_back<BD: BitDepth>(&self, w: usize, h: usize, buf: &[u8]) {
+        use crate::src::strided::Strided as _;
+        use zerocopy::IntoBytes;
+        let pixel_size = core::mem::size_of::<BD::Pixel>();
+        let byte_stride = w * pixel_size;
+        let pxstride = self.data.pixel_stride::<BD>();
+        let abs_stride = pxstride.unsigned_abs();
+        for row in 0..h {
+            let row_off = if pxstride >= 0 {
+                self.offset + row * abs_stride
+            } else {
+                self.offset - row * abs_stride
+            };
+            let mut guard = self.data.slice_mut::<BD, _>((row_off.., ..w));
+            guard.as_mut_bytes()[..byte_stride]
+                .copy_from_slice(&buf[row * byte_stride..][..byte_stride]);
+        }
+    }
+
     /// Create a tracked mutable guard covering the entire picture component.
     ///
     /// Returns `(guard, offset_within_guard)` where the offset corresponds to

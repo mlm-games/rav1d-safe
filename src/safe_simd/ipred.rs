@@ -4883,7 +4883,6 @@ pub unsafe extern "C" fn ipred_filter_16bpc_avx2(
 
 use crate::include::common::bitdepth::BitDepth;
 use crate::src::internal::SCRATCH_EDGE_LEN;
-use crate::src::strided::Strided as _;
 
 /// Safe dispatch for intra prediction. Returns true if SIMD was used.
 #[cfg(target_arch = "x86_64")]
@@ -4914,15 +4913,17 @@ pub fn intra_pred_dispatch<BD: BitDepth>(
 
     let w = width as usize;
     let h = height as usize;
-    let byte_stride = dst.stride();
+    let pixel_size = std::mem::size_of::<BD::Pixel>();
+    let compact_stride = w * pixel_size;
+    let byte_stride = compact_stride as isize;
     let bd_c = bd.into_c();
 
-    // Create tracked guard for the dst pixel region
-    let (mut dst_guard, dst_base) = dst.strided_slice_mut::<BD>(w, h);
-    let dst_base_bytes = dst_base * std::mem::size_of::<BD::Pixel>();
+    // Compact buffer: per-row guards avoid stride-padding overlap between tiles
+    let (mut compact, _) = dst.compact_read::<BD>(w, h);
+    let dst_base_bytes = 0usize;
 
     // Get byte-level views (safe via zerocopy IntoBytes)
-    let dst_bytes: &mut [u8] = dst_guard.as_mut_bytes();
+    let dst_bytes: &mut [u8] = &mut compact[..];
     let tl_bytes: &[u8] = topleft.as_bytes();
 
     match (BD::BPC, mode) {
@@ -5534,5 +5535,6 @@ pub fn intra_pred_dispatch<BD: BitDepth>(
         }
         _ => return false,
     }
+    dst.compact_write_back::<BD>(w, h, &compact);
     true
 }

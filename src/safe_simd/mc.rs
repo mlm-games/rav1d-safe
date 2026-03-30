@@ -11356,13 +11356,11 @@ pub fn avg_dispatch<BD: BitDepth>(
     let Some(_token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
-    use zerocopy::IntoBytes;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
-    avg_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, bd)
+    let (mut compact, compact_stride) = dst.compact_read::<BD>(w as usize, h as usize);
+    let compact_stride_i = compact_stride as isize;
+    avg_dispatch_inner::<BD>(&mut compact, 0, compact_stride_i, tmp1, tmp2, w, h, bd);
+    dst.compact_write_back::<BD>(w as usize, h as usize, &compact);
+    true
 }
 
 /// Inner avg dispatch — operates on pre-acquired byte slice.
@@ -11450,15 +11448,13 @@ pub fn w_avg_dispatch<BD: BitDepth>(
     let Some(_token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
-    use zerocopy::IntoBytes;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
+    let (mut compact, compact_stride) = dst.compact_read::<BD>(w as usize, h as usize);
+    let compact_stride_i = compact_stride as isize;
     w_avg_dispatch_inner::<BD>(
-        dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, weight, bd,
-    )
+        &mut compact, 0, compact_stride_i, tmp1, tmp2, w, h, weight, bd,
+    );
+    dst.compact_write_back::<BD>(w as usize, h as usize, &compact);
+    true
 }
 
 /// Inner w_avg dispatch — operates on pre-acquired byte slice.
@@ -11550,15 +11546,13 @@ pub fn mask_dispatch<BD: BitDepth>(
     let Some(_token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
-    use zerocopy::IntoBytes;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
+    let (mut compact, compact_stride) = dst.compact_read::<BD>(w as usize, h as usize);
+    let compact_stride_i = compact_stride as isize;
     mask_dispatch_inner::<BD>(
-        dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, mask, bd,
-    )
+        &mut compact, 0, compact_stride_i, tmp1, tmp2, w, h, mask, bd,
+    );
+    dst.compact_write_back::<BD>(w as usize, h as usize, &compact);
+    true
 }
 
 /// Inner mask dispatch — operates on pre-acquired byte slice.
@@ -11650,13 +11644,12 @@ pub fn blend_dispatch<BD: BitDepth>(
         return false;
     };
     use zerocopy::IntoBytes;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
+    let (mut compact, compact_stride) = dst.compact_read::<BD>(w as usize, h as usize);
+    let compact_stride_i = compact_stride as isize;
     let tmp_bytes = tmp.as_bytes();
-    blend_dispatch_inner::<BD>(dst_bytes, dst_offset, dst_stride, tmp_bytes, w, h, mask)
+    blend_dispatch_inner::<BD>(&mut compact, 0, compact_stride_i, tmp_bytes, w, h, mask);
+    dst.compact_write_back::<BD>(w as usize, h as usize, &compact);
+    true
 }
 
 /// Inner blend dispatch — operates on pre-acquired byte slice.
@@ -11710,13 +11703,12 @@ pub fn blend_dir_dispatch<BD: BitDepth>(
         return false;
     };
     use zerocopy::IntoBytes;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
+    let (mut compact, compact_stride) = dst.compact_read::<BD>(w as usize, h as usize);
+    let compact_stride_i = compact_stride as isize;
     let tmp_bytes = tmp.as_bytes();
-    blend_dir_dispatch_inner::<BD>(is_h, dst_bytes, dst_offset, dst_stride, tmp_bytes, w, h)
+    blend_dir_dispatch_inner::<BD>(is_h, &mut compact, 0, compact_stride_i, tmp_bytes, w, h);
+    dst.compact_write_back::<BD>(w as usize, h as usize, &compact);
+    true
 }
 
 /// Inner blend_dir dispatch — operates on pre-acquired byte slice.
@@ -11787,15 +11779,13 @@ pub(crate) fn w_mask_dispatch<BD: BitDepth>(
     let Some(_token) = crate::src::cpu::summon_avx2() else {
         return false;
     };
-    use zerocopy::IntoBytes;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
+    let (mut compact, compact_stride) = dst.compact_read::<BD>(w as usize, h as usize);
+    let compact_stride_i = compact_stride as isize;
     w_mask_dispatch_inner::<BD>(
-        layout, dst_bytes, dst_offset, dst_stride, tmp1, tmp2, w, h, mask, sign, bd,
-    )
+        layout, &mut compact, 0, compact_stride_i, tmp1, tmp2, w, h, mask, sign, bd,
+    );
+    dst.compact_write_back::<BD>(w as usize, h as usize, &compact);
+    true
 }
 
 /// Inner w_mask dispatch — operates on pre-acquired byte slice.
@@ -12095,15 +12085,13 @@ pub fn mc_put_dispatch<BD: BitDepth>(
         return false;
     }
 
-    use zerocopy::IntoBytes;
-    let pixel_size = std::mem::size_of::<BD::Pixel>();
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(w as usize, h as usize);
-    let dst_bytes = dst_guard.as_mut_bytes();
-    let dst_offset = dst_base * pixel_size;
-    let dst_stride = dst.stride();
+    let (mut compact, compact_stride) = dst.compact_read::<BD>(w as usize, h as usize);
+    let compact_stride_i = compact_stride as isize;
     mc_put_dispatch_inner::<BD>(
-        filter, dst_bytes, dst_offset, dst_stride, src, w, h, mx, my, bd,
-    )
+        filter, &mut compact, 0, compact_stride_i, src, w, h, mx, my, bd,
+    );
+    dst.compact_write_back::<BD>(w as usize, h as usize, &compact);
+    true
 }
 
 /// Inner mc_put dispatch — operates on pre-acquired dst byte slice.
@@ -12815,12 +12803,11 @@ pub fn warp8x8_dispatch<BD: BitDepth>(
         return false;
     }
 
-    let dst_stride = dst.stride();
     let src_stride = src.stride();
     let pixel_size = std::mem::size_of::<BD::Pixel>();
 
-    let (mut dst_guard, dst_base) = dst.narrow_guard_mut::<BD>(8, 8);
-    let dst_bytes = &mut dst_guard.as_mut_bytes()[dst_base * pixel_size..];
+    let (mut compact, compact_stride) = dst.compact_read::<BD>(8, 8);
+    let compact_stride_i = compact_stride as isize;
     let (src_guard, src_base) = src.full_guard::<BD>();
     let src_bytes = src_guard.as_bytes();
 
@@ -12828,8 +12815,8 @@ pub fn warp8x8_dispatch<BD: BitDepth>(
         BPC::BPC8 => {
             warp_affine_8x8_8bpc_avx2(
                 token,
-                dst_bytes,
-                dst_stride,
+                &mut compact,
+                compact_stride_i,
                 src_bytes,
                 src_base * pixel_size,
                 src_stride,
@@ -12841,8 +12828,8 @@ pub fn warp8x8_dispatch<BD: BitDepth>(
         BPC::BPC16 => {
             warp_affine_8x8_16bpc_avx2(
                 token,
-                dst_bytes,
-                dst_stride,
+                &mut compact,
+                compact_stride_i,
                 src_bytes,
                 src_base * pixel_size,
                 src_stride,
@@ -12854,6 +12841,7 @@ pub fn warp8x8_dispatch<BD: BitDepth>(
             );
         }
     }
+    dst.compact_write_back::<BD>(8, 8, &compact);
     true
 }
 
