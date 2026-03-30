@@ -1471,7 +1471,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 offset: start_pixel,
             };
             let (mut compact, compact_stride) =
-                lpf_pic.compact_read::<BitDepth8>(compact_w, compact_h);
+                lpf_pic.compact_read_per_row::<BitDepth8>(compact_w, compact_h);
             let buf: &mut [u8] = &mut compact;
             let stride_i = compact_stride as isize;
 
@@ -1529,7 +1529,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     bitdepth_max,
                 ),
             }
-            lpf_pic.compact_write_back::<BitDepth8>(compact_w, compact_h, &compact);
+            lpf_pic.compact_write_back_per_row::<BitDepth8>(compact_w, compact_h, &compact);
         }
         BPC::BPC16 => {
             use crate::include::common::bitdepth::BitDepth16;
@@ -1572,7 +1572,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 offset: start_pixel,
             };
             let (mut compact, compact_stride) =
-                lpf_pic.compact_read::<BitDepth16>(compact_w, compact_h);
+                lpf_pic.compact_read_per_row::<BitDepth16>(compact_w, compact_h);
             let buf: &mut [u16] =
                 zerocopy::FromBytes::mut_from_bytes(&mut compact[..]).unwrap();
             let stride_i = (compact_stride / 2) as isize; // u16 stride = byte_stride / 2
@@ -1631,7 +1631,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     bitdepth_max,
                 ),
             }
-            lpf_pic.compact_write_back::<BitDepth16>(compact_w, compact_h, &compact);
+            lpf_pic.compact_write_back_per_row::<BitDepth16>(compact_w, compact_h, &compact);
         }
     }
     true

@@ -170,6 +170,9 @@ pub(crate) fn rav1d_open(
 
     let NumThreads { n_tc, n_fc } = get_num_threads(s);
 
+    // Tell compact buffer guards whether to use per-row (threading) or single (fast) path.
+    crate::include::dav1d::picture::set_tile_threading(n_tc > 1);
+
     let ttd = TaskThreadData {
         cur: (n_fc as u32).into(),
         reset_task_cur: AtomicU32::new(u32::MAX),
