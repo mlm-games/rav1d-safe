@@ -1449,10 +1449,10 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                 let (cw, ch, cstart, cbase) = if !is_v {
                     (7 + 16, max_iter * 4, dst.offset - 7, 7usize)
                 } else {
-                    let cw = max_iter * 4 + 16;
+                    let cw = max_iter * 4;
                     (
                         cw,
-                        7 + 16,
+                        7 + 16, // 23 rows: 7 above + 16 below
                         dst.offset.saturating_sub(7 * byte_stride),
                         7 * cw,
                     )
@@ -1616,7 +1616,7 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
                     (w, h, start, 7usize)
                 } else {
                     // V filter: max_iter*4 + 16 pixels wide, 23 rows tall
-                    let w = max_iter * 4 + 16;
+                    let w = max_iter * 4;
                     let h = 7 + 16; // 23
                     let start = dst.offset.saturating_sub(7 * u16_stride);
                     (w, h, start, 7 * w)
