@@ -18,6 +18,35 @@ pub fn tile_threading_active() -> bool {
 }
 
 use crate::include::common::bitdepth::BitDepth;
+
+/// Execute a closure with mutable byte access to a w×h pixel block.
+///
+/// In single-threaded mode: zero-copy via `narrow_guard_mut`.
+/// In multi-threaded mode: copies to/from a compact buffer with per-row guards.
+///
+/// The closure receives `(bytes, offset, stride)` — a mutable byte slice,
+/// the byte offset to the first pixel, and the byte stride between rows.
+pub fn with_pixel_guard_mut<BD: BitDepth, R>(
+    pic: &crate::src::with_offset::WithOffset<&Rav1dPictureDataComponent>,
+    w: usize,
+    h: usize,
+    f: impl FnOnce(&mut [u8], usize, isize) -> R,
+) -> R {
+    use crate::src::strided::Strided as _;
+    let pixel_size = core::mem::size_of::<BD::Pixel>();
+    if tile_threading_active() {
+        let (mut buf, byte_stride) = pic.compact_read_per_row::<BD>(w, h);
+        let result = f(&mut buf, 0, byte_stride as isize);
+        pic.compact_write_back_per_row::<BD>(w, h, &buf);
+        result
+    } else {
+        let (mut guard, base) = pic.narrow_guard_mut::<BD>(w, h);
+        let bytes = guard.as_mut_bytes();
+        let offset = base * pixel_size;
+        let stride = pic.stride();
+        f(bytes, offset, stride)
+    }
+}
 #[cfg(feature = "c-ffi")]
 use crate::include::common::validate::validate_input;
 #[cfg(feature = "c-ffi")]
