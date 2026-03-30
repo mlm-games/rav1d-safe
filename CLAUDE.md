@@ -610,30 +610,31 @@ cd /home/lilith/work/zenavif
 
 ## Known Issues
 
-### DisjointMut overlaps with tile threading (partially fixed)
+### Tile threading: WORKING under forbid(unsafe_code) (v0.5.0)
 
-**Status:** Level cache overlap FIXED. Picture plane overlap OPEN.
+**Status:** Tile threading (n_fc=1, n_tc>1) works in checked mode. Frame threading (n_fc>1)
+requires `unchecked`.
 
-With `threads > 1` and `max_frame_delay = 1` (tile threading, no frame threading),
-DisjointMut guards overlap between concurrent tile tasks:
+**Level cache (FIXED):** `f.lf.level` changed from `DisjointMut<Vec<u8>>` to `Vec<AtomicU8>`.
+The V filter reads entries across SB row boundaries while reconstruction writes to them
+concurrently. AtomicU8 with Relaxed ordering is zero-cost on x86_64. Inner loopfilter
+functions read entries on-demand via `.load(Relaxed)` — no gather allocation.
 
-**FIXED (e2de9f1):** `f.lf.level` (loopfilter level cache) — SIMD loopfilter dispatch
-acquired an immutable guard spanning the entire remaining buffer. Fix: gather ~32 needed
-level entries into a `[[u8; 4]; 34]` stack buffer, drop the DisjointMut guard immediately,
-pass the compact buffer to inner functions with `b4_stride=1`. Zero allocations, ~128 bytes
-copied. Both x86_64 and aarch64/wasm paths fixed. 784/784 conformance vectors pass.
+**Pixel data (FIXED):** COW pattern via `with_pixel_guard_mut` closure:
+- Single-threaded (n_tc=1): zero-copy `narrow_guard_mut` (original fast path)
+- Multi-threaded (n_tc>1): per-row compact buffer guards (stride padding eliminated)
+- Loopfilter pixel data: per-row compact buffers with 2D decomposition matching filter reach
+- 37 call sites converted (33 SIMD dispatch + 4 scalar fallbacks)
 
-**OPEN:** Picture plane pixel data — `backup2lines` in `cdef_apply.rs` reads 2 rows of
-pixels from the current frame (immutable guard ~1536 bytes at 768w 8bpc), while a concurrent
-tile thread writes reconstructed pixels in an adjacent SB row (mutable guard). The 40-byte
-overlap is at the SB row boundary. Fix requires tightening pixel data guards in:
-- `cdef_apply.rs`: `backup2lines` reads (line 55, 75)
-- `safe_simd/mc.rs`: 15 `full_guard`/`full_guard_mut` calls (x86_64)
-- `safe_simd/mc_arm.rs`: 18 `full_guard` calls (aarch64)
-- `safe_simd/loopfilter_arm.rs`: 9 `full_guard` + whole-buffer lvl guards
+**Other fixes for threading:**
+- `ipred_prepare.rs`: per-pixel column reads instead of stride-wide strided_slice
+- `cdef_apply.rs`: per-row backup2lines instead of 2*stride wide guard
+- `looprestoration.rs`: per-row source reads instead of strided_slice
+- `ipred.rs`: per-row CFL prediction reads
 
-The pattern is the same as the level cache fix: acquire a narrow guard covering only the
-rows actually accessed, or copy needed data to a local buffer and drop the guard immediately.
+**Frame threading (n_fc>1) OPEN:** Reference frame guard conflicts between concurrent
+frame contexts (loopfilter mutable vs reference read immutable on the same frame's picture
+buffer). n_fc clamped to 1 without `unchecked`.
 
 Reproducer: `cargo test --release --test reproduce_overlap -- --ignored`
 
