@@ -1400,13 +1400,13 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
     let lvl_remaining_bytes = lvl.data.len() - lvl_start;
     let lvl_len = lvl_remaining_bytes / 4;
     let lvl_byte_end = lvl_start + lvl_len * 4;
-    // Gather level cache entries from AtomicU8 slice with Relaxed ordering.
-    // The task scheduler provides the necessary synchronization between
-    // tile threads writing level cache entries and the loopfilter reading them.
-    let lvl_buf: Vec<u8> = (lvl_start..lvl_byte_end)
-        .map(|i| lvl.data[i].load(Relaxed))
-        .collect();
-    let lvl_slice: &[[u8; 4]] = zerocopy::FromBytes::ref_from_bytes(&lvl_buf).unwrap();
+    // Bulk-read level cache from AtomicU8 slice. Pre-allocate exact size
+    // to avoid Vec growth overhead.
+    let lvl_byte_len = (lvl_byte_end - lvl_start) & !3; // round down to [u8; 4] alignment
+    let mut lvl_buf = Vec::with_capacity(lvl_byte_len);
+    lvl_buf.extend((lvl_start..lvl_start + lvl_byte_len).map(|i| lvl.data[i].load(Relaxed)));
+    let lvl_slice: &[[u8; 4]] =
+        zerocopy::FromBytes::ref_from_bytes(&lvl_buf).unwrap();
     // Which byte within each [u8;4] entry to read:
     //   H Y → 0, V Y → 1, H U → 2, H V → 3
     // This is encoded in lvl.offset % 4 by the caller (lf_apply.rs adds +0/+1/+2/+3).
