@@ -2453,6 +2453,17 @@ fn parse_obus(
                         payload_size = ps;
                     }
 
+                    // Cap payload size to 16 MB to prevent excessive allocation
+                    // from malformed/malicious bitstreams.
+                    const MAX_ITUT_T35_PAYLOAD: usize = 16 * 1024 * 1024;
+                    if payload_size > MAX_ITUT_T35_PAYLOAD {
+                        writeln!(
+                            c.logger,
+                            "ITU-T T.35 payload too large ({payload_size} bytes, max {MAX_ITUT_T35_PAYLOAD})"
+                        );
+                        break 'itut_t35;
+                    }
+
                     if payload_size == 0 || gb[payload_size] != 0x80 {
                         writeln!(c.logger, "Malformed ITU-T T.35 metadata message format");
                     } else {
