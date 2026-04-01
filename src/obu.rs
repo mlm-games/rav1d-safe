@@ -474,7 +474,7 @@ fn parse_seq_hdr(
             }
         }
         chr = if ss_hor & ss_ver != 0 {
-            Rav1dChromaSamplePosition::from_repr(gb.get_bits(2) as usize).unwrap()
+            Rav1dChromaSamplePosition::from_repr(gb.get_bits(2) as usize).ok_or(EINVAL)?
         } else {
             Rav1dChromaSamplePosition::Unknown
         };
@@ -1374,16 +1374,16 @@ fn parse_restoration(
     allow_intrabc: bool,
     debug: &Debug,
     gb: &mut GetBits,
-) -> Rav1dFrameHeaderRestoration {
+) -> Rav1dResult<Rav1dFrameHeaderRestoration> {
     let r#type;
     let unit_size;
     if (!all_lossless || super_res_enabled) && seqhdr.restoration != 0 && !allow_intrabc {
-        let type_0 = Rav1dRestorationType::from_repr(gb.get_bits(2) as usize).unwrap();
+        let type_0 = Rav1dRestorationType::from_repr(gb.get_bits(2) as usize).ok_or(EINVAL)?;
         r#type = if seqhdr.monochrome == 0 {
             [
                 type_0,
-                Rav1dRestorationType::from_repr(gb.get_bits(2) as usize).unwrap(),
-                Rav1dRestorationType::from_repr(gb.get_bits(2) as usize).unwrap(),
+                Rav1dRestorationType::from_repr(gb.get_bits(2) as usize).ok_or(EINVAL)?,
+                Rav1dRestorationType::from_repr(gb.get_bits(2) as usize).ok_or(EINVAL)?,
             ]
         } else {
             [
@@ -1429,7 +1429,7 @@ fn parse_restoration(
         unit_size = Default::default();
     }
     debug.post(gb, "restoration");
-    Rav1dFrameHeaderRestoration { r#type, unit_size }
+    Ok(Rav1dFrameHeaderRestoration { r#type, unit_size })
 }
 
 fn parse_skip_mode(
@@ -1829,7 +1829,7 @@ fn parse_frame_hdr(
     let frame_type = if seqhdr.reduced_still_picture_header != 0 {
         Rav1dFrameType::Key
     } else {
-        Rav1dFrameType::from_repr(gb.get_bits(2) as usize).unwrap()
+        Rav1dFrameType::from_repr(gb.get_bits(2) as usize).ok_or(EINVAL)?
     };
     let show_frame = (seqhdr.reduced_still_picture_header != 0 || gb.get_bit()) as u8;
     let showable_frame;
@@ -1987,7 +1987,7 @@ fn parse_frame_hdr(
         subpel_filter_mode = if gb.get_bit() {
             Rav1dFilterMode::Switchable
         } else {
-            Rav1dFilterMode::from_repr(gb.get_bits(2) as usize).unwrap()
+            Rav1dFilterMode::from_repr(gb.get_bits(2) as usize).ok_or(EINVAL)?
         };
         switchable_motion_mode = gb.get_bit() as u8;
         use_ref_frame_mvs = (error_resilient_mode == 0
@@ -2026,7 +2026,7 @@ fn parse_frame_hdr(
         allow_intrabc,
         &debug,
         gb,
-    );
+    )?;
 
     let txfm_mode = if all_lossless {
         Rav1dTxfmMode::Only4x4
@@ -2451,6 +2451,17 @@ fn parse_obus(
                             break 'itut_t35;
                         };
                         payload_size = ps;
+                    }
+
+                    // Cap payload size to 16 MB to prevent excessive allocation
+                    // from malformed/malicious bitstreams.
+                    const MAX_ITUT_T35_PAYLOAD: usize = 16 * 1024 * 1024;
+                    if payload_size > MAX_ITUT_T35_PAYLOAD {
+                        writeln!(
+                            c.logger,
+                            "ITU-T T.35 payload too large ({payload_size} bytes, max {MAX_ITUT_T35_PAYLOAD})"
+                        );
+                        break 'itut_t35;
                     }
 
                     if payload_size == 0 || gb[payload_size] != 0x80 {
