@@ -4614,8 +4614,7 @@ pub(crate) fn rav1d_decode_frame_init(c: &Rav1dContext, fc: &Rav1dFrameContext) 
 
     // setup jnt_comp weights
     if frame_hdr.switchable_comp_refs != 0 {
-        let cur_frame_offset =
-            f.cur.frame_hdr.as_ref().ok_or(EINVAL)?.frame_offset as c_int;
+        let cur_frame_offset = f.cur.frame_hdr.as_ref().ok_or(EINVAL)?.frame_offset as c_int;
         let ref_pocs: [_; 7] = array::from_fn(|i| {
             f.refp[i]
                 .p
@@ -5247,12 +5246,7 @@ pub fn rav1d_submit_frame(c: &Rav1dContext, state: &mut Rav1dState) -> Rav1dResu
         );
         if !frame_hdr.allow_intrabc {
             for i in 0..7 {
-                f.refpoc[i] = f.refp[i]
-                    .p
-                    .frame_hdr
-                    .as_ref()
-                    .ok_or(EINVAL)?
-                    .frame_offset as c_uint;
+                f.refpoc[i] = f.refp[i].p.frame_hdr.as_ref().ok_or(EINVAL)?.frame_offset as c_uint;
             }
         } else {
             f.refpoc.fill(0);

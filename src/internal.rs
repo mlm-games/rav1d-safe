@@ -870,7 +870,6 @@ impl Rav1dFrameData {
     pub fn seq_hdr(&self) -> &Rav1dSequenceHeader {
         self.seq_hdr.as_ref().unwrap()
     }
-
 }
 
 #[derive(Default)]
