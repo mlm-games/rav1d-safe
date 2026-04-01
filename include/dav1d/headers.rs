@@ -1684,7 +1684,7 @@ pub struct Dav1dFilmGrainData {
     /// as [`Self::ar_coeff_shift`] being the last field would
     /// read 8 bytes out of bounds and be UB.
     ///
-    /// [`malloc`]: libc::malloc
+    /// [`malloc`]: https://man7.org/linux/man-pages/man3/malloc.3.html
     pub ar_coeff_shift: u64,
     pub grain_scale_shift: c_int,
     pub uv_mult: [c_int; 2],

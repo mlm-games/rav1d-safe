@@ -36,6 +36,14 @@ jobs:
           - os: ubuntu-24.04-arm
             features: "bitdepth_8,bitdepth_16"
             label: safe-simd-arm64
+          - os: windows-11-arm
+            features: "bitdepth_8,bitdepth_16"
+            label: safe-simd-arm64
+
+          # macOS Intel (x86_64) — catch Intel-specific issues
+          - os: macos-15-intel
+            features: "bitdepth_8,bitdepth_16"
+            label: safe-simd
 
           # ASM builds (original hand-written assembly, x86_64 only)
           - os: ubuntu-latest
