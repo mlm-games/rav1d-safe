@@ -291,19 +291,28 @@ fn lpf_v_sb_inner<BD: BitDepth, const YUV: usize>(
     bitdepth_max: i32,
 ) {
     let vmask = [mask[0], mask[1], mask[2]];
+    // Use wrapping usize for incremental addition (two's complement makes
+    // `base += stride_u` equivalent to `base -= |stride|` for negative strides).
     let b4_stride_u = b4_stride as usize;
 
+    // Track offsets incrementally to avoid multiplying wrapped usize values.
+    let mut cur_lvl_offset = lvl_offset;
+    let mut cur_dst_offset: isize = 0;
+
     for y in 0..w as usize {
-        let lvl_base = lvl_offset + y * b4_stride_u * 4;
-        let lvl = &lvl_data[lvl_base..lvl_base + 4];
+        let lvl = &lvl_data[cur_lvl_offset..cur_lvl_offset + 4];
 
         if lvl[0] == 0 && lvl[1] == 0 && lvl[2] == 0 && lvl[3] == 0 {
+            cur_lvl_offset = cur_lvl_offset.wrapping_add(b4_stride_u);
+            cur_dst_offset += 4 * stride;
             continue;
         }
 
         let vm = (vmask[0] >> y) & 1 | ((vmask[1] >> y) & 1) << 1 | ((vmask[2] >> y) & 1) << 2;
 
         if vm == 0 {
+            cur_lvl_offset = cur_lvl_offset.wrapping_add(b4_stride_u);
+            cur_dst_offset += 4 * stride;
             continue;
         }
 
@@ -328,8 +337,11 @@ fn lpf_v_sb_inner<BD: BitDepth, const YUV: usize>(
         };
 
         // For vertical filter, stridea=stride (move between rows), strideb=1 (move in the filter direction)
-        let base_idx = signed_idx(dst_base, y as isize * 4 * stride);
+        let base_idx = signed_idx(dst_base, cur_dst_offset);
         loop_filter_core::<BD>(buf, base_idx, e, i, h, stride, 1, wd, bitdepth_max);
+
+        cur_lvl_offset = cur_lvl_offset.wrapping_add(b4_stride_u);
+        cur_dst_offset += 4 * stride;
     }
 }
 
@@ -629,79 +641,39 @@ pub unsafe extern "C" fn lpf_v_sb_uv_16bpc_neon(
     );
 }
 
-/// Safe dispatch for loopfilter_sb on aarch64. Returns true if SIMD was used.
+/// Safe dispatch for loopfilter_sb on aarch64.
+///
+/// Returns false — falls back to the proven generic scalar implementation.
+/// The ARM-specific loopfilter code has multiple issues that need a proper
+/// rewrite to fix correctly:
+///
+/// 1. The H/V inner functions use swapped stride conventions vs the x86
+///    version, making reach computation and bounds checking non-trivial.
+/// 2. `signed_idx` with `wrapping_add_signed` produces wrapped indices
+///    when pixel offsets go negative (e.g., accessing rows above the edge
+///    with positive strides, or rows below with negative strides).
+/// 3. The lvl indexing in `lpf_v_sb_inner` used `b4_stride as usize`
+///    multiplication which wraps for negative strides (fixed to incremental,
+///    but the core filter still has issues 1 and 2).
+///
+/// The ARM loopfilter has no NEON intrinsics — it's pure scalar code
+/// identical in algorithm to the generic fallback, so disabling it has
+/// no performance impact. A future rewrite should use the x86 approach:
+/// compute exact reach, create a narrow guard, and normalize the stride.
+///
+/// See: <https://github.com/imazen/rav1d-safe/issues/1>
 #[cfg(target_arch = "aarch64")]
 pub fn loopfilter_sb_dispatch<BD: BitDepth>(
-    dst: PicOffset,
-    stride: ptrdiff_t,
-    mask: &[u32; 3],
-    lvl: WithOffset<&[AtomicU8]>,
-    b4_stride: isize,
-    lut: &Align16<Av1FilterLUT>,
-    w: c_int,
-    bitdepth_max: c_int,
-    is_y: bool,
-    is_v: bool,
+    _dst: PicOffset,
+    _stride: ptrdiff_t,
+    _mask: &[u32; 3],
+    _lvl: WithOffset<&[AtomicU8]>,
+    _b4_stride: isize,
+    _lut: &Align16<Av1FilterLUT>,
+    _w: c_int,
+    _bitdepth_max: c_int,
+    _is_y: bool,
+    _is_v: bool,
 ) -> bool {
-    // Get full pixel buffer as a slice
-    let (mut dst_guard, dst_base) = dst.full_guard_mut::<BD>();
-    let buf: &mut [BD::Pixel] = &mut dst_guard;
-
-    // Gather level cache entries from AtomicU8 slice with Relaxed ordering.
-    let lvl_buf: Vec<u8> = lvl.data.iter().map(|a| a.load(Relaxed)).collect();
-    let lvl_data: &[u8] = &lvl_buf;
-    let lvl_offset = lvl.offset;
-
-    // Call inner functions directly, bypassing FFI wrappers.
-    match (is_y, is_v) {
-        (true, false) => lpf_h_sb_inner::<BD, 0>(
-            buf,
-            dst_base,
-            stride as isize,
-            mask,
-            lvl_data,
-            lvl_offset,
-            b4_stride,
-            lut,
-            w,
-            bitdepth_max,
-        ),
-        (true, true) => lpf_v_sb_inner::<BD, 0>(
-            buf,
-            dst_base,
-            stride as isize,
-            mask,
-            lvl_data,
-            lvl_offset,
-            b4_stride,
-            lut,
-            w,
-            bitdepth_max,
-        ),
-        (false, false) => lpf_h_sb_inner::<BD, 1>(
-            buf,
-            dst_base,
-            stride as isize,
-            mask,
-            lvl_data,
-            lvl_offset,
-            b4_stride,
-            lut,
-            w,
-            bitdepth_max,
-        ),
-        (false, true) => lpf_v_sb_inner::<BD, 1>(
-            buf,
-            dst_base,
-            stride as isize,
-            mask,
-            lvl_data,
-            lvl_offset,
-            b4_stride,
-            lut,
-            w,
-            bitdepth_max,
-        ),
-    }
-    true
+    false
 }

@@ -25,6 +25,17 @@ use safe_unaligned_simd::aarch64 as safe_simd;
 
 use super::itx_arm_neon_8x8::transpose_8x8h;
 
+/// Read a coefficient from the buffer, returning 0 for out-of-bounds indices.
+/// AV1 specifies that coefficients beyond min(w,32)*min(h,32) are zero.
+#[inline(always)]
+fn coeff_or_zero(coeff: &[i16], idx: usize) -> i32 {
+    if idx < coeff.len() {
+        coeff[idx] as i32
+    } else {
+        0
+    }
+}
+
 // ============================================================================
 // DC-only fast paths for 64-wide blocks
 // ============================================================================
@@ -792,7 +803,7 @@ pub(crate) fn inv_txfm_add_dct_dct_64x64_8bpc_neon_inner(
     for y in 0..64 {
         let mut input = [0i32; 64];
         for x in 0..64 {
-            input[x] = coeff[y + x * 64] as i32;
+            input[x] = coeff_or_zero(coeff, y + x * 64);
         }
         let out = scalar_dct64_1d(&input);
         for x in 0..64 {
@@ -815,9 +826,7 @@ pub(crate) fn inv_txfm_add_dct_dct_64x64_8bpc_neon_inner(
     neon_add_to_dst_8bpc(dst, dst_base, dst_stride, &tmp, 64, 64, 12);
 
     // Clear coefficients
-    for i in 0..4096 {
-        coeff[i] = 0;
-    }
+    coeff.fill(0);
 }
 
 /// NEON implementation of 64x64 DCT_DCT for 16bpc.
@@ -842,7 +851,7 @@ pub(crate) fn inv_txfm_add_dct_dct_64x64_16bpc_neon_inner(
     for y in 0..64 {
         let mut input = [0i32; 64];
         for x in 0..64 {
-            input[x] = coeff[y + x * 64];
+            input[x] = coeff.get(y + x * 64).copied().unwrap_or(0);
         }
         let out = scalar_dct64_1d(&input);
         for x in 0..64 {
@@ -862,9 +871,7 @@ pub(crate) fn inv_txfm_add_dct_dct_64x64_16bpc_neon_inner(
     }
 
     neon_add_to_dst_16bpc(dst, dst_base, dst_stride, &tmp, 64, 64, 12, bitdepth_max);
-    for i in 0..4096 {
-        coeff[i] = 0;
-    }
+    coeff.fill(0);
 }
 
 // ============================================================================
@@ -892,7 +899,7 @@ pub(crate) fn inv_txfm_add_dct_dct_64x32_8bpc_neon_inner(
     for y in 0..32 {
         let mut input = [0i32; 64];
         for x in 0..64 {
-            input[x] = coeff[y + x * 32] as i32;
+            input[x] = coeff_or_zero(coeff, y + x * 32);
         }
         let out = scalar_dct64_1d(&input);
         for x in 0..64 {
@@ -911,9 +918,7 @@ pub(crate) fn inv_txfm_add_dct_dct_64x32_8bpc_neon_inner(
     }
 
     neon_add_to_dst_8bpc(dst, dst_base, dst_stride, &tmp, 64, 32, 11);
-    for i in 0..2048 {
-        coeff[i] = 0;
-    }
+    coeff.fill(0);
 }
 
 /// NEON implementation of 64x32 DCT_DCT for 16bpc.
@@ -937,7 +942,7 @@ pub(crate) fn inv_txfm_add_dct_dct_64x32_16bpc_neon_inner(
     for y in 0..32 {
         let mut input = [0i32; 64];
         for x in 0..64 {
-            input[x] = coeff[y + x * 32];
+            input[x] = coeff.get(y + x * 32).copied().unwrap_or(0);
         }
         let out = scalar_dct64_1d(&input);
         for x in 0..64 {
@@ -956,9 +961,7 @@ pub(crate) fn inv_txfm_add_dct_dct_64x32_16bpc_neon_inner(
     }
 
     neon_add_to_dst_16bpc(dst, dst_base, dst_stride, &tmp, 64, 32, 11, bitdepth_max);
-    for i in 0..2048 {
-        coeff[i] = 0;
-    }
+    coeff.fill(0);
 }
 
 // ============================================================================
@@ -986,7 +989,7 @@ pub(crate) fn inv_txfm_add_dct_dct_32x64_8bpc_neon_inner(
     for y in 0..64 {
         let mut input = [0i32; 32];
         for x in 0..32 {
-            input[x] = coeff[y + x * 64] as i32;
+            input[x] = coeff_or_zero(coeff, y + x * 64);
         }
         let out = scalar_dct32_1d(&input);
         for x in 0..32 {
@@ -1005,9 +1008,7 @@ pub(crate) fn inv_txfm_add_dct_dct_32x64_8bpc_neon_inner(
     }
 
     neon_add_to_dst_8bpc(dst, dst_base, dst_stride, &tmp, 32, 64, 11);
-    for i in 0..2048 {
-        coeff[i] = 0;
-    }
+    coeff.fill(0);
 }
 
 /// NEON implementation of 32x64 DCT_DCT for 16bpc.
@@ -1031,7 +1032,7 @@ pub(crate) fn inv_txfm_add_dct_dct_32x64_16bpc_neon_inner(
     for y in 0..64 {
         let mut input = [0i32; 32];
         for x in 0..32 {
-            input[x] = coeff[y + x * 64];
+            input[x] = coeff.get(y + x * 64).copied().unwrap_or(0);
         }
         let out = scalar_dct32_1d(&input);
         for x in 0..32 {
@@ -1050,9 +1051,7 @@ pub(crate) fn inv_txfm_add_dct_dct_32x64_16bpc_neon_inner(
     }
 
     neon_add_to_dst_16bpc(dst, dst_base, dst_stride, &tmp, 32, 64, 11, bitdepth_max);
-    for i in 0..2048 {
-        coeff[i] = 0;
-    }
+    coeff.fill(0);
 }
 
 // ============================================================================
@@ -1080,7 +1079,7 @@ pub(crate) fn inv_txfm_add_dct_dct_16x64_8bpc_neon_inner(
     for y in 0..64 {
         let mut input = [0i32; 16];
         for x in 0..16 {
-            input[x] = coeff[y + x * 64] as i32;
+            input[x] = coeff_or_zero(coeff, y + x * 64);
         }
         // rect2 scaling
         let scale = 2896i64 * 8;
@@ -1104,9 +1103,7 @@ pub(crate) fn inv_txfm_add_dct_dct_16x64_8bpc_neon_inner(
     }
 
     neon_add_to_dst_8bpc(dst, dst_base, dst_stride, &tmp, 16, 64, 4);
-    for i in 0..1024 {
-        coeff[i] = 0;
-    }
+    coeff.fill(0);
 }
 
 /// NEON implementation of 16x64 DCT_DCT for 16bpc.
@@ -1130,7 +1127,7 @@ pub(crate) fn inv_txfm_add_dct_dct_16x64_16bpc_neon_inner(
     for y in 0..64 {
         let mut input = [0i32; 16];
         for x in 0..16 {
-            input[x] = coeff[y + x * 64];
+            input[x] = coeff.get(y + x * 64).copied().unwrap_or(0);
         }
         let scale = 2896i64 * 8;
         for val in input.iter_mut() {
@@ -1153,9 +1150,7 @@ pub(crate) fn inv_txfm_add_dct_dct_16x64_16bpc_neon_inner(
     }
 
     neon_add_to_dst_16bpc(dst, dst_base, dst_stride, &tmp, 16, 64, 4, bitdepth_max);
-    for i in 0..1024 {
-        coeff[i] = 0;
-    }
+    coeff.fill(0);
 }
 
 /// NEON implementation of 64x16 DCT_DCT for 8bpc.
@@ -1179,7 +1174,7 @@ pub(crate) fn inv_txfm_add_dct_dct_64x16_8bpc_neon_inner(
     for y in 0..16 {
         let mut input = [0i32; 64];
         for x in 0..64 {
-            input[x] = coeff[y + x * 16] as i32;
+            input[x] = coeff_or_zero(coeff, y + x * 16);
         }
         let scale = 2896i64 * 8;
         for val in input.iter_mut() {
@@ -1202,9 +1197,7 @@ pub(crate) fn inv_txfm_add_dct_dct_64x16_8bpc_neon_inner(
     }
 
     neon_add_to_dst_8bpc(dst, dst_base, dst_stride, &tmp, 64, 16, 4);
-    for i in 0..1024 {
-        coeff[i] = 0;
-    }
+    coeff.fill(0);
 }
 
 /// NEON implementation of 64x16 DCT_DCT for 16bpc.
@@ -1228,7 +1221,7 @@ pub(crate) fn inv_txfm_add_dct_dct_64x16_16bpc_neon_inner(
     for y in 0..16 {
         let mut input = [0i32; 64];
         for x in 0..64 {
-            input[x] = coeff[y + x * 16];
+            input[x] = coeff.get(y + x * 16).copied().unwrap_or(0);
         }
         let scale = 2896i64 * 8;
         for val in input.iter_mut() {
@@ -1251,9 +1244,7 @@ pub(crate) fn inv_txfm_add_dct_dct_64x16_16bpc_neon_inner(
     }
 
     neon_add_to_dst_16bpc(dst, dst_base, dst_stride, &tmp, 64, 16, 4, bitdepth_max);
-    for i in 0..1024 {
-        coeff[i] = 0;
-    }
+    coeff.fill(0);
 }
 
 // ============================================================================

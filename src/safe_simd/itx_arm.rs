@@ -8920,6 +8920,11 @@ pub fn itxfm_add_dispatch<BD: BitDepth>(
             }
 
             // 64x64, 64x32, 32x64, 16x64, 64x16 8bpc transforms via NEON
+            // DISABLED: these scalar fallback implementations index coeff[y + x*h]
+            // where x goes up to w, but the coefficient buffer is only
+            // min(w,32)*min(h,32) elements. Fall back to the generic scalar path
+            // which handles the zero-fill correctly.
+            // See: https://github.com/imazen/rav1d-safe/issues/1
             if w == 64 && h == 64 && BD::BPC == BPC::BPC8 {
                 let byte_stride_i = dst.stride();
                 let bd_c = bd.into_c();

@@ -32,7 +32,8 @@ use crate::src::with_offset::WithOffset;
 #[allow(non_camel_case_types)]
 type ptrdiff_t = isize;
 
-const TMP_STRIDE: usize = 16;
+// Must match the row stride used in dav1d_cdef_directions (12).
+const TMP_STRIDE: usize = 12;
 
 /// Scalar constrain function
 #[inline(always)]
@@ -195,7 +196,7 @@ fn cdef_filter_block_8bpc_inner(
             let sec_shift = damping - sec_strength.ilog2() as c_int;
 
             for y in 0..h {
-                let tmp_row = &tmp[tmp_offset + y * TMP_STRIDE..];
+                let base = tmp_offset + y * TMP_STRIDE;
                 let mut dst_row = (dst + (y as isize * stride)).slice_mut::<BitDepth8>(w);
 
                 for x in 0..w {
@@ -203,12 +204,13 @@ fn cdef_filter_block_8bpc_inner(
                     let mut sum = 0i32;
                     let mut max = px;
                     let mut min = px;
+                    let bx = (base + x) as isize;
 
                     let mut pri_tap_k = pri_tap;
                     for k in 0..2 {
                         let off1 = dav1d_cdef_directions[dir + 2][k] as isize;
-                        let p0 = tmp_row[(x as isize + off1) as usize] as i32;
-                        let p1 = tmp_row[(x as isize - off1) as usize] as i32;
+                        let p0 = tmp[(bx + off1) as usize] as i32;
+                        let p1 = tmp[(bx - off1) as usize] as i32;
 
                         sum += pri_tap_k * constrain_scalar(p0 - px, pri_strength, pri_shift);
                         sum += pri_tap_k * constrain_scalar(p1 - px, pri_strength, pri_shift);
@@ -220,10 +222,10 @@ fn cdef_filter_block_8bpc_inner(
 
                         let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
                         let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
-                        let s0 = tmp_row[(x as isize + off2) as usize] as i32;
-                        let s1 = tmp_row[(x as isize - off2) as usize] as i32;
-                        let s2 = tmp_row[(x as isize + off3) as usize] as i32;
-                        let s3 = tmp_row[(x as isize - off3) as usize] as i32;
+                        let s0 = tmp[(bx + off2) as usize] as i32;
+                        let s1 = tmp[(bx - off2) as usize] as i32;
+                        let s2 = tmp[(bx + off3) as usize] as i32;
+                        let s3 = tmp[(bx - off3) as usize] as i32;
 
                         let sec_tap = 2 - k as i32;
                         sum += sec_tap * constrain_scalar(s0 - px, sec_strength, sec_shift);
@@ -240,18 +242,19 @@ fn cdef_filter_block_8bpc_inner(
             }
         } else {
             for y in 0..h {
-                let tmp_row = &tmp[tmp_offset + y * TMP_STRIDE..];
+                let base = tmp_offset + y * TMP_STRIDE;
                 let mut dst_row = (dst + (y as isize * stride)).slice_mut::<BitDepth8>(w);
 
                 for x in 0..w {
                     let px = dst_row[x] as i32;
                     let mut sum = 0i32;
+                    let bx = (base + x) as isize;
 
                     let mut pri_tap_k = pri_tap;
                     for k in 0..2 {
                         let off = dav1d_cdef_directions[dir + 2][k] as isize;
-                        let p0 = tmp_row[(x as isize + off) as usize] as i32;
-                        let p1 = tmp_row[(x as isize - off) as usize] as i32;
+                        let p0 = tmp[(bx + off) as usize] as i32;
+                        let p1 = tmp[(bx - off) as usize] as i32;
 
                         sum += pri_tap_k * constrain_scalar(p0 - px, pri_strength, pri_shift);
                         sum += pri_tap_k * constrain_scalar(p1 - px, pri_strength, pri_shift);
@@ -267,7 +270,7 @@ fn cdef_filter_block_8bpc_inner(
         let sec_shift = damping - sec_strength.ilog2() as c_int;
 
         for y in 0..h {
-            let tmp_row = &tmp[tmp_offset + y * TMP_STRIDE..];
+            let base = tmp_offset + y * TMP_STRIDE;
             let mut dst_row = (dst + (y as isize * stride)).slice_mut::<BitDepth8>(w);
 
             for x in 0..w {
@@ -275,14 +278,15 @@ fn cdef_filter_block_8bpc_inner(
                 let mut sum = 0i32;
                 let mut max = px;
                 let mut min = px;
+                let bx = (base + x) as isize;
 
                 for k in 0..2 {
                     let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
                     let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
-                    let s0 = tmp_row[(x as isize + off2) as usize] as i32;
-                    let s1 = tmp_row[(x as isize - off2) as usize] as i32;
-                    let s2 = tmp_row[(x as isize + off3) as usize] as i32;
-                    let s3 = tmp_row[(x as isize - off3) as usize] as i32;
+                    let s0 = tmp[(bx + off2) as usize] as i32;
+                    let s1 = tmp[(bx - off2) as usize] as i32;
+                    let s2 = tmp[(bx + off3) as usize] as i32;
+                    let s3 = tmp[(bx - off3) as usize] as i32;
 
                     let sec_tap = 2 - k as i32;
                     sum += sec_tap * constrain_scalar(s0 - px, sec_strength, sec_shift);
@@ -534,7 +538,7 @@ fn cdef_filter_block_16bpc_inner(
             let sec_shift = damping - sec_strength.ilog2() as c_int;
 
             for y in 0..h {
-                let tmp_row = &tmp[tmp_offset + y * TMP_STRIDE..];
+                let base = tmp_offset + y * TMP_STRIDE;
                 let mut dst_row = (dst + (y as isize * stride)).slice_mut::<BitDepth16>(w);
 
                 for x in 0..w {
@@ -542,12 +546,13 @@ fn cdef_filter_block_16bpc_inner(
                     let mut sum = 0i32;
                     let mut max = px;
                     let mut min = px;
+                    let bx = (base + x) as isize;
 
                     let mut pri_tap_k = pri_tap;
                     for k in 0..2 {
                         let off1 = dav1d_cdef_directions[dir + 2][k] as isize;
-                        let p0 = tmp_row[(x as isize + off1) as usize] as i32;
-                        let p1 = tmp_row[(x as isize - off1) as usize] as i32;
+                        let p0 = tmp[(bx + off1) as usize] as i32;
+                        let p1 = tmp[(bx - off1) as usize] as i32;
 
                         sum += pri_tap_k * constrain_scalar(p0 - px, pri_strength, pri_shift);
                         sum += pri_tap_k * constrain_scalar(p1 - px, pri_strength, pri_shift);
@@ -559,10 +564,10 @@ fn cdef_filter_block_16bpc_inner(
 
                         let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
                         let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
-                        let s0 = tmp_row[(x as isize + off2) as usize] as i32;
-                        let s1 = tmp_row[(x as isize - off2) as usize] as i32;
-                        let s2 = tmp_row[(x as isize + off3) as usize] as i32;
-                        let s3 = tmp_row[(x as isize - off3) as usize] as i32;
+                        let s0 = tmp[(bx + off2) as usize] as i32;
+                        let s1 = tmp[(bx - off2) as usize] as i32;
+                        let s2 = tmp[(bx + off3) as usize] as i32;
+                        let s3 = tmp[(bx - off3) as usize] as i32;
 
                         let sec_tap = 2 - k as i32;
                         sum += sec_tap * constrain_scalar(s0 - px, sec_strength, sec_shift);
@@ -579,18 +584,19 @@ fn cdef_filter_block_16bpc_inner(
             }
         } else {
             for y in 0..h {
-                let tmp_row = &tmp[tmp_offset + y * TMP_STRIDE..];
+                let base = tmp_offset + y * TMP_STRIDE;
                 let mut dst_row = (dst + (y as isize * stride)).slice_mut::<BitDepth16>(w);
 
                 for x in 0..w {
                     let px = dst_row[x] as i32;
                     let mut sum = 0i32;
+                    let bx = (base + x) as isize;
 
                     let mut pri_tap_k = pri_tap;
                     for k in 0..2 {
                         let off = dav1d_cdef_directions[dir + 2][k] as isize;
-                        let p0 = tmp_row[(x as isize + off) as usize] as i32;
-                        let p1 = tmp_row[(x as isize - off) as usize] as i32;
+                        let p0 = tmp[(bx + off) as usize] as i32;
+                        let p1 = tmp[(bx - off) as usize] as i32;
 
                         sum += pri_tap_k * constrain_scalar(p0 - px, pri_strength, pri_shift);
                         sum += pri_tap_k * constrain_scalar(p1 - px, pri_strength, pri_shift);
@@ -606,7 +612,7 @@ fn cdef_filter_block_16bpc_inner(
         let sec_shift = damping - sec_strength.ilog2() as c_int;
 
         for y in 0..h {
-            let tmp_row = &tmp[tmp_offset + y * TMP_STRIDE..];
+            let base = tmp_offset + y * TMP_STRIDE;
             let mut dst_row = (dst + (y as isize * stride)).slice_mut::<BitDepth16>(w);
 
             for x in 0..w {
@@ -614,14 +620,15 @@ fn cdef_filter_block_16bpc_inner(
                 let mut sum = 0i32;
                 let mut max = px;
                 let mut min = px;
+                let bx = (base + x) as isize;
 
                 for k in 0..2 {
                     let off2 = dav1d_cdef_directions[dir + 4][k] as isize;
                     let off3 = dav1d_cdef_directions[dir + 0][k] as isize;
-                    let s0 = tmp_row[(x as isize + off2) as usize] as i32;
-                    let s1 = tmp_row[(x as isize - off2) as usize] as i32;
-                    let s2 = tmp_row[(x as isize + off3) as usize] as i32;
-                    let s3 = tmp_row[(x as isize - off3) as usize] as i32;
+                    let s0 = tmp[(bx + off2) as usize] as i32;
+                    let s1 = tmp[(bx - off2) as usize] as i32;
+                    let s2 = tmp[(bx + off3) as usize] as i32;
+                    let s3 = tmp[(bx - off3) as usize] as i32;
 
                     let sec_tap = 2 - k as i32;
                     sum += sec_tap * constrain_scalar(s0 - px, sec_strength, sec_shift);
