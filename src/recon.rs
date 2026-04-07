@@ -191,17 +191,17 @@ pub(crate) type ReadPalUVFn = fn(
 
 #[inline]
 fn read_golomb(msac: &mut MsacContext) -> u32 {
-    let mut len = 0;
-    let mut val = 1;
+    let mut len = 0u32;
+    let mut val = 1u32;
 
-    while !rav1d_msac_decode_bool_equi(msac) && len < 32 {
+    while !rav1d_msac_decode_bool_equi(msac) && len < 31 {
         len += 1;
     }
     for _ in 0..len {
         val = (val << 1) + rav1d_msac_decode_bool_equi(msac) as u32;
     }
 
-    val - 1
+    val.wrapping_sub(1)
 }
 
 trait ReadInt {
