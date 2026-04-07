@@ -18,10 +18,9 @@ fuzz_target!(|data: &[u8]| {
     // Create a single-threaded decoder with tight size limits for fuzzing.
     // 256×256 = 65536 pixels is plenty for exercising all code paths
     // without triggering OOM from adversarial frame dimensions.
-    let mut decoder = match Decoder::with_settings(Settings {
-        frame_size_limit: 256 * 256,
-        ..Settings::default()
-    }) {
+    let mut settings = Settings::default();
+    settings.frame_size_limit = 256 * 256;
+    let mut decoder = match Decoder::with_settings(settings) {
         Ok(d) => d,
         Err(_) => return,
     };

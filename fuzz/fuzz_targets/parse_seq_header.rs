@@ -17,13 +17,11 @@ fuzz_target!(|data: &[u8]| {
 
     // Disable all optional processing to focus fuzzing on the parser.
     // Tight frame size limit to avoid OOM on adversarial dimensions.
-    let settings = Settings {
-        threads: 1,
-        frame_size_limit: 256 * 256,
-        inloop_filters: InloopFilters::none(),
-        decode_frame_type: DecodeFrameType::All,
-        ..Settings::default()
-    };
+    let mut settings = Settings::default();
+    settings.threads = 1;
+    settings.frame_size_limit = 256 * 256;
+    settings.inloop_filters = InloopFilters::none();
+    settings.decode_frame_type = DecodeFrameType::All;
 
     let mut decoder = match Decoder::with_settings(settings) {
         Ok(d) => d,
