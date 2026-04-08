@@ -26,6 +26,7 @@ use crate::include::common::bitdepth::BitDepth;
 ///
 /// The closure receives `(bytes, offset, stride)` — a mutable byte slice,
 /// the byte offset to the first pixel, and the byte stride between rows.
+#[inline]
 pub fn with_pixel_guard_mut<BD: BitDepth, R>(
     pic: &crate::src::with_offset::WithOffset<&Rav1dPictureDataComponent>,
     w: usize,
