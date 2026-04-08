@@ -8,3 +8,4 @@ fuzz/corpus/
 perf.data
 perf.data.old
 .claude/worktrees/
+!fuzz/Cargo.lock
