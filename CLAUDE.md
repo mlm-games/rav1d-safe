@@ -610,10 +610,20 @@ cd /home/lilith/work/zenavif
 
 ## Known Issues
 
-### Tile threading: WORKING under forbid(unsafe_code) (v0.5.0)
+### Tile threading: MOSTLY WORKING, CDEF race remains (v0.5.3)
 
-**Status:** Tile threading (n_fc=1, n_tc>1) works in checked mode. Frame threading (n_fc>1)
-requires `unchecked`.
+**Status:** Tile threading (n_fc=1, n_tc>1) mostly works in checked mode. Frame threading
+(n_fc>1) requires `unchecked`.
+
+**CDEF tile race (OPEN, v0.5.3):** Fuzz-discovered non-deterministic DisjointMut overlap panic
+in `safe_simd/cdef.rs:1005` during tile-threaded decode (n_tc=30, n_fc=1). Thread `rav1d-worker-29`
+reads `&_[3102..3110]` while another thread holds `&mut _[2976..3104]` — 2-byte overlap at
+the super-block row boundary. This is analogous to the deblock progress barrier issue (fixed)
+but in the CDEF filter pass. The CDEF filter reads pixels from adjacent SB rows that may be
+under active reconstruction by another tile thread. Reproducer: zenavif fuzz corpus file
+`crash-3c65b028f4111d121f45bce88a818bf6e7014d1c` (7506 bytes, AVIF animation, requires high
+thread count to trigger). Fix likely needs a CDEF progress barrier similar to the deblock one,
+or narrower per-row guards in `cdef_apply.rs`.
 
 **Level cache (FIXED):** `f.lf.level` changed from `DisjointMut<Vec<u8>>` to `Vec<AtomicU8>`.
 The V filter reads entries across SB row boundaries while reconstruction writes to them
