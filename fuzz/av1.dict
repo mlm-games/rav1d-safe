@@ -1,10 +1,583 @@
-# AV1 OBU type bytes and markers
-"\x0A\x07"
-"\x0A\x0B"
-"\x12"
-"\x32"
-"\x0A"
-"\x22"
-"\x2A"
-"\x30"
-"\x38"
+# AV1 fuzzing dictionary for rav1d-safe
+# Comprehensive coverage of OBU parsing, sequence/frame headers,
+# metadata, entropy coding, and container formats.
+#
+# OBU header byte encoding: forbidden(1)|type(4)|has_ext(1)|has_size(1)|reserved(1)
+# Extension byte: temporal_id(3)|spatial_id(2)|reserved(3)
+
+# ===========================================================================
+# OBU header bytes — no extension, WITH has_size_field
+# ===========================================================================
+obu_seq_hdr="\x0A"
+obu_temporal_delimiter="\x12"
+obu_frame_hdr="\x1A"
+obu_tile_group="\x22"
+obu_metadata="\x2A"
+obu_frame="\x32"
+obu_redundant_frame_hdr="\x3A"
+obu_tile_list="\x42"
+obu_padding="\x7A"
+
+# ===========================================================================
+# OBU header bytes — no extension, WITHOUT has_size_field
+# ===========================================================================
+obu_seq_hdr_nosize="\x08"
+obu_td_nosize="\x10"
+obu_frame_hdr_nosize="\x18"
+obu_tile_group_nosize="\x20"
+obu_metadata_nosize="\x28"
+obu_frame_nosize="\x30"
+obu_redundant_fh_nosize="\x38"
+obu_tile_list_nosize="\x40"
+obu_padding_nosize="\x78"
+
+# ===========================================================================
+# OBU header bytes — WITH extension, WITH has_size_field
+# ===========================================================================
+obu_seq_hdr_ext="\x0E"
+obu_td_ext="\x16"
+obu_frame_hdr_ext="\x1E"
+obu_tile_group_ext="\x26"
+obu_metadata_ext="\x2E"
+obu_frame_ext="\x36"
+obu_redundant_fh_ext="\x3E"
+obu_tile_list_ext="\x46"
+obu_padding_ext="\x7E"
+
+# ===========================================================================
+# OBU header bytes — WITH extension, WITHOUT has_size_field
+# ===========================================================================
+obu_seq_hdr_ext_nosize="\x0C"
+obu_td_ext_nosize="\x14"
+obu_frame_hdr_ext_nosize="\x1C"
+obu_tile_group_ext_nosize="\x24"
+obu_metadata_ext_nosize="\x2C"
+obu_frame_ext_nosize="\x34"
+obu_redundant_fh_ext_nosize="\x3C"
+obu_tile_list_ext_nosize="\x44"
+obu_padding_ext_nosize="\x7C"
+
+# ===========================================================================
+# OBU header bytes — forbidden bit SET (should be rejected)
+# ===========================================================================
+obu_forbidden_seq_hdr="\x8A"
+obu_forbidden_td="\x92"
+obu_forbidden_frame="\xB2"
+
+# ===========================================================================
+# Invalid/reserved OBU types (0, 9-14) — triggers unknown OBU path
+# ===========================================================================
+obu_reserved_type_0="\x02"
+obu_reserved_type_9="\x4A"
+obu_reserved_type_10="\x52"
+obu_reserved_type_11="\x5A"
+obu_reserved_type_12="\x62"
+obu_reserved_type_13="\x6A"
+obu_reserved_type_14="\x72"
+
+# ===========================================================================
+# Extension header bytes — temporal_id(3)|spatial_id(2)|reserved(3)
+# ===========================================================================
+ext_t0_s0="\x00"
+ext_t1_s0="\x20"
+ext_t2_s0="\x40"
+ext_t3_s0="\x60"
+ext_t7_s0="\xE0"
+ext_t0_s1="\x08"
+ext_t0_s2="\x10"
+ext_t0_s3="\x18"
+ext_t7_s3="\xF8"
+
+# ===========================================================================
+# LEB128 size field patterns (used for obu_size)
+# ===========================================================================
+leb128_0="\x00"
+leb128_1="\x01"
+leb128_2="\x02"
+leb128_7="\x07"
+leb128_10="\x0A"
+leb128_16="\x10"
+leb128_63="\x3F"
+leb128_64="\x40"
+leb128_127="\x7F"
+leb128_128="\x80\x01"
+leb128_255="\xFF\x01"
+leb128_256="\x80\x02"
+leb128_1023="\xFF\x07"
+leb128_16383="\xFF\x7F"
+leb128_16384="\x80\x80\x01"
+leb128_max_2byte="\xFF\x7F"
+leb128_max_3byte="\xFF\xFF\x7F"
+leb128_max_4byte="\xFF\xFF\xFF\x7F"
+# Overlong/invalid LEB128 (more bit set but exceeds 32-bit)
+leb128_overlong="\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF"
+leb128_overflow="\x80\x80\x80\x80\x80\x80\x80\x80"
+
+# ===========================================================================
+# Sequence header — profile (3 bits at MSB of first byte after OBU header)
+# Profile 0 (Main): 000xxxxx
+# Profile 1 (High): 001xxxxx
+# Profile 2 (Professional): 010xxxxx
+# ===========================================================================
+seq_profile_0="\x00"
+seq_profile_1="\x20"
+seq_profile_2="\x40"
+seq_profile_invalid="\x60"
+
+# ===========================================================================
+# Sequence header — still_picture + reduced_still_picture_header patterns
+# After profile(3): still_picture(1)|reduced_still_picture(1)
+# ===========================================================================
+seq_not_still="\x00"
+seq_still_picture="\x10"
+seq_still_reduced="\x18"
+
+# ===========================================================================
+# Sequence header — common minimal sequence headers
+# OBU header (0x0A) + profile 0 + still + reduced + level bits + dims
+# ===========================================================================
+# Minimal reduced still picture: profile=0, still=1, reduced=1, level=2.0(000,00)
+# then width_n_bits-1=0(0000), height_n_bits-1=0(0000), width=0(0), height=0(0)
+seq_hdr_minimal_1x1="\x0A\x07\x18\x00\x00\x80"
+# With has_size, size=6 bytes
+seq_hdr_with_size="\x0A\x06\x18\x00\x00\x80"
+
+# ===========================================================================
+# Sequence header — level values (major_level(3)|minor_level(2))
+# Levels: 2.0=000|00, 2.1=000|01, 3.0=001|00, 3.1=001|01,
+#         4.0=010|00, 5.0=011|00, 5.1=011|01, 6.0=100|00, 6.1=100|01
+# ===========================================================================
+level_2_0="\x00"
+level_2_1="\x04"
+level_3_0="\x08"
+level_3_1="\x0C"
+level_4_0="\x10"
+level_4_1="\x14"
+level_5_0="\x18"
+level_5_1="\x1C"
+level_6_0="\x20"
+level_6_1="\x24"
+level_6_2="\x28"
+level_6_3="\x2C"
+
+# ===========================================================================
+# Sequence header — color config
+# color_primaries values (8-bit field in color_description)
+# ===========================================================================
+cp_bt709="\x01"
+cp_unknown="\x02"
+cp_bt470m="\x04"
+cp_bt470bg="\x05"
+cp_bt601="\x06"
+cp_smpte240="\x07"
+cp_film="\x08"
+cp_bt2020="\x09"
+cp_xyz="\x0A"
+cp_smpte431="\x0B"
+cp_smpte432="\x0C"
+cp_ebu3213="\x16"
+
+# ===========================================================================
+# transfer_characteristics values (8-bit)
+# ===========================================================================
+tc_bt709="\x01"
+tc_unknown="\x02"
+tc_bt470m="\x04"
+tc_bt470bg="\x05"
+tc_bt601="\x06"
+tc_smpte240="\x07"
+tc_linear="\x08"
+tc_log100="\x09"
+tc_log100_sqrt10="\x0A"
+tc_iec61966="\x0B"
+tc_bt1361="\x0C"
+tc_srgb="\x0D"
+tc_bt2020_10bit="\x0E"
+tc_bt2020_12bit="\x0F"
+tc_smpte2084_pq="\x10"
+tc_smpte428="\x11"
+tc_hlg="\x12"
+
+# ===========================================================================
+# matrix_coefficients values (8-bit)
+# ===========================================================================
+mc_identity="\x00"
+mc_bt709="\x01"
+mc_unknown="\x02"
+mc_fcc="\x04"
+mc_bt470bg="\x05"
+mc_bt601="\x06"
+mc_smpte240="\x07"
+mc_smpte_ycgco="\x08"
+mc_bt2020_ncl="\x09"
+mc_bt2020_cl="\x0A"
+mc_smpte2085="\x0B"
+mc_chromat_ncl="\x0C"
+mc_chromat_cl="\x0D"
+mc_ictcp="\x0E"
+
+# ===========================================================================
+# Chroma sample position (2-bit field, stored in higher bits of a byte)
+# ===========================================================================
+chr_unknown="\x00"
+chr_vertical="\x01"
+chr_colocated="\x02"
+chr_reserved="\x03"
+
+# ===========================================================================
+# Frame header — frame_type values (2-bit field)
+# KEY=0, INTER=1, INTRA_ONLY=2, SWITCH=3
+# ===========================================================================
+frame_type_key="\x00"
+frame_type_inter="\x01"
+frame_type_intra="\x02"
+frame_type_switch="\x03"
+
+# ===========================================================================
+# Frame header — common quantization values
+# base_q_idx (8-bit, 0-255)
+# ===========================================================================
+qindex_0="\x00"
+qindex_1="\x01"
+qindex_32="\x20"
+qindex_64="\x40"
+qindex_128="\x80"
+qindex_200="\xC8"
+qindex_255="\xFF"
+
+# ===========================================================================
+# Frame header — TX mode values (Only4x4=0, Largest=1, Switchable=2)
+# ===========================================================================
+tx_only_4x4="\x00"
+tx_largest="\x01"
+tx_switchable="\x02"
+
+# ===========================================================================
+# Frame header — filter mode (3-bit values)
+# Regular8Tap=0, Smooth8Tap=1, Sharp8Tap=2, Bilinear=3, Switchable=4
+# ===========================================================================
+filter_regular="\x00"
+filter_smooth="\x01"
+filter_sharp="\x02"
+filter_bilinear="\x03"
+filter_switchable="\x04"
+
+# ===========================================================================
+# Frame header — restoration type (2-bit field per plane)
+# None=0, Switchable=1, Wiener=2, SgrProj=3
+# ===========================================================================
+rest_none="\x00"
+rest_switchable="\x01"
+rest_wiener="\x02"
+rest_sgrproj="\x03"
+
+# ===========================================================================
+# Metadata OBU — metadata type (LEB128 encoded)
+# HdrCll=1, HdrMdcv=2, Scalability=3, ItutT35=4, Timecode=5
+# ===========================================================================
+meta_hdr_cll="\x01"
+meta_hdr_mdcv="\x02"
+meta_scalability="\x03"
+meta_itut_t35="\x04"
+meta_timecode="\x05"
+# Invalid/unknown metadata type
+meta_unknown_255="\xFF\x01"
+
+# ===========================================================================
+# Metadata OBU — HDR Content Light Level (2x 16-bit values)
+# max_content_light_level(16) + max_frame_average_light_level(16)
+# ===========================================================================
+hdr_cll_1000_400="\x03\xE8\x01\x90"
+hdr_cll_4000_1000="\x0F\xA0\x03\xE8"
+hdr_cll_10000_500="\x27\x10\x01\xF4"
+hdr_cll_zeros="\x00\x00\x00\x00"
+hdr_cll_max="\xFF\xFF\xFF\xFF"
+
+# ===========================================================================
+# Metadata OBU — ITU-T T.35 country codes
+# ===========================================================================
+t35_usa="\xB5"
+t35_japan="\xFF\x28"
+
+# ===========================================================================
+# Common multi-byte OBU sequences
+# ===========================================================================
+# Temporal delimiter OBU (complete: header + size=0)
+td_complete="\x12\x00"
+# Temporal delimiter with extension (header + ext + size=0)
+td_ext_complete="\x16\x00\x00"
+
+# Sequence header OBU start (header + small size)
+seq_hdr_start_small="\x0A\x07"
+seq_hdr_start_medium="\x0A\x0B"
+seq_hdr_start_large="\x0A\x20"
+
+# Frame OBU start
+frame_start_small="\x32\x01"
+frame_start_medium="\x32\x10"
+frame_start_large="\x32\x80\x01"
+
+# Frame header OBU start
+frame_hdr_start="\x1A\x04"
+frame_hdr_start_medium="\x1A\x10"
+
+# Tile group OBU start
+tile_grp_start="\x22\x01"
+tile_grp_start_medium="\x22\x10"
+
+# Metadata OBU with HDR CLL type
+metadata_cll="\x2A\x06\x01"
+# Metadata OBU with MDCV type
+metadata_mdcv="\x2A\x1A\x02"
+# Metadata OBU with ITU-T T.35 type
+metadata_t35="\x2A\x08\x04"
+
+# Padding OBU with various sizes
+padding_empty="\x7A\x00"
+padding_small="\x7A\x04\x00\x00\x00\x00"
+
+# ===========================================================================
+# Common frame dimension patterns (width/height as variable-bit fields)
+# width_n_bits-1(4) | height_n_bits-1(4) | max_width-1(n) | max_height-1(n)
+# ===========================================================================
+# 1-bit dims: 0000|0000 → 1x1 (width=0, height=0)
+dim_1x1="\x00\x00"
+# 4-bit dims: 0011|0011 → up to 16x16
+dim_4bit="\x33"
+# 8-bit dims: 0111|0111 → up to 256x256
+dim_8bit="\x77"
+# 12-bit dims: 1011|1011 → up to 4096x4096
+dim_12bit="\xBB"
+# 16-bit dims: 1111|1111 → up to 65536x65536
+dim_16bit="\xFF"
+
+# ===========================================================================
+# Common small dimension values (LE16 for width/height-1)
+# ===========================================================================
+dim_val_0="\x00\x00"
+dim_val_1="\x01\x00"
+dim_val_7="\x07\x00"
+dim_val_15="\x0F\x00"
+dim_val_31="\x1F\x00"
+dim_val_63="\x3F\x00"
+dim_val_127="\x7F\x00"
+dim_val_255="\xFF\x00"
+dim_val_319="\x3F\x01"
+dim_val_351="\x5F\x01"
+dim_val_639="\x7F\x02"
+dim_val_719="\xCF\x02"
+dim_val_1079="\x37\x04"
+dim_val_1919="\x7F\x07"
+dim_val_2159="\x6F\x08"
+dim_val_3839="\xFF\x0E"
+dim_val_4095="\xFF\x0F"
+dim_val_7679="\xFF\x1D"
+dim_val_8191="\xFF\x1F"
+
+# ===========================================================================
+# Superblock size flag (sb128): 0=64x64 SB, 1=128x128 SB
+# ===========================================================================
+sb_64="\x00"
+sb_128="\x01"
+
+# ===========================================================================
+# Film grain params present flag
+# ===========================================================================
+fg_absent="\x00"
+fg_present="\x01"
+
+# ===========================================================================
+# CDEF parameters — damping(2)|n_bits(2) packed
+# ===========================================================================
+cdef_damping3_bits0="\x00"
+cdef_damping4_bits1="\x05"
+cdef_damping5_bits2="\x0A"
+cdef_damping6_bits3="\x0F"
+
+# ===========================================================================
+# Loop filter levels — level_y[0](6)|level_y[1](6) packed into ~2 bytes
+# ===========================================================================
+lf_level_0_0="\x00\x00"
+lf_level_32_32="\x80\x80"
+lf_level_63_63="\xFC\xFC"
+
+# ===========================================================================
+# Segmentation — 8 segments, each with delta_q, delta_lf, ref, skip, globalmv
+# ===========================================================================
+seg_disabled="\x00"
+seg_all_flags="\xFF"
+
+# ===========================================================================
+# Warped motion type (2-bit): Identity=0, Translation=1, RotZoom=2, Affine=3
+# ===========================================================================
+warp_identity="\x00"
+warp_translation="\x01"
+warp_rotzoom="\x02"
+warp_affine="\x03"
+
+# ===========================================================================
+# Adaptive boolean (screen_content_tools, force_integer_mv)
+# Off=0, On=1, Adaptive=2
+# ===========================================================================
+adaptive_off="\x00"
+adaptive_on="\x01"
+adaptive_adaptive="\x02"
+
+# ===========================================================================
+# Trailing bits pattern (trailing_one_bit=1, then zeros to byte boundary)
+# ===========================================================================
+trailing_1="\x80"
+trailing_01="\x40"
+trailing_001="\x20"
+trailing_0001="\x10"
+trailing_00001="\x08"
+
+# ===========================================================================
+# IVF container header (common test wrapper for AV1 bitstreams)
+# ===========================================================================
+ivf_magic="DKIF"
+ivf_codec="AV01"
+# Full IVF header: DKIF + version(2) + header_len(2) + codec(4)
+ivf_header_start="DKIF\x00\x00\x20\x00AV01"
+
+# ===========================================================================
+# AVIF/ISOBMFF container markers (AV1 in AVIF files)
+# ===========================================================================
+ftyp="ftyp"
+avif="avif"
+mif1="mif1"
+miaf="miaf"
+mdat="mdat"
+moov="moov"
+meta="meta"
+iloc="iloc"
+iinf="iinf"
+pitm="pitm"
+ipco="ipco"
+ipma="ipma"
+ispe="ispe"
+av01="av01"
+av1C="av1C"
+iprp="iprp"
+
+# ===========================================================================
+# AV1 codec configuration box (av1C) patterns
+# marker(1)=1|version(7)=1|seq_profile(3)|seq_level_idx_0(5)|...
+# ===========================================================================
+av1c_profile0_level31="\x81\x04"
+av1c_profile0_level51="\x81\x0C"
+av1c_profile1_level51="\x81\x2C"
+
+# ===========================================================================
+# Annex B / Section 5 low overhead bitstream markers
+# temporal_unit_size (LEB128) + frame_unit_size (LEB128) + obu_length (LEB128)
+# ===========================================================================
+annexb_small_tu="\x0A\x0A"
+annexb_medium_tu="\x80\x01\x80\x01"
+
+# ===========================================================================
+# Byte patterns that trigger edge cases in bit reading
+# ===========================================================================
+all_zeros="\x00\x00\x00\x00"
+all_ones="\xFF\xFF\xFF\xFF"
+alternating_01="\x55\x55\x55\x55"
+alternating_10="\xAA\xAA\xAA\xAA"
+byte_7f="\x7F\x7F\x7F\x7F"
+byte_80="\x80\x80\x80\x80"
+byte_fe="\xFE\xFE\xFE\xFE"
+single_bit_set="\x01\x00\x00\x00"
+
+# ===========================================================================
+# Pixel layout values: I400=0, I420=1, I422=2, I444=3
+# ===========================================================================
+layout_i400="\x00"
+layout_i420="\x01"
+layout_i422="\x02"
+layout_i444="\x03"
+
+# ===========================================================================
+# show_existing_frame patterns (existing_frame_idx is 3 bits, 0-7)
+# ===========================================================================
+show_existing_0="\x00"
+show_existing_7="\x07"
+
+# ===========================================================================
+# Reference frame indices (3 bits each, 7 refs per frame)
+# ===========================================================================
+ref_idx_0="\x00"
+ref_idx_7="\x07"
+# All refs point to slot 0
+refs_all_zero="\x00\x00\x00"
+# All refs point to slot 7
+refs_all_seven="\xFF\xFF\xFF"
+
+# ===========================================================================
+# Primary reference frame (3 bits, 7=PRIMARY_REF_NONE)
+# ===========================================================================
+primary_ref_none="\x07"
+primary_ref_0="\x00"
+
+# ===========================================================================
+# Order hint (8 bits max)
+# ===========================================================================
+order_hint_0="\x00"
+order_hint_1="\x01"
+order_hint_128="\x80"
+order_hint_255="\xFF"
+
+# ===========================================================================
+# Refresh frame flags (8-bit bitmask, one bit per reference slot)
+# ===========================================================================
+refresh_none="\x00"
+refresh_all="\xFF"
+refresh_slot0="\x01"
+refresh_slot7="\x80"
+
+# ===========================================================================
+# Delta Q / Delta LF signed values (7-bit signed, preceded by present flag)
+# ===========================================================================
+deltaq_minus1="\xFF"
+deltaq_plus1="\x02"
+deltaq_minus63="\x7F"
+deltaq_plus63="\xFE"
+
+# ===========================================================================
+# Loop filter mode_ref_deltas — default values (7-bit signed)
+# ref_delta defaults: [1, 0, 0, 0, -1, 0, -1, -1]
+# ===========================================================================
+lf_ref_delta_plus1="\x02"
+lf_ref_delta_minus1="\x7F"
+
+# ===========================================================================
+# Super-resolution denominator (3-bit: value + 9, range 9-16)
+# ===========================================================================
+superres_denom_9="\x00"
+superres_denom_16="\x07"
+
+# ===========================================================================
+# Tile size bytes minus 1 (2-bit: 0=1byte, 1=2bytes, 2=3bytes, 3=4bytes)
+# ===========================================================================
+tile_size_1byte="\x00"
+tile_size_4bytes="\x03"
+
+# ===========================================================================
+# Global motion — warp model parameters
+# Typical global motion param patterns
+# ===========================================================================
+gm_identity_type="\x00"
+gm_translation_type="\x01"
+gm_rotzoom_type="\x02"
+gm_affine_type="\x03"
+
+# ===========================================================================
+# Complete minimal valid OBU sequences
+# ===========================================================================
+# TD + SeqHdr (reduced still, 1x1, profile 0, level 2.0)
+# TD: 0x12 0x00 | SeqHdr: 0x0A size profile+still+reduced+level+dims+trailing
+minimal_td_seq="\x12\x00\x0A\x06\x18\x00\x00\x80"
+
+# TD alone (often the first OBU)
+td_only="\x12\x00"
+
+# SeqHdr + Frame (common pair)
+seq_then_frame="\x0A\x07\x32\x01"
