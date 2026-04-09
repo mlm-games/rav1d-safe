@@ -644,6 +644,10 @@ DeblockRows for sbrow N-1 completes. Only active when n_tc>1 and loopfilter leve
 In C dav1d this race is benign (raw pointers), but rav1d-safe's DisjointMut correctly
 detects it. Regression test: `tests/tile_threading_overlap.rs`.
 
+**recon.rs subtract overflow (OPEN, v0.5.3):** Fuzz-discovered via heic/fuzz_decode_av1.
+Panic at `src/recon.rs:204` — "attempt to subtract with overflow". Triggered by crafted AV1
+bitstream through the heic AVIF decode path. Separate from the CDEF race above.
+
 **Other fixes for threading:**
 - `ipred_prepare.rs`: per-pixel column reads instead of stride-wide strided_slice
 - `cdef_apply.rs`: per-row backup2lines instead of 2*stride wide guard
