@@ -272,10 +272,14 @@ fn read_mv_residual(ts_c: &mut Rav1dTileStateContext, ref_mv: &mut Mv, mv_prec: 
     let mv_cdf = &mut ts_c.cdf.mv;
 
     if mv_joint.contains(MVJoint::V) {
-        ref_mv.y += read_mv_component_diff(&mut ts_c.msac, &mut mv_cdf.comp[0], mv_prec) as i16;
+        ref_mv.y = ref_mv
+            .y
+            .wrapping_add(read_mv_component_diff(&mut ts_c.msac, &mut mv_cdf.comp[0], mv_prec) as i16);
     }
     if mv_joint.contains(MVJoint::H) {
-        ref_mv.x += read_mv_component_diff(&mut ts_c.msac, &mut mv_cdf.comp[1], mv_prec) as i16;
+        ref_mv.x = ref_mv
+            .x
+            .wrapping_add(read_mv_component_diff(&mut ts_c.msac, &mut mv_cdf.comp[1], mv_prec) as i16);
     }
 }
 
