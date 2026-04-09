@@ -9,7 +9,20 @@ repository = "https://github.com/imazen/rav1d-safe"
 documentation = "https://docs.rs/rav1d-disjoint-mut"
 keywords = ["concurrency", "mutex", "slice", "disjoint", "borrow"]
 categories = ["concurrency", "no-std", "data-structures"]
-exclude = ["justfile"]
+exclude = [
+    "justfile",
+    "CLAUDE.md",
+    "CONTEXT-HANDOFF.md",
+    "FEEDBACK.md",
+    ".claude/",
+    ".superwork/",
+    ".zenbench/",
+    "copter-report/",
+    ".github/",
+    "Cross.toml",
+    "Cargo.toml.original.txt",
+    "fuzz/",
+]
 
 [features]
 default = ["std"]

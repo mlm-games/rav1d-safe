@@ -3,9 +3,22 @@ Cargo.lock
 *.orig
 *.rlib
 test-vectors/
+fuzz/target/
 fuzz/artifacts/
 fuzz/corpus/
+fuzz/coverage/
+fuzz-*.log
+*.profraw
+*.profdata
 perf.data
 perf.data.old
 .claude/worktrees/
 !fuzz/Cargo.lock
+
+# Tooling noise
+.superwork/
+copter-report/
+.zenbench/
+.external-cache/
+Cargo.toml.original.txt
+*.rs.local

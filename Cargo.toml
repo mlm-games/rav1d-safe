@@ -19,9 +19,15 @@ exclude = [
     "meson*", "tests/", "doc/", "package/", "test-vectors/", "fuzz/", "scripts/",
     "src/arm/", "src/x86/",
     ".github/", "justfile", "gcovr.cfg", "retranspile.sh", "rust_out",
-    "CLAUDE.md", "FEEDBACK.md", "STRATEGY.md", "SPEC.md",
+    "CLAUDE.md", "CONTEXT-HANDOFF.md", "FEEDBACK.md", "STRATEGY.md", "SPEC.md",
     "CAPI.md", "CONTRIBUTING.md", "THANKS.md", "NEWS.dav1d",
     "DISJOINT_MUT_ANALYSIS.md", "REAL_UNSAFE_ANALYSIS.md", "TEST-VECTORS-README.md",
+    ".claude/",
+    ".superwork/",
+    ".zenbench/",
+    "copter-report/",
+    "Cross.toml",
+    "Cargo.toml.original.txt",
 ]
 
 [lib]
