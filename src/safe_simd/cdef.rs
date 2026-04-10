@@ -982,29 +982,30 @@ pub(super) fn padding_8bpc(
 
     // Handle top edge (safe slice access via DisjointMut)
     if edges.contains(CdefEdgeFlags::HAVE_TOP) {
-        // Adjust offset by -2 so index 0 corresponds to 2 pixels left of block
-        let x_start = if edges.contains(CdefEdgeFlags::HAVE_LEFT) {
-            0usize
-        } else {
-            2
-        };
+        let have_left = edges.contains(CdefEdgeFlags::HAVE_LEFT);
+        // Guard offset: only extend left by 2 when HAVE_LEFT is set (need left
+        // border pixels). Without HAVE_LEFT, start at offset+0 to keep the guard
+        // within this row's bounds — avoids overlapping with backup2lines writing
+        // to the adjacent row in cdef_line_buf.
+        let left_ext = if have_left { 2usize } else { 0 };
         let x_end = if edges.contains(CdefEdgeFlags::HAVE_RIGHT) {
             w + 4
         } else {
             w + 2
         };
+        let guard_len = x_end - 2 + left_ext; // pixels to lock: left_ext + (x_end - 2)
         for dy in 0..2usize {
             let row_offset = tmp_offset - (2 - dy) * TMP_STRIDE;
-            let top_row = WithOffset {
-                data: top.data,
-                offset: top
-                    .offset
-                    .wrapping_sub(2)
-                    .wrapping_add_signed(dy as isize * stride),
-            };
-            let slice = top_row.data.slice_as::<_, u8>((top_row.offset.., ..x_end));
-            for x in x_start..x_end {
-                tmp[row_offset + x - 2] = slice[x] as u16;
+            let guard_start = top
+                .offset
+                .wrapping_sub(left_ext)
+                .wrapping_add_signed(dy as isize * stride);
+            let slice = top.data.slice_as::<_, u8>((guard_start.., ..guard_len));
+            // Copy pixels: slice[0..left_ext] are left border (if present),
+            // slice[left_ext..] are the block + right border.
+            // In tmp, positions 0..left_ext map to left border, left_ext.. to block.
+            for i in 0..guard_len {
+                tmp[row_offset + i - left_ext] = slice[i] as u16;
             }
         }
     }
@@ -1387,28 +1388,23 @@ pub(super) fn padding_16bpc(
     // Handle top edge (safe slice access via DisjointMut)
     if edges.contains(CdefEdgeFlags::HAVE_TOP) {
         let pixel_stride = dst.pixel_stride::<BitDepth16>();
-        let x_start = if edges.contains(CdefEdgeFlags::HAVE_LEFT) {
-            0usize
-        } else {
-            2
-        };
+        let have_left = edges.contains(CdefEdgeFlags::HAVE_LEFT);
+        let left_ext = if have_left { 2usize } else { 0 };
         let x_end = if edges.contains(CdefEdgeFlags::HAVE_RIGHT) {
             w + 4
         } else {
             w + 2
         };
+        let guard_len = x_end - 2 + left_ext;
         for dy in 0..2usize {
             let row_offset = tmp_offset - (2 - dy) * TMP_STRIDE;
-            let top_row = WithOffset {
-                data: top.data,
-                offset: top
-                    .offset
-                    .wrapping_sub(2)
-                    .wrapping_add_signed(dy as isize * pixel_stride),
-            };
-            let slice = top_row.data.slice_as::<_, u16>((top_row.offset.., ..x_end));
-            for x in x_start..x_end {
-                tmp[row_offset + x - 2] = slice[x];
+            let guard_start = top
+                .offset
+                .wrapping_sub(left_ext)
+                .wrapping_add_signed(dy as isize * pixel_stride);
+            let slice = top.data.slice_as::<_, u16>((guard_start.., ..guard_len));
+            for i in 0..guard_len {
+                tmp[row_offset + i - left_ext] = slice[i];
             }
         }
     }
