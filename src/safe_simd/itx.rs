@@ -1979,9 +1979,7 @@ fn flipadst16_1d(c: &mut [i32], stride: usize, min: i32, max: i32) {
     adst16_1d(c, stride, min, max);
     // Swap in place
     for i in 0..8 {
-        let tmp = c[i * stride];
-        c[i * stride] = c[(15 - i) * stride];
-        c[(15 - i) * stride] = tmp;
+        c.swap(i * stride, (15 - i) * stride);
     }
 }
 
@@ -6417,12 +6415,10 @@ mod tests {
 // ADST 4x4 TRANSFORMS
 // ============================================================================
 
-/// ADST4 coefficients (derived from spec)
-/// The ADST4 uses these key values:
-/// - 1321, 3803, 2482, 3344
-/// The code uses (val - 4096) trick to avoid overflow
-
-/// ADST4 1D transform applied to a single 4-element vector (returns 4 outputs)
+/// ADST4 1D transform applied to a single 4-element vector (returns 4 outputs).
+///
+/// ADST4 coefficients (derived from spec): 1321, 3803, 2482, 3344.
+/// The code uses (val - 4096) trick to avoid overflow.
 #[inline(always)]
 fn adst4_1d_scalar(
     in0: i32,

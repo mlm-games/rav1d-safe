@@ -1368,7 +1368,7 @@ fn read_coef_tree<BD: BitDepth>(
                 CfSelect::Task
             };
         if t.frame_thread.pass != 2 {
-            let ts_c = ts_c.as_deref_mut().unwrap();
+            let ts_c = ts_c.unwrap();
             eob = decode_coefs::<BD>(
                 f,
                 t.ts,
@@ -2169,7 +2169,7 @@ pub(crate) fn rav1d_recon_b_intra<BD: BitDepth>(
             }
 
             let intra_flags = sm_flag(&f.a[t.a], bx4 as usize)
-                | sm_flag(&mut t.l, by4 as usize)
+                | sm_flag(&t.l, by4 as usize)
                 | intra_edge_filter_flag;
             let sb_has_tr = if (init_x + 16) < w4 {
                 true
@@ -2480,7 +2480,7 @@ pub(crate) fn rav1d_recon_b_intra<BD: BitDepth>(
                         bd,
                     );
                 }
-                if debug_block_info!(&*f, t.b) && DEBUG_B_PIXELS {
+                if debug_block_info!(f, t.b) && DEBUG_B_PIXELS {
                     ac_dump(ac, 4 * cbw4 as usize, 4 * cbh4 as usize, "ac");
                     for pl in 1..3 {
                         let uv_dst = cur_data[pl].with_offset::<BD>() + uv_off;
@@ -2535,8 +2535,7 @@ pub(crate) fn rav1d_recon_b_intra<BD: BitDepth>(
                 }
             }
 
-            let sm_uv_fl =
-                sm_uv_flag(&f.a[t.a], cbx4 as usize) | sm_uv_flag(&mut t.l, cby4 as usize);
+            let sm_uv_fl = sm_uv_flag(&f.a[t.a], cbx4 as usize) | sm_uv_flag(&t.l, cby4 as usize);
             let uv_sb_has_tr = if init_x + 16 >> ss_hor < cw4 {
                 true
             } else if init_y != 0 {
@@ -4102,7 +4101,7 @@ pub(crate) fn rav1d_read_pal_plane<BD: BitDepth>(
                 (*cache).as_::<c_int>()
             );
         }
-        print!("{}, pal=", if cache.len() != 0 { "]" } else { "[]" });
+        print!("{}, pal=", if !cache.is_empty() { "]" } else { "[]" });
         for (n, pal) in pal.iter().enumerate() {
             print!(
                 "{}{:02x}",

@@ -414,7 +414,7 @@ impl save_tmvs::Fn {
         assert!(row_start8 >= 0);
         assert!((row_end8 - row_start8) as u32 <= 16);
 
-        let rp = &*rp.as_ref().unwrap();
+        let rp = rp.as_ref().unwrap();
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "asm")] {
@@ -1164,7 +1164,7 @@ pub(crate) fn rav1d_refmvs_find(
             let bw8 = bw4 >> 1;
             let rbi = rbi + bh8 as usize * stride;
             let has_bottom = by8 + bh8 < cmp::min(rt.tile_row.end >> 1, (by8 & !7) + 8);
-            if has_bottom && bx8 - 1 >= cmp::max(rt.tile_col.start >> 1, bx8 & !7) {
+            if has_bottom && bx8 > cmp::max(rt.tile_col.start >> 1, bx8 & !7) {
                 let rb = *rf.rp_proj.index(rbi - 1);
                 add_temporal_candidate(rf, mvstack, cnt, rb, r#ref, None, frame_hdr);
             }

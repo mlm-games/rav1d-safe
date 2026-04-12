@@ -133,7 +133,7 @@ pub(crate) fn rav1d_apply_grain_row<BD: BitDepth>(
     let seq_hdr = &***out.seq_hdr.as_ref().unwrap();
     let frame_hdr = &***out.frame_hdr.as_ref().unwrap();
     let data = &frame_hdr.film_grain.data;
-    let data_c = &data.clone().into();
+    let data_c = &data.clone();
     let in_data = &r#in.data.as_ref().unwrap().data;
     let out_data = &out.data.as_ref().unwrap().data;
     let w = out.p.w as usize;
@@ -226,7 +226,7 @@ pub(crate) fn rav1d_apply_grain<BD: BitDepth>(
     r#in: &Rav1dPicture,
 ) {
     let mut grain = Default::default();
-    let rows = (out.p.h as usize + FG_BLOCK_SIZE - 1) / FG_BLOCK_SIZE;
+    let rows = (out.p.h as usize).div_ceil(FG_BLOCK_SIZE);
 
     rav1d_prep_grain::<BD>(dsp, out, r#in, &mut grain);
     for row in 0..rows {

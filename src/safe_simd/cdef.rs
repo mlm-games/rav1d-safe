@@ -2267,9 +2267,7 @@ pub fn cdef_dir_dispatch<BD: BitDepth>(
 ) -> Option<c_int> {
     use crate::include::common::bitdepth::BPC;
 
-    let Some(token) = crate::src::cpu::summon_avx2() else {
-        return None;
-    };
+    let token = crate::src::cpu::summon_avx2()?;
 
     match BD::BPC {
         BPC::BPC8 => Some(cdef_find_dir_simd_8bpc(token, dst, variance)),

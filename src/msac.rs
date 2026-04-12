@@ -216,6 +216,7 @@ impl From<&[u8]> for MsacAsmContextBuf {
 /// Uses `usize` indices instead of raw pointers, so this type is
 /// automatically `Send + Sync` without any unsafe impls.
 #[cfg(not(asm_msac))]
+#[derive(Default)]
 struct MsacAsmContextBuf {
     /// Byte index of current position within `MsacContext::data`.
     pos: usize,
@@ -226,13 +227,8 @@ struct MsacAsmContextBuf {
 }
 
 #[cfg(not(asm_msac))]
-impl Default for MsacAsmContextBuf {
-    fn default() -> Self {
-        Self { pos: 0, end: 0 }
-    }
-}
-
 #[cfg_attr(asm_msac, repr(C))]
+#[derive(Default)]
 pub struct MsacAsmContext {
     buf: MsacAsmContextBuf,
     pub dif: EcWin,
@@ -246,21 +242,6 @@ pub struct MsacAsmContext {
         n_symbols: usize,
         _cdf_len: usize,
     ) -> c_uint,
-}
-
-impl Default for MsacAsmContext {
-    fn default() -> Self {
-        Self {
-            buf: Default::default(),
-            dif: Default::default(),
-            rng: Default::default(),
-            cnt: Default::default(),
-            allow_update_cdf: Default::default(),
-
-            #[cfg(all(asm_msac, target_arch = "x86_64"))]
-            symbol_adapt16: Rav1dMsacDSPContext::default().symbol_adapt16,
-        }
-    }
 }
 
 impl MsacAsmContext {

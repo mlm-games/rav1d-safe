@@ -79,8 +79,8 @@ fn inv_txfm_add<BD: BitDepth>(
 ) {
     let bitdepth_max = bd.bitdepth_max().as_::<i32>();
 
-    assert!(w >= 4 && w <= 64);
-    assert!(h >= 4 && h <= 64);
+    assert!((4..=64).contains(&w));
+    assert!((4..=64).contains(&h));
     assert!(eob >= 0);
 
     let is_rect2 = w * 2 == h || h * 2 == w;
@@ -966,12 +966,7 @@ impl Rav1dInvTxfmDSPContext {
     }
 
     /// Safe SIMD initialization for x86_64 without hand-written assembly.
-    /// Uses Rust intrinsics instead.
-
-    /// Safe SIMD 8bpc initialization
-
-    /// Safe SIMD 16bpc initialization
-
+    /// Uses Rust intrinsics instead. Handles both 8bpc and 16bpc.
     #[inline(always)]
     const fn init<BD: BitDepth>(self, flags: CpuFlags, bpc: u8) -> Self {
         #[cfg(feature = "asm")]

@@ -137,7 +137,7 @@ pub(crate) fn rav1d_open(
     s: &Rav1dSettings,
 ) -> Rav1dResult<(Arc<Rav1dContext>, Vec<JoinHandle<()>>)> {
     static initted: Once = Once::new();
-    initted.call_once(|| init_internal());
+    initted.call_once(init_internal);
 
     validate_input!((s.n_threads >= 0 && s.n_threads <= 256, EINVAL))?;
     validate_input!((s.max_frame_delay >= 0 && s.max_frame_delay <= 256, EINVAL))?;
@@ -427,8 +427,8 @@ fn gen_picture(c: &Rav1dContext, state: &mut Rav1dState) -> Rav1dResult {
 
 pub(crate) fn rav1d_send_data(c: &Rav1dContext, in_0: &mut Rav1dData) -> Rav1dResult {
     let state = &mut *c.state.try_lock().unwrap();
-    if in_0.data.is_some() {
-        let sz = in_0.data.as_ref().unwrap().len();
+    if let Some(data) = &in_0.data {
+        let sz = data.len();
         validate_input!((sz > 0 && sz <= usize::MAX / 2, EINVAL))?;
         state.drain = false;
     }

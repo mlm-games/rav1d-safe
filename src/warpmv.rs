@@ -59,7 +59,7 @@ pub(crate) fn rav1d_get_shear_params(wm: &Rav1dWarpedMotionParams) -> bool {
     let alpha = iclip_wmp(mat[2] - 0x10000) as i16;
     let beta = iclip_wmp(mat[3]) as i16;
 
-    let (shift, y) = resolve_divisor_32((mat[2]).abs() as u32);
+    let (shift, y) = resolve_divisor_32((mat[2]).unsigned_abs());
     let y = apply_sign(y, mat[2]);
     let v1 = mat[4] as i64 * 0x10000 * y as i64;
     let rnd = 1 << shift >> 1;
@@ -168,7 +168,7 @@ pub(crate) fn rav1d_find_affine_int(
     if det == 0 {
         return true;
     }
-    let (mut shift, idet) = resolve_divisor_64(det.abs() as u64);
+    let (mut shift, idet) = resolve_divisor_64(det.unsigned_abs());
     let mut idet = apply_sign64(idet, det);
     shift -= 16;
     if shift < 0 {
