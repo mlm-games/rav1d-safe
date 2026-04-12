@@ -1255,7 +1255,7 @@ pub(crate) struct Rav1dPicAllocator {
 
 /// Safe picture allocator using per-plane `Vec<u8>` buffers from a shared pool.
 #[cfg(not(feature = "c-ffi"))]
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct Rav1dPicAllocator {
     pub(crate) pool: Arc<MemPool<u8>>,
 }

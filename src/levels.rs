@@ -539,9 +539,8 @@ impl From<Av1BlockInter1d> for Av1BlockInterNd {
 
 impl From<Av1BlockInter2d> for Av1BlockInterNd {
     fn from(two_d: Av1BlockInter2d) -> Self {
-        let one_d = <Av1BlockInter1d as FromBytes>::ref_from_bytes(IntoBytes::as_bytes(&two_d))
-            .unwrap()
-            .clone(); // Cheap 12-byte clone.
+        let one_d =
+            *<Av1BlockInter1d as FromBytes>::ref_from_bytes(IntoBytes::as_bytes(&two_d)).unwrap(); // Cheap 12-byte clone.
         Self { one_d }
     }
 }

@@ -1055,7 +1055,7 @@ pub(crate) fn get_filter_strength(wh: c_int, angle: c_int, is_sm: bool) -> c_int
             (..=16, ..) => 0,
             (..=24, 4..) => 3,
             (..=24, ..) => 0,
-            (.., _) => 3,
+            (..) => 3,
         }
     } else {
         match (wh, angle) {
@@ -1070,7 +1070,7 @@ pub(crate) fn get_filter_strength(wh: c_int, angle: c_int, is_sm: bool) -> c_int
             (..=32, 32..) => 3,
             (..=32, 4..) => 2,
             (..=32, ..) => 1,
-            (.., _) => 3,
+            (..) => 3,
         }
     }
 }

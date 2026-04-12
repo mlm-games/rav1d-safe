@@ -2237,7 +2237,7 @@ fn parse_obus(
             state.n_tiles = 0;
             return Err(EINVAL);
         }
-        if let Err(_) = state.tiles.try_reserve_exact(1) {
+        if state.tiles.try_reserve_exact(1).is_err() {
             return Err(EINVAL);
         }
         state.n_tiles += 1 + hdr.end - hdr.start;
@@ -2507,12 +2507,18 @@ fn parse_obus(
             {
                 Rav1dFrameType::Inter | Rav1dFrameType::Switch => {
                     if c.decode_frame_type > Rav1dDecodeFrameType::Reference {
-                        return Ok(skip(state));
+                        return {
+                            skip(state);
+                            Ok(())
+                        };
                     }
                 }
                 Rav1dFrameType::Intra => {
                     if c.decode_frame_type > Rav1dDecodeFrameType::Intra {
-                        return Ok(skip(state));
+                        return {
+                            skip(state);
+                            Ok(())
+                        };
                     }
                 }
                 _ => {}
@@ -2636,7 +2642,10 @@ fn parse_obus(
                         || c.decode_frame_type == Rav1dDecodeFrameType::Reference
                             && frame_hdr.refresh_frame_flags == 0
                     {
-                        return Ok(skip(state));
+                        return {
+                            skip(state);
+                            Ok(())
+                        };
                     }
                 }
                 Rav1dFrameType::Intra => {
@@ -2644,7 +2653,10 @@ fn parse_obus(
                         || c.decode_frame_type == Rav1dDecodeFrameType::Reference
                             && frame_hdr.refresh_frame_flags == 0
                     {
-                        return Ok(skip(state));
+                        return {
+                            skip(state);
+                            Ok(())
+                        };
                     }
                 }
                 _ => {}

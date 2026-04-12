@@ -13,7 +13,7 @@ pub trait Strided {
     }
 }
 
-impl<'a, S: Strided> Strided for &'a S {
+impl<S: Strided> Strided for &S {
     fn stride(&self) -> isize {
         (*self).stride()
     }

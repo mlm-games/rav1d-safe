@@ -230,8 +230,9 @@ pub(crate) struct Rav1dTileGroup {
     pub hdr: Rav1dTileGroupHeader,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum TaskType {
+    #[default]
     Init = 0,
     InitCdf = 1,
     TileEntropy = 2,
@@ -245,12 +246,6 @@ pub enum TaskType {
     ReconstructionProgress = 10,
     FgPrep = 11,
     FgApply = 12,
-}
-
-impl Default for TaskType {
-    fn default() -> Self {
-        Self::Init
-    }
 }
 
 #[derive(Default)]

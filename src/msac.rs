@@ -216,6 +216,7 @@ impl From<&[u8]> for MsacAsmContextBuf {
 /// Uses `usize` indices instead of raw pointers, so this type is
 /// automatically `Send + Sync` without any unsafe impls.
 #[cfg(not(asm_msac))]
+#[derive(Default)]
 struct MsacAsmContextBuf {
     /// Byte index of current position within `MsacContext::data`.
     pos: usize,
@@ -223,13 +224,6 @@ struct MsacAsmContextBuf {
     /// Maintained for layout parity with asm but not read in non-asm path.
     #[allow(dead_code)]
     end: usize,
-}
-
-#[cfg(not(asm_msac))]
-impl Default for MsacAsmContextBuf {
-    fn default() -> Self {
-        Self { pos: 0, end: 0 }
-    }
 }
 
 #[cfg_attr(asm_msac, repr(C))]
@@ -248,6 +242,9 @@ pub struct MsacAsmContext {
     ) -> c_uint,
 }
 
+// Manual impl needed: `symbol_adapt16` field (behind `cfg(asm_msac)`) is a fn ptr
+// that doesn't implement Default, so #[derive(Default)] fails on asm builds.
+#[allow(clippy::derivable_impls)]
 impl Default for MsacAsmContext {
     fn default() -> Self {
         Self {

@@ -2007,7 +2007,7 @@ fn get_filter_strength_simple(wh: i32, angle: i32, is_sm: bool) -> i32 {
             (..=16, ..) => 0,
             (..=24, 4..) => 3,
             (..=24, ..) => 0,
-            (.., _) => 3,
+            (..) => 3,
         }
     } else {
         match (wh, angle) {
@@ -2022,7 +2022,7 @@ fn get_filter_strength_simple(wh: i32, angle: i32, is_sm: bool) -> i32 {
             (..=32, 32..) => 3,
             (..=32, 4..) => 2,
             (..=32, ..) => 1,
-            (.., _) => 3,
+            (..) => 3,
         }
     }
 }
@@ -2031,12 +2031,12 @@ fn get_filter_strength_simple(wh: i32, angle: i32, is_sm: bool) -> i32 {
 // Z2 Prediction (angular prediction for angles 90-180)
 // ============================================================================
 
-/// Z2 prediction: directional prediction using both top AND left edges (angles 90-180°)
+/// Filter edge pixels for Z2 prediction (8bpc version of filter_edge from ipred.rs).
 ///
+/// Z2 prediction: directional prediction using both top AND left edges (angles 90-180).
 /// Unlike Z1 (top only) and Z3 (left only), Z2 blends between edges:
 /// - When base_x >= 0: interpolate from top edge
 /// - When base_x < 0: interpolate from left edge
-/// Filter edge pixels for Z2 prediction (8bpc version of filter_edge from ipred.rs).
 fn filter_edge_8bpc(
     out: &mut [u8],
     sz: i32,
@@ -2218,7 +2218,7 @@ fn ipred_z2_8bpc_inner(
             0usize
         } else {
             let needed = (-base_x0) as usize;
-            ((needed + base_inc_x - 1) / base_inc_x).min(width)
+            needed.div_ceil(base_inc_x).min(width)
         };
 
         // First: process pixels using left edge (x < left_count)
@@ -4410,7 +4410,7 @@ fn ipred_z2_16bpc_inner(
             0usize
         } else {
             let needed = (-base_x0) as usize;
-            ((needed + base_inc_x - 1) / base_inc_x).min(width)
+            needed.div_ceil(base_inc_x).min(width)
         };
 
         // First: process pixels using left edge

@@ -9,8 +9,8 @@ fn type_name_of<T>(_: &T) -> &'static str {
 pub fn parent_type_name_of<T>(t: &T) -> &'static str {
     let name = type_name_of(&t);
     let name = name.strip_prefix("&").unwrap();
-    let name = name.strip_suffix("::f").unwrap();
-    name
+
+    (name.strip_suffix("::f").unwrap()) as _
 }
 
 pub fn debug_abort() {

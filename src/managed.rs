@@ -305,6 +305,7 @@ impl From<DecodeFrameType> for Rav1dDecodeFrameType {
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
+#[derive(Default)]
 pub enum CpuLevel {
     /// No SIMD — pure scalar Rust. Works on all platforms. Slowest.
     Scalar,
@@ -331,6 +332,7 @@ pub enum CpuLevel {
     NeonI8mm,
 
     /// Use all features detected at runtime. Default.
+    #[default]
     Native,
 }
 
@@ -412,12 +414,6 @@ impl CpuLevel {
             Self::NeonI8mm => "neon-i8mm",
             Self::Native => "native",
         }
-    }
-}
-
-impl Default for CpuLevel {
-    fn default() -> Self {
-        Self::Native
     }
 }
 
@@ -804,8 +800,8 @@ impl<'a> Planes8<'a> {
         let w = self.frame.width() as usize;
         let h = self.frame.height() as usize;
         match self.frame.pixel_layout() {
-            PixelLayout::I420 => ((w + 1) / 2, (h + 1) / 2),
-            PixelLayout::I422 => ((w + 1) / 2, h),
+            PixelLayout::I420 => (w.div_ceil(2), h.div_ceil(2)),
+            PixelLayout::I422 => (w.div_ceil(2), h),
             PixelLayout::I444 => (w, h),
             PixelLayout::I400 => (0, 0),
         }
@@ -901,8 +897,8 @@ impl<'a> Planes16<'a> {
         let w = self.frame.width() as usize;
         let h = self.frame.height() as usize;
         match self.frame.pixel_layout() {
-            PixelLayout::I420 => ((w + 1) / 2, (h + 1) / 2),
-            PixelLayout::I422 => ((w + 1) / 2, h),
+            PixelLayout::I420 => (w.div_ceil(2), h.div_ceil(2)),
+            PixelLayout::I422 => (w.div_ceil(2), h),
             PixelLayout::I444 => (w, h),
             PixelLayout::I400 => (0, 0),
         }

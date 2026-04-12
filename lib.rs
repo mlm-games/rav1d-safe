@@ -13,7 +13,48 @@
     forbid(unsafe_code)
 )]
 #![cfg_attr(any(feature = "asm", feature = "c-ffi"), deny(unsafe_op_in_unsafe_fn))]
-#![allow(clippy::all)]
+// Clippy lint policy: suppress pervasive C-port patterns at crate level,
+// enable everything else. Each lint has a reason and warning count.
+//
+// Pervasive C-port patterns (too many to fix individually):
+#![allow(clippy::precedence)] // 652: C-style arithmetic
+#![allow(clippy::too_many_arguments)] // 282: C function signatures
+#![allow(clippy::unnecessary_cast)] // 189: generic/bitdepth code
+#![allow(clippy::identity_op)] // 156: readability in transforms
+#![allow(clippy::needless_range_loop)] // 143: C-port loop idiom
+#![allow(clippy::explicit_auto_deref)] // 85: deref style
+#![allow(clippy::erasing_op)] // 53: generic transform constants
+#![allow(clippy::needless_return)] // 24: C-port return style
+#![allow(clippy::nonminimal_bool)] // 23: C-port booleans
+#![allow(clippy::needless_borrow)] // 19: borrow style
+#![allow(clippy::doc_overindented_list_items)] // 16: doc formatting
+#![allow(clippy::zero_prefixed_literal)] // 12: decimal C constants
+#![allow(clippy::collapsible_if)] // 11: nested ifs from C
+#![allow(clippy::needless_late_init)] // 10: C-style init
+//
+// Structural C-port patterns (changing would obscure correspondence):
+#![allow(clippy::upper_case_acronyms)] // 9: AV1 spec names
+#![allow(clippy::type_complexity)] // 4: internal C-port types
+#![allow(clippy::misrefactored_assign_op)] // 4: boundary clamping
+#![allow(clippy::neg_multiply)] // 4: C-style negation
+//
+// Intentional patterns (deny-by-default, false positives here):
+#![allow(clippy::eq_op)] // 2: intentional 2-2
+#![allow(clippy::overly_complex_bool_expr)] // 2: debug gates
+#![allow(clippy::let_underscore_lock)] // 2: lock drop via take()
+//
+// Informational lints not worth acting on:
+#![allow(clippy::module_inception)] // 1: dav1d::dav1d
+#![allow(clippy::large_enum_variant)] // 1: internal enum
+//
+// Newer clippy lints (1.87+) firing on C-port patterns:
+#![allow(clippy::duplicated_attributes)] // new in clippy 1.87+: repeated cfg_attr
+#![allow(clippy::manual_is_multiple_of)] // new in clippy 1.87+: x % n == 0 patterns
+#![allow(clippy::let_and_return)] // new in clippy 1.87+: C-port let-then-return
+#![allow(clippy::unnecessary_map_on_constructor)] // new in clippy 1.87+: Option/Result::map on constructor
+#![allow(clippy::clone_on_copy)] // new in clippy 1.87+: explicit .clone() on Copy types
+#![allow(clippy::option_map_unit_fn)] // new in clippy 1.87+: .map(|x| side_effect)
+#![allow(clippy::unnecessary_lazy_evaluations)] // new in clippy 1.87+: .unwrap_or_else(|| val)
 #![cfg_attr(
     any(feature = "asm", feature = "c-ffi"),
     deny(clippy::undocumented_unsafe_blocks)
