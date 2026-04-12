@@ -46,6 +46,15 @@
 // Informational lints not worth acting on:
 #![allow(clippy::module_inception)] // 1: dav1d::dav1d
 #![allow(clippy::large_enum_variant)] // 1: internal enum
+//
+// Newer clippy lints (1.87+) firing on C-port patterns:
+#![allow(clippy::duplicated_attributes)] // new in clippy 1.87+: repeated cfg_attr
+#![allow(clippy::manual_is_multiple_of)] // new in clippy 1.87+: x % n == 0 patterns
+#![allow(clippy::let_and_return)] // new in clippy 1.87+: C-port let-then-return
+#![allow(clippy::unnecessary_map_on_constructor)] // new in clippy 1.87+: Option/Result::map on constructor
+#![allow(clippy::clone_on_copy)] // new in clippy 1.87+: explicit .clone() on Copy types
+#![allow(clippy::option_map_unit_fn)] // new in clippy 1.87+: .map(|x| side_effect)
+#![allow(clippy::unnecessary_lazy_evaluations)] // new in clippy 1.87+: .unwrap_or_else(|| val)
 #![cfg_attr(
     any(feature = "asm", feature = "c-ffi"),
     deny(clippy::undocumented_unsafe_blocks)
