@@ -226,9 +226,7 @@ struct MsacAsmContextBuf {
     end: usize,
 }
 
-#[cfg(not(asm_msac))]
 #[cfg_attr(asm_msac, repr(C))]
-#[derive(Default)]
 pub struct MsacAsmContext {
     buf: MsacAsmContextBuf,
     pub dif: EcWin,
@@ -242,6 +240,24 @@ pub struct MsacAsmContext {
         n_symbols: usize,
         _cdf_len: usize,
     ) -> c_uint,
+}
+
+// Manual impl needed: `symbol_adapt16` field (behind `cfg(asm_msac)`) is a fn ptr
+// that doesn't implement Default, so #[derive(Default)] fails on asm builds.
+#[allow(clippy::derivable_impls)]
+impl Default for MsacAsmContext {
+    fn default() -> Self {
+        Self {
+            buf: Default::default(),
+            dif: Default::default(),
+            rng: Default::default(),
+            cnt: Default::default(),
+            allow_update_cdf: Default::default(),
+
+            #[cfg(all(asm_msac, target_arch = "x86_64"))]
+            symbol_adapt16: Rav1dMsacDSPContext::default().symbol_adapt16,
+        }
+    }
 }
 
 impl MsacAsmContext {
