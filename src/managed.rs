@@ -298,10 +298,9 @@ impl From<DecodeFrameType> for Rav1dDecodeFrameType {
 /// use rav1d_safe::src::managed::{Decoder, Settings, CpuLevel};
 ///
 /// // Force scalar-only decode (no SIMD)
-/// let mut decoder = Decoder::with_settings(Settings {
-///     cpu_level: CpuLevel::Scalar,
-///     ..Default::default()
-/// }).unwrap();
+/// let mut settings = Settings::default();
+/// settings.cpu_level = CpuLevel::Scalar;
+/// let mut decoder = Decoder::with_settings(settings).unwrap();
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
