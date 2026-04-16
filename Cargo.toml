@@ -14,24 +14,16 @@ repository = "https://github.com/imazen/rav1d-safe"
 readme = "README.md"
 keywords = ["av1", "video", "decoder", "simd", "codec"]
 categories = ["multimedia::video", "multimedia::encoding"]
-exclude = [
-    "*.c", "*.h", "*.in", "*.S", "*.orig",
-    "meson*", "tests/", "doc/", "package/", "test-vectors/", "fuzz/", "scripts/",
-    "src/arm/", "src/x86/",
-    ".github/", "justfile", "gcovr.cfg", "retranspile.sh", "rust_out",
-    "CLAUDE.md", "CONTEXT-HANDOFF.md", "FEEDBACK.md", "STRATEGY.md", "SPEC.md",
-    "CAPI.md", "CONTRIBUTING.md", "THANKS.md", "NEWS.dav1d",
-    "DISJOINT_MUT_ANALYSIS.md", "REAL_UNSAFE_ANALYSIS.md", "TEST-VECTORS-README.md",
-    ".claude/",
-    ".superwork/",
-    ".zenbench/",
-    "copter-report/",
-    "Cross.toml",
-    "Cargo.toml.original.txt",
-    "wasmtime-guest-profile.json",
-    "MSAC-SIMD-HANDOFF.md", "THREADING-HANDOFF.md",
-    "benchmarks/*.txt",
-    "src/ext/",
+include = [
+    "/src/*.rs",
+    "/src/safe_simd/**",
+    "/lib.rs",
+    "/build.rs",
+    "/benches/**",
+    "/examples/**",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE*",
 ]
 
 [lib]
