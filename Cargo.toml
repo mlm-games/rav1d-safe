@@ -28,6 +28,10 @@ exclude = [
     "copter-report/",
     "Cross.toml",
     "Cargo.toml.original.txt",
+    "wasmtime-guest-profile.json",
+    "MSAC-SIMD-HANDOFF.md", "THREADING-HANDOFF.md",
+    "benchmarks/*.txt",
+    "src/ext/",
 ]
 
 [lib]
