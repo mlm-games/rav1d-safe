@@ -52,49 +52,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Decode frames
     for (i, frame_data) in frames.iter().enumerate() {
-        match decoder.decode(frame_data)? {
-            Some(frame) => {
-                println!("Frame {}:", i + 1);
-                println!("  Size: {}x{}", frame.width(), frame.height());
-                println!("  Bit depth: {}", frame.bit_depth());
-                println!("  Layout: {:?}", frame.pixel_layout());
+        if let Some(frame) = decoder.decode(frame_data)? {
+            println!("Frame {}:", i + 1);
+            println!("  Size: {}x{}", frame.width(), frame.height());
+            println!("  Bit depth: {}", frame.bit_depth());
+            println!("  Layout: {:?}", frame.pixel_layout());
 
-                // Color info
-                let color = frame.color_info();
-                println!("  Color primaries: {:?}", color.primaries);
-                println!("  Transfer: {:?}", color.transfer_characteristics);
+            // Color info
+            let color = frame.color_info();
+            println!("  Color primaries: {:?}", color.primaries);
+            println!("  Transfer: {:?}", color.transfer_characteristics);
 
-                // HDR metadata
-                if let Some(cll) = frame.content_light() {
-                    println!("  HDR Max CLL: {} nits", cll.max_content_light_level);
-                }
-
-                // Zero-copy pixel access
-                match frame.planes() {
-                    Planes::Depth8(planes) => {
-                        let y = planes.y();
-                        println!(
-                            "  Y plane: {}x{} (stride={})",
-                            y.width(),
-                            y.height(),
-                            y.stride()
-                        );
-                        println!("  First pixel: {}", y.pixel(0, 0));
-                    }
-                    Planes::Depth16(planes) => {
-                        let y = planes.y();
-                        println!(
-                            "  Y plane: {}x{} (stride={})",
-                            y.width(),
-                            y.height(),
-                            y.stride()
-                        );
-                        println!("  First pixel: {}", y.pixel(0, 0));
-                    }
-                }
-                println!();
+            // HDR metadata
+            if let Some(cll) = frame.content_light() {
+                println!("  HDR Max CLL: {} nits", cll.max_content_light_level);
             }
-            None => {}
+
+            // Zero-copy pixel access
+            match frame.planes() {
+                Planes::Depth8(planes) => {
+                    let y = planes.y();
+                    println!(
+                        "  Y plane: {}x{} (stride={})",
+                        y.width(),
+                        y.height(),
+                        y.stride()
+                    );
+                    println!("  First pixel: {}", y.pixel(0, 0));
+                }
+                Planes::Depth16(planes) => {
+                    let y = planes.y();
+                    println!(
+                        "  Y plane: {}x{} (stride={})",
+                        y.width(),
+                        y.height(),
+                        y.stride()
+                    );
+                    println!("  First pixel: {}", y.pixel(0, 0));
+                }
+            }
+            println!();
         }
     }
 

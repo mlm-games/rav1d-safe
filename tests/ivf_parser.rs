@@ -17,12 +17,14 @@ pub struct IvfHeader {
 
 /// IVF frame header (12 bytes)
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct IvfFrame {
     pub data: Vec<u8>,
     #[allow(dead_code)]
     pub timestamp: u64,
 }
 
+#[allow(dead_code)]
 pub fn parse_ivf_header<R: Read>(reader: &mut R) -> io::Result<IvfHeader> {
     let mut header = [0u8; 32];
     reader.read_exact(&mut header)?;
@@ -61,6 +63,7 @@ pub fn parse_ivf_header<R: Read>(reader: &mut R) -> io::Result<IvfHeader> {
     })
 }
 
+#[allow(dead_code)]
 pub fn parse_ivf_frame<R: Read>(reader: &mut R) -> io::Result<Option<IvfFrame>> {
     let mut frame_header = [0u8; 12];
 
@@ -95,6 +98,7 @@ pub fn parse_ivf_frame<R: Read>(reader: &mut R) -> io::Result<Option<IvfFrame>> 
     Ok(Some(IvfFrame { data, timestamp }))
 }
 
+#[allow(dead_code)]
 pub fn parse_all_frames<R: Read>(reader: &mut R) -> io::Result<Vec<IvfFrame>> {
     // Skip IVF header
     parse_ivf_header(reader)?;

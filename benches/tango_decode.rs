@@ -58,11 +58,10 @@ fn extract_obu(avif_bytes: &[u8]) -> Option<Vec<u8>> {
 // ---------------------------------------------------------------------------
 
 fn decode_ivf_frames(obu_frames: &[Vec<u8>]) -> usize {
-    let mut dec = Decoder::with_settings(Settings {
-        threads: 1,
-        ..Default::default()
-    })
-    .expect("decoder creation");
+    let mut settings = Settings::default();
+    settings.threads = 1;
+    let mut dec = Decoder::with_settings(settings)
+        .expect("decoder creation");
     let mut n = 0;
     for obu in obu_frames {
         if let Ok(Some(_)) = dec.decode(obu) {
@@ -76,12 +75,11 @@ fn decode_ivf_frames(obu_frames: &[Vec<u8>]) -> usize {
 }
 
 fn decode_obu(obu: &[u8]) -> usize {
-    let mut dec = Decoder::with_settings(Settings {
-        threads: 1,
-        frame_size_limit: 8192 * 8192,
-        ..Default::default()
-    })
-    .expect("decoder creation");
+    let mut settings = Settings::default();
+    settings.threads = 1;
+    settings.frame_size_limit = 8192 * 8192;
+    let mut dec = Decoder::with_settings(settings)
+        .expect("decoder creation");
     let mut n = 0;
     if let Ok(Some(_)) = dec.decode(obu) {
         n += 1;

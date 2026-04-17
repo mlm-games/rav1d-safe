@@ -32,9 +32,7 @@ fn load_vector(filename: &'static str) -> Option<TestVector> {
     let mut settings = Settings::default();
     settings.frame_size_limit = 8192 * 8192;
     let mut dec = Decoder::with_settings(settings).ok()?;
-    if dec.decode(&obu).ok()?.is_none() {
-        return None;
-    }
+    dec.decode(&obu).ok()?.as_ref()?;
     Some(TestVector {
         name: filename.split('.').next().unwrap_or(filename),
         obu,

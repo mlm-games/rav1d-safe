@@ -464,7 +464,7 @@ mod tests {
 
         let x: Align64<[u8; 4]> = Aligned([1, 2, 3, 4]);
         // Access through Deref (no .0 or pattern destructure needed)
-        let inner: &[u8; 4] = &*x;
+        let inner: &[u8; 4] = &x;
         assert_eq!(*inner, [1, 2, 3, 4]);
     }
 }

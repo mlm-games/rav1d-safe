@@ -1771,7 +1771,7 @@ fn boxsum3_v_avx2(
     let src = &src[REST_UNIT_STRIDE..]; // Skip first row (matching scalar)
 
     let mut x = 1usize;
-    while x + 16 <= w - 1 {
+    while x + 16 < w {
         for out_row in 2..h - 2 {
             let base_row = out_row - 2; // src is already offset by 1 row; match scalar window
             let r0 = loadu_128!(
@@ -2155,7 +2155,7 @@ fn boxsum3_v_avx512(
     let src = &src[REST_UNIT_STRIDE..]; // Skip first row (matching scalar)
 
     let mut x = 1usize;
-    while x + 32 <= w - 1 {
+    while x + 32 < w {
         for out_row in 2..h - 2 {
             let base_row = out_row - 2;
             let r0 = loadu_256!(
@@ -4045,7 +4045,7 @@ fn boxsum3_v_16bpc_avx512(
     let src = &src[REST_UNIT_STRIDE..]; // Skip first row
 
     let mut x = 1usize;
-    while x + 16 <= w - 1 {
+    while x + 16 < w {
         for out_row in 2..h - 2 {
             let base_row = out_row - 2;
             let r0 = loadu_256!(
@@ -5728,27 +5728,6 @@ pub unsafe extern "C" fn sgr_filter_mix_16bpc_avx2(
     sgr_mix_16bpc_avx2_inner(p, left, lpf, lpf_off, w, h, params, edges, bitdepth_max);
 }
 
-// ============================================================================
-// TESTS
-// ============================================================================
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_rest_unit_stride() {
-        // Verify our constant matches the one in looprestoration.rs
-        assert_eq!(REST_UNIT_STRIDE, 256 * 3 / 2 + 3 + 3);
-        assert_eq!(REST_UNIT_STRIDE, 390);
-    }
-
-    #[test]
-    fn test_max_restoration_width() {
-        assert_eq!(MAX_RESTORATION_WIDTH, 384);
-    }
-}
-
 /// Safe dispatch for lr_filter. Returns true if SIMD was used.
 #[cfg(target_arch = "x86_64")]
 pub fn lr_filter_dispatch<BD: BitDepth>(
@@ -5930,4 +5909,25 @@ pub fn lr_filter_dispatch<BD: BitDepth>(
         ),
     }
     true
+}
+
+// ============================================================================
+// TESTS
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rest_unit_stride() {
+        // Verify our constant matches the one in looprestoration.rs
+        assert_eq!(REST_UNIT_STRIDE, 256 * 3 / 2 + 3 + 3);
+        assert_eq!(REST_UNIT_STRIDE, 390);
+    }
+
+    #[test]
+    fn test_max_restoration_width() {
+        assert_eq!(MAX_RESTORATION_WIDTH, 384);
+    }
 }

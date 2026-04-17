@@ -34,11 +34,10 @@ fn extract_obu(avif_bytes: &[u8]) -> Option<Vec<u8>> {
 
 /// Decode OBU data through the managed API. Returns frame count.
 fn decode_obu(obu: &[u8]) -> usize {
-    let mut dec = Decoder::with_settings(Settings {
-        threads: 1,
-        frame_size_limit: 8192 * 8192, // Allow up to 8K square
-        ..Default::default()
-    })
+    let mut settings = Settings::default();
+    settings.threads = 1;
+    settings.frame_size_limit = 8192 * 8192; // Allow up to 8K square
+    let mut dec = Decoder::with_settings(settings)
     .expect("decoder creation failed");
 
     let mut n = 0;

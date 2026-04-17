@@ -166,8 +166,8 @@ mod tests {
                 (w, h)
             } else {
                 match pic.p.layout {
-                    Rav1dPixelLayout::I420 => ((w + 1) / 2, (h + 1) / 2),
-                    Rav1dPixelLayout::I422 => ((w + 1) / 2, h),
+                    Rav1dPixelLayout::I420 => (w.div_ceil(2), h.div_ceil(2)),
+                    Rav1dPixelLayout::I422 => (w.div_ceil(2), h),
                     Rav1dPixelLayout::I444 => (w, h),
                     Rav1dPixelLayout::I400 => unreachable!(),
                 }

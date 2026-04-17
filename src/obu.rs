@@ -2505,21 +2505,21 @@ fn parse_obus(
                 .ok_or(EINVAL)?
                 .frame_type
             {
-                Rav1dFrameType::Inter | Rav1dFrameType::Switch => {
-                    if c.decode_frame_type > Rav1dDecodeFrameType::Reference {
-                        return {
-                            skip(state);
-                            Ok(())
-                        };
-                    }
+                Rav1dFrameType::Inter | Rav1dFrameType::Switch
+                    if c.decode_frame_type > Rav1dDecodeFrameType::Reference =>
+                {
+                    return {
+                        skip(state);
+                        Ok(())
+                    };
                 }
-                Rav1dFrameType::Intra => {
-                    if c.decode_frame_type > Rav1dDecodeFrameType::Intra {
-                        return {
-                            skip(state);
-                            Ok(())
-                        };
-                    }
+                Rav1dFrameType::Intra
+                    if c.decode_frame_type > Rav1dDecodeFrameType::Intra =>
+                {
+                    return {
+                        skip(state);
+                        Ok(())
+                    };
                 }
                 _ => {}
             }
@@ -2637,27 +2637,25 @@ fn parse_obus(
             state.frame_hdr = None;
         } else if state.n_tiles == frame_hdr.tiling.cols as c_int * frame_hdr.tiling.rows as c_int {
             match frame_hdr.frame_type {
-                Rav1dFrameType::Inter | Rav1dFrameType::Switch => {
-                    if c.decode_frame_type > Rav1dDecodeFrameType::Reference
+                Rav1dFrameType::Inter | Rav1dFrameType::Switch
+                    if (c.decode_frame_type > Rav1dDecodeFrameType::Reference
                         || c.decode_frame_type == Rav1dDecodeFrameType::Reference
-                            && frame_hdr.refresh_frame_flags == 0
-                    {
-                        return {
-                            skip(state);
-                            Ok(())
-                        };
-                    }
+                            && frame_hdr.refresh_frame_flags == 0) =>
+                {
+                    return {
+                        skip(state);
+                        Ok(())
+                    };
                 }
-                Rav1dFrameType::Intra => {
-                    if c.decode_frame_type > Rav1dDecodeFrameType::Intra
+                Rav1dFrameType::Intra
+                    if (c.decode_frame_type > Rav1dDecodeFrameType::Intra
                         || c.decode_frame_type == Rav1dDecodeFrameType::Reference
-                            && frame_hdr.refresh_frame_flags == 0
-                    {
-                        return {
-                            skip(state);
-                            Ok(())
-                        };
-                    }
+                            && frame_hdr.refresh_frame_flags == 0) =>
+                {
+                    return {
+                        skip(state);
+                        Ok(())
+                    };
                 }
                 _ => {}
             }

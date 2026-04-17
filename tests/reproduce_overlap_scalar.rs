@@ -2,8 +2,6 @@
 //! Run: cargo test --release --test reproduce_overlap_scalar -- --ignored --nocapture
 
 use rav1d_safe::src::managed::{CpuLevel, Decoder, Settings};
-use std::fs::File;
-use std::io::BufReader;
 
 mod ivf_parser;
 

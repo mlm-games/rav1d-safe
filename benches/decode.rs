@@ -103,7 +103,7 @@ fn discover_vectors(subdir: &str, limit: usize) -> Vec<TestVector> {
     // Filter out huge vectors, then sort largest-first.
     // We try more candidates than `limit` because some vectors may fail validation.
     entries.retain(|(_, size)| *size <= MAX_VECTOR_BYTES);
-    entries.sort_by(|a, b| b.1.cmp(&a.1));
+    entries.sort_by_key(|e| std::cmp::Reverse(e.1));
     entries.truncate(limit * 10);
 
     let mut result = Vec::with_capacity(limit);
@@ -120,13 +120,13 @@ fn discover_vectors(subdir: &str, limit: usize) -> Vec<TestVector> {
         }
         // Trial decode to filter out vectors that panic or produce no frames
         if !validate_vector(&frames) {
-            let rel = path.strip_prefix(&vectors_dir()).unwrap_or(&path).display();
+            let rel = path.strip_prefix(vectors_dir()).unwrap_or(&path).display();
             eprintln!("skipping {rel} (decode failed or panicked)");
             continue;
         }
         let total_bytes: usize = frames.iter().map(|f| f.len()).sum();
         let name = path
-            .strip_prefix(&vectors_dir())
+            .strip_prefix(vectors_dir())
             .unwrap_or(&path)
             .display()
             .to_string()
@@ -148,21 +148,20 @@ fn collect_ivf_files(dir: &Path, out: &mut Vec<(PathBuf, u64)>) {
         let path = entry.path();
         if path.is_dir() {
             collect_ivf_files(&path, out);
-        } else if path.extension().is_some_and(|e| e == "ivf") {
-            if let Ok(meta) = path.metadata() {
-                out.push((path, meta.len()));
-            }
+        } else if path.extension().is_some_and(|e| e == "ivf")
+            && let Ok(meta) = path.metadata()
+        {
+            out.push((path, meta.len()));
         }
     }
 }
 
 /// Decode all OBU frames through the managed API. Returns frame count.
 fn decode_all(obu_frames: &[Vec<u8>]) -> usize {
-    let mut dec = Decoder::with_settings(Settings {
-        threads: 1,
-        ..Default::default()
-    })
-    .expect("decoder creation failed");
+    let mut settings = Settings::default();
+    settings.threads = 1;
+    let mut dec = Decoder::with_settings(settings)
+        .expect("decoder creation failed");
 
     let mut n = 0;
     for obu in obu_frames {

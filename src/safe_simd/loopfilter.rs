@@ -1343,23 +1343,6 @@ fn compute_lvl_len(b4_stride: isize, _w: i32) -> usize {
     (b4_stride.unsigned_abs() as usize) * 132 + 4
 }
 
-// ============================================================================
-// TESTS
-// ============================================================================
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_iclip_diff() {
-        assert_eq!(iclip_diff(100, 0), 100);
-        assert_eq!(iclip_diff(-100, 0), -100);
-        assert_eq!(iclip_diff(200, 0), 127);
-        assert_eq!(iclip_diff(-200, 0), -128);
-    }
-}
-
 /// Safe dispatch for loopfilter_sb on x86_64. Returns true if SIMD was used.
 #[cfg(target_arch = "x86_64")]
 pub fn loopfilter_sb_dispatch<BD: BitDepth>(
@@ -1956,4 +1939,21 @@ pub fn loopfilter_sb_dispatch<BD: BitDepth>(
         }
     }
     true
+}
+
+// ============================================================================
+// TESTS
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_iclip_diff() {
+        assert_eq!(iclip_diff(100, 0), 100);
+        assert_eq!(iclip_diff(-100, 0), -100);
+        assert_eq!(iclip_diff(200, 0), 127);
+        assert_eq!(iclip_diff(-200, 0), -128);
+    }
 }
