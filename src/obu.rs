@@ -2513,9 +2513,7 @@ fn parse_obus(
                         Ok(())
                     };
                 }
-                Rav1dFrameType::Intra
-                    if c.decode_frame_type > Rav1dDecodeFrameType::Intra =>
-                {
+                Rav1dFrameType::Intra if c.decode_frame_type > Rav1dDecodeFrameType::Intra => {
                     return {
                         skip(state);
                         Ok(())

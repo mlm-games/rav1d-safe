@@ -160,8 +160,7 @@ fn collect_ivf_files(dir: &Path, out: &mut Vec<(PathBuf, u64)>) {
 fn decode_all(obu_frames: &[Vec<u8>]) -> usize {
     let mut settings = Settings::default();
     settings.threads = 1;
-    let mut dec = Decoder::with_settings(settings)
-        .expect("decoder creation failed");
+    let mut dec = Decoder::with_settings(settings).expect("decoder creation failed");
 
     let mut n = 0;
     for obu in obu_frames {

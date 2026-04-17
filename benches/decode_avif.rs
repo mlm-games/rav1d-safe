@@ -37,8 +37,7 @@ fn decode_obu(obu: &[u8]) -> usize {
     let mut settings = Settings::default();
     settings.threads = 1;
     settings.frame_size_limit = 8192 * 8192; // Allow up to 8K square
-    let mut dec = Decoder::with_settings(settings)
-    .expect("decoder creation failed");
+    let mut dec = Decoder::with_settings(settings).expect("decoder creation failed");
 
     let mut n = 0;
     match dec.decode(obu) {
